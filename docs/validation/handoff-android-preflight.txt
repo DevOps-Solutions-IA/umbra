@@ -1,0 +1,4 @@
+Java: /usr/bin/java
+Android SDK: NOT FOUND
+BLOCKED: Android SDK platform 36 is not installed. No APK compiled.
+Install it using Android Studio SDK Manager, or sdkmanager "platforms;android-36" "build-tools;35.0.0".

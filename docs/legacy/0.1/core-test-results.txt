@@ -1,0 +1,21 @@
+PASS Base64 roundtrip
+PASS SHA-256 known vector
+PASS Symmetric safety code
+PASS Safety code rejects bad identities
+PASS Tokens: shape and uniqueness
+PASS Padding: boundary cases
+PASS Padding: random cases
+PASS Padding rejects empty message
+PASS Padding rejects oversized message
+PASS Padding rejects invalid block length
+PASS Padding rejects forged inner length
+PASS Padding is randomized
+PASS Frame roundtrip
+PASS Fragmented stream
+PASS Multiple consecutive frames
+PASS Frame rejects invalid prefixes
+PASS Frame rejects truncation
+PASS Frame rejects empty output
+PASS Frame accepts maximum bounded size
+PASS Constant-time comparator functional behavior
+20 utility test scenarios passed. libsignal/Android/hardware NOT exercised.

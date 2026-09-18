@@ -1,0 +1,5 @@
+Python AST syntax: 6 files parsed.
+XML well-formedness: 5 files parsed.
+Compose and workflow YAML: parsed.
+JUnit test declarations: 18; NOT executed.
+No Android artifact build or runtime checks implied by these validations.

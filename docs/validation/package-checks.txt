@@ -1,0 +1,7 @@
+PASS Python syntax: 10 source files parsed; pytest results are separate.
+PASS XML well-formedness: 6 files; not Android resource compilation.
+PASS relative Markdown links: 4 existing local targets checked.
+PASS git diff --check: no whitespace errors.
+PASS integration source inventory: 30 JUnit methods present, NOT EXECUTED.
+CONFIRMED no APK file present; no production signing key supplied.
+Archive/manifest and patch applicability checked externally during packaging; a hash is not a signature.

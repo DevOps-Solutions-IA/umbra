@@ -1,0 +1,125 @@
+........................................................................ [ 90%]
+........                                                                 [100%]
+80 passed in 1.27s
+PASS Base64 roundtrip
+PASS SHA-256 known vector
+PASS Symmetric safety code
+PASS Safety code rejects bad identities
+PASS Tokens: shape and uniqueness
+PASS Padding: boundary cases
+PASS Padding: random cases
+PASS Padding rejects empty message
+PASS Padding rejects oversized message
+PASS Padding rejects invalid block length
+PASS Padding rejects forged inner length
+PASS Padding is randomized
+PASS Frame roundtrip
+PASS Fragmented stream
+PASS Multiple consecutive frames
+PASS Frame rejects invalid prefixes
+PASS Frame rejects truncation
+PASS Frame rejects empty output
+PASS Frame accepts maximum bounded size
+PASS Constant-time comparator functional behavior
+20 utility test scenarios passed. libsignal/Android/hardware NOT exercised.
+PASS Gate begins locked
+PASS Gate authenticates explicitly
+PASS Lock invalidates an outstanding operation
+PASS Reauthentication never revives an old lease
+PASS Gate rejects exact expiry boundary
+PASS Gate rejects backward test clock
+PASS Commit callback is not run after a lock
+PASS Expiry blocks commit even without a UI tick
+PASS Worker cannot reuse pre-lock authorization
+PASS Authorized commit returns its actual result
+PASS Invalid gate duration rejected
+PASS Strict UTF-8 decoder rejects invalid sequence
+PASS Strict UTF-8 encoder rejects unpaired UTF-16
+PASS Strict UTF-8 encoder roundtrips multilingual text
+PASS Filename removes traversal separators and formatting controls
+PASS Filename truncation preserves complete Unicode code points
+PASS Filename rejects an unsafe received name
+PASS Filename handles missing and blank display names
+PASS Filename handles dot-only names
+PASS Filename keeps a multilingual legitimate name
+PASS Strict Base64 rejects omitted padding
+PASS Strict Base64 rejects nonzero pad bits
+PASS Strict Base64 rejects whitespace
+PASS Base64 explicit local bound permits a valid large record
+PASS Base64 local bound cannot disable allocation limits
+PASS JSON accepts nested structured content
+PASS JSON accepts multilingual content and surrogate pair
+PASS JSON rejects adversarial syntax 1
+PASS JSON rejects adversarial syntax 2
+PASS JSON rejects adversarial syntax 3
+PASS JSON rejects adversarial syntax 4
+PASS JSON rejects adversarial syntax 5
+PASS JSON rejects adversarial syntax 6
+PASS JSON rejects adversarial syntax 7
+PASS JSON rejects adversarial syntax 8
+PASS JSON rejects adversarial syntax 9
+PASS JSON rejects adversarial syntax 10
+PASS JSON rejects adversarial syntax 11
+PASS JSON rejects adversarial syntax 12
+PASS JSON rejects adversarial syntax 13
+PASS JSON rejects adversarial syntax 14
+PASS JSON rejects adversarial syntax 15
+PASS JSON rejects adversarial syntax 16
+PASS JSON rejects adversarial syntax 17
+PASS JSON rejects adversarial syntax 18
+PASS JSON rejects adversarial syntax 19
+PASS JSON rejects adversarial syntax 20
+PASS JSON rejects adversarial syntax 21
+PASS JSON rejects adversarial syntax 22
+PASS JSON rejects adversarial syntax 23
+PASS JSON rejects adversarial syntax 24
+PASS JSON rejects adversarial syntax 25
+PASS JSON rejects adversarial syntax 26
+PASS JSON rejects deep nesting
+PASS JSON rejects excessive node count
+PASS JSON rejects oversized field name
+PASS JSON enforces byte limit before parsing
+PASS Handshake frame has its own allocation limit
+PASS Handshake frame accepts fragmented input
+PASS Retry delay is bounded under extreme attempts
+PASS Retry rejects invalid jitter
+PASS Retry schedules from the supplied clock
+PASS Nearby transcript is deterministic
+PASS Nearby proof binds fresh verifier nonce
+PASS Nearby proof binds signer role
+PASS Nearby proof binds identities and direction
+PASS Nearby reflection and self-connection rejected
+PASS Nearby malformed nonce rejected
+PASS Vault codec authenticates roundtrip
+PASS Blind index is deterministic for the same key
+PASS Blind index is not an unkeyed dictionary hash
+PASS Blind index is separated across vault keys
+PASS Blind index is separated by record category
+PASS Index inputs have unambiguous framing
+PASS GCM rejects wrong key
+PASS GCM rejects bucket substitution
+PASS GCM rejects index substitution
+PASS GCM rejects nonce mutation
+PASS GCM rejects every single-bit ciphertext mutation
+PASS GCM rejects truncated and invalid nonce lengths
+PASS Sealed record getters do not expose mutable backing arrays
+PASS Vault randomized IV uniqueness sample
+PASS Legacy codec migration preserves authenticated content
+PASS Vault bounds cleartext before encryption
+PASS Framing fuzz: malformed negative prefixes never allocate
+85 additional JVM security test scenarios passed. Android/libsignal/Bluetooth radio NOT exercised.
+Parsed Java syntax: 20 files. Android/libsignal compilation NOT performed.
+PASS source policy: application declared
+PASS source policy: backup disabled in source
+PASS source policy: legacy backup disabled
+PASS source policy: cleartext networking disabled
+PASS source policy: network policy denies cleartext
+PASS source policy: only system trust anchors
+PASS source policy: offline overlay removes INTERNET
+PASS source policy: offline overlay removes NETWORK_STATE
+PASS source policy: no contact/SMS/phone/location/broad-storage permissions
+PASS source policy: cloud-backup excludes private storage
+PASS source policy: device-transfer excludes private storage
+PASS source policy: offline compile-time relay switch
+12 source policy checks passed. Merged manifest/APK verification remains separate.
+These checks do NOT compile or run the Android/libsignal integration. Run scripts/build_android.py separately.

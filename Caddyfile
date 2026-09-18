@@ -1,0 +1,13 @@
+{$UMBRA_DOMAIN} {
+    request_body {
+        max_size 1MB
+    }
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        Cache-Control "no-store"
+        X-Content-Type-Options "nosniff"
+        -Server
+    }
+    reverse_proxy relay:8080
+    # No access-log directive. Provider/network/system logs still require a separate review.
+}

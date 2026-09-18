@@ -1,0 +1,30 @@
+{
+  "checked_on": "2026-09-18",
+  "scope": "CI actions only; not an audit",
+  "actions": {
+    "actions/checkout": {
+      "ref": "v4",
+      "sha": "11d5960a326750d5838078e36cf38b85af677262"
+    },
+    "actions/setup-python": {
+      "ref": "v5",
+      "sha": "a26af69be951a213d495a4c3e4e4022e16d87065"
+    },
+    "actions/setup-java": {
+      "ref": "v4",
+      "sha": "cf277c60eb25467037889841efdb72551f06f6c3"
+    },
+    "android-actions/setup-android": {
+      "ref": "v3",
+      "sha": "9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407"
+    },
+    "gradle/actions/setup-gradle": {
+      "ref": "v4.4.3",
+      "sha": "ed408507eac070d1f99cc633dbcf757c94c7933a"
+    },
+    "actions/upload-artifact": {
+      "ref": "v4",
+      "sha": "ea165f8d65b6e75b540449e92b4886f43607fa02"
+    }
+  }
+}
