@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Fetch the selected official Gradle distribution; verify its published checksum.
+"""Fetch the selected official Gradle distribution; verify its pinned checksum.
 
 Requires internet on the build machine. No downloaded binaries are included in this source delivery.
-For release builds, independently pin/review this checksum and the dependency verification metadata.
+An existing local installation is reused; this does not attest its contents.
 """
 from __future__ import annotations
 import hashlib
@@ -14,6 +14,8 @@ import urllib.request
 import zipfile
 
 VERSION = "8.13"
+# https://services.gradle.org/distributions/gradle-8.13-bin.zip.sha256
+SHA256 = "20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78"
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -24,10 +26,7 @@ def bootstrap() -> Path:
         return executable
     base = f"https://services.gradle.org/distributions/gradle-{VERSION}-bin.zip"
     home.parent.mkdir(exist_ok=True)
-    with urllib.request.urlopen(base + ".sha256", timeout=30) as response:
-        if not response.url.startswith("https://"):
-            raise RuntimeError("Refusing non-HTTPS redirect")
-        expected = response.read(256).decode().strip().lower()
+    expected = SHA256
     if not re.fullmatch(r"[a-f0-9]{64}", expected):
         raise RuntimeError("Invalid official checksum response")
     archive = home.parent / f"gradle-{VERSION}.zip"

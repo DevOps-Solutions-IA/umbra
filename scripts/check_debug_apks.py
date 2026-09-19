@@ -53,12 +53,15 @@ def inspect(apk: Path, aapt: Path, variant: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sdk", default=os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT"))
+    parser.add_argument("--include-release", action="store_true")
     args = parser.parse_args()
     if not args.sdk:
         raise SystemExit("BLOCKED: specify --sdk or ANDROID_HOME")
     aapt = Path(args.sdk) / "build-tools/35.0.0" / ("aapt.exe" if os.name == "nt" else "aapt")
     for variant in ("connected", "offline"):
         inspect(ROOT / f"android/app/build/outputs/apk/{variant}/debug/app-{variant}-debug.apk", aapt, variant)
+        if args.include_release:
+            inspect(ROOT / f"android/app/build/outputs/apk/{variant}/release/app-{variant}-release-unsigned.apk", aapt, variant)
 
 
 if __name__ == "__main__":
