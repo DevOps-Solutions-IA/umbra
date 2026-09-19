@@ -27,7 +27,24 @@ public final class Engine {
         byte[] value = db.get(bucket, key); return value == null ? null : new JSONObject(Bytes.text(value));
     }
     private void put(String bucket, String key, JSONObject value) { db.put(bucket, key, Bytes.utf8(value.toString())); }
-    public boolean initialized() { return db.get("meta", "identity") != null; }
+    public boolean initialized() throws Exception {
+        byte[] identity = db.get("meta", "identity");
+        if (identity == null) {
+            // A missing identity is only a fresh install when no application records remain.
+            // Never offer re-enrollment over a partially lost or damaged vault.
+            for (String bucket : new String[]{"meta", "contact", "trusted", "session", "prekey", "signed", "kyber",
+                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export"})
+                if (!db.keys(bucket).isEmpty()) throw new IllegalStateException("Identity missing from existing vault");
+            return false;
+        }
+        IdentityKeyPair pair = new IdentityKeyPair(identity);
+        JSONObject savedProfile = profile();
+        int registration = signal.getLocalRegistrationId();
+        if (savedProfile == null || !Bytes.identity(pair.getPublicKey().serialize()).equals(savedProfile.getString("id")) ||
+                registration < 1 || registration > 16380)
+            throw new IllegalStateException("Stored identity metadata is inconsistent");
+        return true;
+    }
     public void initialize(String alias) throws Exception {
         if (alias.trim().isEmpty() || alias.length() > 40 || alias.codePoints().anyMatch(c -> Character.isISOControl(c) || Character.getType(c) == Character.FORMAT)) throw new IllegalArgumentException("Alias de 1 a 40 caracteres");
         db.transaction(() -> {

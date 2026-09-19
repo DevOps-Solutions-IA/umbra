@@ -18,6 +18,7 @@ import android.view.inputmethod.EditorInfo;
 import android.widget.*;
 import app.umbra.core.Bytes;
 import app.umbra.core.AccessGate;
+import app.umbra.core.DocumentIO;
 import app.umbra.protocol.Wire;
 import app.umbra.BuildConfig;
 import app.umbra.R;
@@ -92,16 +93,19 @@ public final class MainActivity extends Activity {
         if (!authenticating || unlocked) lock();
     }
     @Override public void onDestroy() {
-        destroyed = true; gate.lock(); cancelRelay(); main.removeCallbacksAndMessages(null);
+        destroyed = true; unlocked = false; generation++; gate.lock(); cancelRelay(); main.removeCallbacksAndMessages(null);
         if (authCancellation != null) authCancellation.cancel();
         BluetoothLink link = bluetooth; if (link != null) link.close();
-        worker.shutdownNow(); super.onDestroy();
+        // Close after the running transaction; stale queued actions reject the locked gate.
+        // A non-cooperative document provider can delay this cleanup, never the UI thread.
+        worker.submit(() -> { if (vault != null) { vault.close(); vault = null; engine = null; } });
+        worker.shutdown(); super.onDestroy();
     }
     private void completeAuthentication() {
         if (!resumed || destroyed || isFinishing()) return;
         authenticationGranted = false; externalUi = false; gate.unlock(); unlocked = true; authAt = SystemClock.elapsedRealtime();
         action(() -> {
-            if (vault == null) vault = new Vault(MainActivity.this, gate);
+            if (vault == null) vault = new Vault(getApplicationContext(), gate);
             engine = new Engine(vault); initialised = engine.initialized();
             if (initialised) { vault.get("meta", "identity"); engine.expire(); }
             return initialised;
@@ -385,7 +389,10 @@ public final class MainActivity extends Activity {
         LinearLayout warning = card(page);
         label(warning, "Una identidad. Este dispositivo.", 18, TEXT);
         label(warning, "No hay una llave maestra ni recuperación del historial. Perder el teléfono o invalidar su clave puede hacer los datos inaccesibles.", 14, MUTED);
-        button(page, "Crear identidad protegida", () -> action(() -> { engine.initialize(alias.getText().toString().trim()); initialised = true; return true; }, ok -> refresh()), true);
+        button(page, "Crear identidad protegida", () -> {
+            String name = alias.getText().toString().trim();
+            action(() -> { engine.initialize(name); initialised = true; return true; }, ok -> refresh());
+        }, true);
     }
     private void render() {
         if (!unlocked) { showLocked(); return; }
@@ -574,7 +581,10 @@ public final class MainActivity extends Activity {
         TextView fingerprint = label(card, group(code), 15, MINT); fingerprint.setTypeface(Typeface.MONOSPACE);
         if (!contact.optBoolean("blocked")) {
             EditText entered = input(page, "Código completo mostrado por la otra persona", false); entered.setSingleLine(false); entered.setMaxLines(4);
-            button(page, "Comparar y verificar", () -> action(() -> { engine.verify(peer, entered.getText().toString()); return true; }, ok -> { peerDetails = null; chat = peer; refresh(); syncNow(); }), true);
+            button(page, "Comparar y verificar", () -> {
+                String codeEntered = entered.getText().toString();
+                action(() -> { engine.verify(peer, codeEntered); return true; }, ok -> { peerDetails = null; chat = peer; refresh(); syncNow(); });
+            }, true);
         }
         button(page, contact.optBoolean("blocked") ? "Desbloquear contacto" : "Bloquear contacto", () -> action(() -> { engine.block(peer, !contact.optBoolean("blocked")); return true; }, ok -> refresh()), false);
         button(page, "Vaciar conversación local", () -> confirm("Vaciar conversación", "Borra el historial local y la cola pendiente. No borra las copias del otro teléfono ni revoca lo ya enviado al relay.",
@@ -648,30 +658,23 @@ public final class MainActivity extends Activity {
             String key = pendingExportKey; pendingExportKey = null;
             if (key == null) { notice("La exportación no está disponible. Créala nuevamente."); return; }
             action(() -> {
+                AccessGate.Lease lease = gate.enter();
                 byte[] content = engine.exportData(key);
-                try (OutputStream out = getContentResolver().openOutputStream(uri, "wt")) {
-                    if (out == null) throw new IOException("No se pudo abrir el documento");
-                    gate.requireUnlocked(); out.write(content); out.flush(); return true;
-                } finally { Arrays.fill(content, (byte) 0); engine.clearExport(key); }
+                try {
+                    DocumentIO.write(gate, lease, content, () -> getContentResolver().openOutputStream(uri, "wt"));
+                    return true;
+                } finally {
+                    Arrays.fill(content, (byte) 0);
+                    // Never clean up with a new authentication epoch. Expiry handles cancelled exports.
+                    gate.check(lease); engine.clearExport(key);
+                }
             }, ok -> notice("Documento exportado. La copia externa no está protegida por UMBRA."));
         }
     }
     private byte[] readBounded(Uri uri, int max) throws Exception {
-        AccessGate.Lease lease = gate.enter();
-        try (InputStream input = getContentResolver().openInputStream(uri); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
-            if (input == null) throw new IOException("No input");
-            byte[] buffer = new byte[8192]; int n;
-            try {
-                while ((n = input.read(buffer)) != -1) {
-                    gate.check(lease);
-                    if (output.size() + n > max) throw new IllegalArgumentException("El archivo supera el tamaño permitido");
-                    output.write(buffer, 0, n);
-                }
-                gate.check(lease); return output.toByteArray();
-            } finally { Arrays.fill(buffer, (byte) 0); }
-            // A non-cooperative external document provider may still block read(); never run it on the UI thread.
-        }
+        return DocumentIO.read(gate, max, () -> getContentResolver().openInputStream(uri));
     }
+
     private String displayName(Uri uri) {
         try (android.database.Cursor cursor = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
             if (cursor != null && cursor.moveToFirst()) return cursor.getString(0);
