@@ -20,6 +20,7 @@ import app.umbra.core.Bytes;
 import app.umbra.core.AccessGate;
 import app.umbra.protocol.Wire;
 import app.umbra.BuildConfig;
+import app.umbra.R;
 import app.umbra.crypto.Engine;
 import app.umbra.data.Vault;
 import app.umbra.transport.*;
@@ -495,7 +496,7 @@ public final class MainActivity extends Activity {
         heading("Cerca", "Conexión directa. Sin datos móviles ni internet.");
         LinearLayout status = card(page); label(status, transportStatus, 17, MINT);
         label(status, "Solo un enlace cercano a la vez. Ambos teléfonos deben mantener UMBRA abierta y desbloqueada.", 13, MUTED);
-        Switch offline = new Switch(this); offline.setText("Solo Bluetooth · no usar internet"); offline.setTextColor(TEXT);
+        Switch offline = new Switch(this); offline.setText(R.string.bluetooth_only); offline.setTextColor(TEXT);
         offline.setChecked(!BuildConfig.ALLOW_RELAY || !profile.optBoolean("online")); offline.setEnabled(BuildConfig.ALLOW_RELAY); page.addView(offline);
         offline.setOnCheckedChangeListener((v, checked) -> { networkPaused = checked; networkStateLoaded = true; if (checked) cancelRelay(); action(() -> { engine.setOnline(!checked); return true; }, ok -> refresh()); });
         button(page, "Esperar un contacto verificado", () -> {
@@ -524,6 +525,9 @@ public final class MainActivity extends Activity {
     }
     private void chooseBluetooth(boolean enroll) {
         if (!bluetoothPermission()) return;
+        if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            notice("Se necesita permiso para consultar los dispositivos cercanos."); return;
+        }
         try {
             BluetoothAdapter adapter = link().adapter();
             if (adapter == null || !adapter.isEnabled()) { notice("Activa Bluetooth en ajustes de Android."); return; }
@@ -534,6 +538,8 @@ public final class MainActivity extends Activity {
             new SecureDialogBuilder().setTitle("Teléfono que está esperando").setItems(names, (d, index) -> {
                 try { link().connect(devices.get(index), enroll); } catch (Exception e) { notice(safeError(e)); }
             }).setNegativeButton("Cancelar", null).show();
+        } catch (SecurityException e) {
+            notice("El permiso Bluetooth fue revocado. Revisa los permisos de dispositivos cercanos.");
         } catch (Exception e) { notice("No se pudo abrir Bluetooth. Revisa los permisos de dispositivos cercanos."); }
     }
     private void renderIdentity() {
@@ -672,6 +678,9 @@ public final class MainActivity extends Activity {
         } catch (Exception ignored) {}
         return "archivo.bin";
     }
+    // API 33+ uses the platform OnBackInvokedCallback registered in onCreate.
+    // Keep this legacy callback for API 31-32; lint does not recognize that dual path.
+    @android.annotation.SuppressLint("GestureBackNavigation")
     @Override public void onBackPressed() { back(); }
     private void back() { if (peerDetails != null) { peerDetails = null; render(); } else if (chat != null) { chat = null; refresh(); } else { lock(); moveTaskToBack(true); } }
     private String ttlName() { return ttl == 3600 ? "1 hora" : ttl == 604800 ? "7 días" : "24 horas"; }

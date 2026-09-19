@@ -17,6 +17,8 @@ for path in BUILD.rglob("AndroidManifest.xml"):
         has_internet = "android.permission.INTERNET" in permissions
         if has_internet != (variant == "connectedDebug"):
             raise SystemExit(f"FAIL: unexpected network permission in {variant}")
+        if ("android.permission.ACCESS_NETWORK_STATE" in permissions) != (variant == "connectedDebug"):
+            raise SystemExit(f"FAIL: unexpected network state permission in {variant}")
         found[variant] += 1
         print(f"PASS merged manifest: {variant}; INTERNET={has_internet}")
 if not all(found.values()):

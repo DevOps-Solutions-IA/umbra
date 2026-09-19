@@ -1,5 +1,10 @@
 # Backlog de finalización verificable
 
+Actualización 2026-09-19 UTC: P0-01 verificado localmente en la rama
+`codex/android-build-validation`; [evidencia](validation/2026-09-19-p0-01.md).
+PR y CI deben revisarse antes de fusionar. Se verificaron permisos y JNI de los APK
+debug, pero P0-02 completo (incluido release) y los demás paquetes siguen abiertos.
+
 Todos los paquetes siguientes están ABIERTOS al transferir el proyecto. Son tareas propuestas
 con criterios de aceptación, no funcionalidades ya entregadas. Terminar una fase no autoriza
 marcar las posteriores como terminadas. Mantener tickets/PRs separados y enlazar evidencia.

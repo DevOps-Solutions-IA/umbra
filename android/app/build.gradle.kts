@@ -2,6 +2,7 @@ plugins { id("com.android.application") }
 android {
     namespace = "app.umbra"
     compileSdk = 36
+    buildToolsVersion = "35.0.0"
     defaultConfig {
         applicationId = "app.umbra.privatechat"
         minSdk = 31
@@ -24,7 +25,12 @@ android {
             buildConfigField("boolean", "ALLOW_RELAY", "false")
         }
     }
-    compileOptions { sourceCompatibility = JavaVersion.VERSION_21; targetCompatibility = JavaVersion.VERSION_21 }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
+        // Required by libsignal-android's AAR metadata.
+        isCoreLibraryDesugaringEnabled = true
+    }
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -35,9 +41,12 @@ android {
     }
     packaging {
         resources.excludes += setOf("libsignal_jni*.dylib", "signal_jni*.dll", "libsignal_jni*.so")
+        // Upstream client-testing APIs are unused; retain production JNI for every ABI.
+        jniLibs.excludes += "**/libsignal_jni_testing.so"
     }
 }
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
     implementation("org.signal:libsignal-android:0.102.3")
     implementation("org.signal:libsignal-client:0.102.3")
     implementation("com.google.zxing:core:3.5.3")
