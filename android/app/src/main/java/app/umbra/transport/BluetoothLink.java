@@ -41,7 +41,7 @@ public final class BluetoothLink implements AutoCloseable {
     public BluetoothLink(Context context, Listener listener) {
         BluetoothManager manager = context.getSystemService(BluetoothManager.class);
         adapter = manager == null ? null : manager.getAdapter(); this.listener = listener;
-        watchdog.scheduleAtFixedRate(() -> {
+        watchdog.scheduleWithFixedDelay(() -> {
             BluetoothSocket active = socket; if (active == null) return;
             long now = System.nanoTime();
             if ((peer == null && now - started > TimeUnit.SECONDS.toNanos(20)) ||
