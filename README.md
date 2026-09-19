@@ -28,7 +28,7 @@ no ejecutada en GitHub en esta entrega. Los resultados locales nuevos están en
 
 Cliente Android nativo con interfaz propia, chats individuales, adjuntos pequeños, identidad local sin teléfono, transporte Bluetooth directo y relay HTTPS. Esta revisión modifica el código anterior: no es una maqueta de pantallas ni un documento de propuesta.
 
-**Entrega de código, no de una aplicación certificada para secretos reales. No incluye APK.** Se ejecutaron las pruebas del servidor y del núcleo Java; faltan la compilación Android, la ejecución de libsignal/JNI, las pruebas entre teléfonos y una auditoría independiente. No se afirma que sea más segura que WhatsApp, Signal u otra aplicación auditada.
+**Entrega de desarrollo, no de una aplicación certificada para secretos reales.** P0-01 ejecuta las pruebas del servidor, núcleo Java y libsignal/JNI, y genera APKs debug de ambas variantes con lint e inspección de permisos. Siguen pendientes las pruebas Android instrumentadas, entre teléfonos y una auditoría independiente. No se afirma que sea más segura que WhatsApp, Signal u otra aplicación auditada.
 
 ## Qué cambia en esta revisión
 
@@ -52,17 +52,17 @@ El cifrado de mensajes mantiene la integración con **libsignal 0.102.3**; no se
 | Núcleo Java, JDK 21 real | **105 escenarios aprobados**: 20 anteriores y 85 nuevos. Incluyen JCA AES-GCM/HMAC con claves de prueba de software, no Android Keystore. |
 | Configuración fuente | **12 comprobaciones aprobadas** sobre permisos declarados, backups, confianza TLS y variante offline. No inspeccionan un APK. |
 | Sintaxis Java | 20 archivos analizados; no verifica resolución de tipos/dependencias Android. |
-| Integración real libsignal | **30 métodos JUnit escritos, no ejecutados**: 18 anteriores y 12 nuevos. Sin reemplazar la biblioteca por un simulador. |
-| Preflight Android | Bloqueado: falta Android SDK, plataforma 36. |
-| Manifiestos combinados / APK | Bloqueado: no existen salidas de una compilación Android. |
+| Integración real libsignal | **30 métodos JUnit aprobados por variante** (60 ejecuciones): JNI real en JVM Linux, sin fallos ni omisiones. |
+| Build Android | Gradle 8.13 / AGP 8.13.2 / JDK 21 / SDK 36: ambos APK debug y lint aprobados (4 advertencias por variante). |
+| Manifiestos combinados / APK | Permisos y JNI verificados; offline sin INTERNET ni ACCESS_NETWORK_STATE. |
 
-Los comandos, límites y salidas completas están en [docs/TEST_STATUS.md](docs/TEST_STATUS.md) y `docs/validation/`. Los informes anteriores se conservan, identificados como históricos, en `docs/legacy/0.1/`.
+La evidencia actual de P0-01 está en [el informe fechado](docs/validation/2026-09-19-p0-01.md). Los informes históricos están en [docs/TEST_STATUS.md](docs/TEST_STATUS.md) y `docs/validation/`. Los informes anteriores se conservan, identificados como históricos, en `docs/legacy/0.1/`.
 
 ## Dos variantes
 
 **Connected** conserva mensajería por relay HTTPS y Bluetooth. Su interruptor «solo Bluetooth» cancela conexiones propias en curso y pausa nuevos intentos de red; no puede retirar bytes que ya se hayan enviado.
 
-**Offline** tiene un identificador de aplicación distinto, `BuildConfig.ALLOW_RELAY=false` y un manifiesto de variante que elimina `INTERNET` y `ACCESS_NETWORK_STATE`. Es una restricción escrita en el proyecto, pendiente de comprobar en la compilación. El script posterior a la compilación falla si falta un manifiesto o si conserva los permisos prohibidos. Esta variante no comparte automáticamente identidad ni historial con Connected.
+**Offline** tiene un identificador de aplicación distinto, `BuildConfig.ALLOW_RELAY=false` y un manifiesto de variante que elimina `INTERNET` y `ACCESS_NETWORK_STATE`. La ausencia de ambos permisos se verifica en los manifiestos combinados y con aapt sobre el APK debug final. El script posterior a la compilación falla si falta un manifiesto o si conserva los permisos prohibidos. Esta variante no comparte automáticamente identidad ni historial con Connected.
 
 La restricción se refiere al proceso de UMBRA: un selector de documentos o aplicación externa puede usar su propia conexión a internet. No convierte el teléfono completo en un dispositivo sin red ni oculta la actividad de radio Bluetooth.
 
@@ -71,10 +71,10 @@ La restricción se refiere al proceso de UMBRA: un selector de documentos o apli
 ```text
 android/app/src/main/      Cliente nativo, protocolo, bóveda e interfaz
 android/app/src/offline/   Eliminación de permisos de red para la variante offline
-android/app/src/test/      Pruebas de integración real con libsignal, pendientes
+android/app/src/test/      Pruebas JVM de integración real con libsignal
 relay/                    FastAPI/SQLite, administrador de invitaciones y pruebas
 scripts/                  Pruebas locales, políticas de fuente y compilación Android
-.github/workflows/        Flujo CI escrito para ambas variantes; no ejecutado aquí
+.github/workflows/        Flujo CI para backend, contenedor y ambas variantes Android
 docs/validation/          Salidas reales de esta sesión
 docs/HARDENING_0_2.md      Cambios, amenazas cubiertas y limitaciones
 ```
@@ -95,7 +95,7 @@ En Windows: activar `.venv\Scripts\Activate.ps1` y utilizar Git Bash/WSL para el
 
 ## Compilar Android y ambas variantes
 
-JDK 21, Gradle 8.13, Android Gradle Plugin 8.13.2, plataforma 36 y Build Tools 35.0.0. Android 12/API 31 o superior en los teléfonos. Estas son las versiones configuradas; su resolución conjunta no se verificó en este entorno.
+JDK 21, Gradle 8.13, Android Gradle Plugin 8.13.2, plataforma 36 y Build Tools 35.0.0. Android 12/API 31 o superior en los teléfonos. Su resolución conjunta se verificó para debug; ver [el procedimiento reproducible](docs/ANDROID_BUILD.md).
 
 ```bash
 sdkmanager "platforms;android-36" "build-tools;35.0.0"
@@ -108,9 +108,9 @@ En Windows:
 python scripts/build_android.py --sdk "$env:LOCALAPPDATA\Android\Sdk"
 ```
 
-El script ejecuta pruebas JUnit, ensamblado debug y lint de ambas variantes, y después comprueba los manifiestos combinados. Utiliza Gradle local o descarga la distribución oficial, con comprobación de su checksum publicado. No incorpora binarios del SDK ni bibliotecas descargadas.
+El script ejecuta pruebas JUnit, ensamblado debug y lint de ambas variantes, y después comprueba manifiestos combinados, permisos del APK y JNI. Utiliza Gradle 8.13 descargado de la distribución oficial, con comprobación de su checksum publicado. No incorpora binarios del SDK ni bibliotecas descargadas.
 
-Rutas **esperadas tras una compilación correcta**, no archivos presentes en esta entrega:
+Rutas de los APK debug generados localmente (los binarios no se añaden a Git):
 
 ```text
 android/app/build/outputs/apk/connected/debug/app-connected-debug.apk

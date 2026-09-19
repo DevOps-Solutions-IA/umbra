@@ -1,5 +1,20 @@
 # Transferencia técnica a Codex
 
+## Actualización P0-01 — 2026-09-19 UTC
+
+VERIFIED — Repositorio privado publicado; base main comprobada:
+`3716f09e415c69f59102e74cffa6a1bbb154dec6`. Cambios de código en
+`5a8f9b368225372a80c5150a37d33737138216c9`, rama `codex/android-build-validation`.
+Build debug real, 30 tests libsignal por variante, lint y permisos/JNI de APK
+verificados localmente. Backend (80 tests) y contenedor aislado también verificados.
+Consultar [evidencia y límites](validation/2026-09-19-p0-01.md) y
+[procedimiento](ANDROID_BUILD.md). La PR requiere revisión; no se autoriza auto-merge.
+
+NOT_VERIFIED — Siguen pendientes instrumentación/Keystore, Bluetooth emulado y
+físico, release/R8, cadena de suministro completa y auditoría. Siguiente trabajo:
+completar los controles restantes de P0-02 y continuar P0-03 según el roadmap.
+La descripción de preparación que sigue es histórica, no el estado actual de publicación.
+
 Fecha: 2026-09-18. Revisión de aplicación: 0.2.0-dev, sin cambios de runtime en esta preparación.
 Objetivo remoto: `devopssolutionsia/umbra`, **privado**. La preparación local no demuestra que
 el repositorio exista en GitHub. No hay una tarea Codex iniciada ni servicio desplegado.

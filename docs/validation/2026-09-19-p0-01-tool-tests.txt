@@ -1,0 +1,53 @@
+test_client_testing_jni_rejected (test_debug_apks.ApkGateTests.test_client_testing_jni_rejected) ... ok
+test_connected_requires_both_network_permissions (test_debug_apks.ApkGateTests.test_connected_requires_both_network_permissions) ... ok
+test_desktop_jni_rejected (test_debug_apks.ApkGateTests.test_desktop_jni_rejected) ... ok
+test_empty_decoder_output_rejected (test_debug_apks.ApkGateTests.test_empty_decoder_output_rejected) ... ok
+test_missing_jni_abi_rejected (test_debug_apks.ApkGateTests.test_missing_jni_abi_rejected) ... ok
+test_offline_bluetooth_only (test_debug_apks.ApkGateTests.test_offline_bluetooth_only) ... ok
+test_offline_rejects_each_network_permission (test_debug_apks.ApkGateTests.test_offline_rejects_each_network_permission) ... ok
+test_conflicting_history_blocks_upload (test_publisher_flow.PublicationFlowTests.test_conflicting_history_blocks_upload) ... ok
+test_private_created_and_checked_before_push (test_publisher_flow.PublicationFlowTests.test_private_created_and_checked_before_push) ... ok
+test_public_response_blocks_upload (test_publisher_flow.PublicationFlowTests.test_public_response_blocks_upload) ... ok
+test_wrong_account_blocks_creation (test_publisher_flow.PublicationFlowTests.test_wrong_account_blocks_creation) ... ok
+test_aws_pattern (test_repository_tools.GuardTests.test_aws_pattern) ... ok
+test_credential_url_pattern (test_repository_tools.GuardTests.test_credential_url_pattern) ... ok
+test_database_rejected (test_repository_tools.GuardTests.test_database_rejected) ... ok
+test_env_example_allowed (test_repository_tools.GuardTests.test_env_example_allowed) ... ok
+test_fine_grained_pattern (test_repository_tools.GuardTests.test_fine_grained_pattern) ... ok
+test_github_pattern (test_repository_tools.GuardTests.test_github_pattern) ... ok
+test_key_file_rejected (test_repository_tools.GuardTests.test_key_file_rejected) ... ok
+test_local_sdk_config_rejected (test_repository_tools.GuardTests.test_local_sdk_config_rejected) ... ok
+test_nested_env_example_allowed (test_repository_tools.GuardTests.test_nested_env_example_allowed) ... ok
+test_openai_pattern (test_repository_tools.GuardTests.test_openai_pattern) ... ok
+test_private_key_pattern (test_repository_tools.GuardTests.test_private_key_pattern) ... ok
+test_public_url_allowed (test_repository_tools.GuardTests.test_public_url_allowed) ... ok
+test_real_env_rejected (test_repository_tools.GuardTests.test_real_env_rejected) ... ok
+test_rsa_key_pattern (test_repository_tools.GuardTests.test_rsa_key_pattern) ... ok
+test_signing_store_rejected (test_repository_tools.GuardTests.test_signing_store_rejected) ... ok
+test_source_is_allowed (test_repository_tools.GuardTests.test_source_is_allowed) ... ok
+test_staging_env_rejected (test_repository_tools.GuardTests.test_staging_env_rejected) ... ok
+test_symlink_rejected (test_repository_tools.GuardTests.test_symlink_rejected) ... ok
+test_venv_not_published (test_repository_tools.GuardTests.test_venv_not_published) ... ok
+test_worktree_scan (test_repository_tools.GuardTests.test_worktree_scan) ... ok
+test_different_main_rejected (test_repository_tools.PublisherTests.test_different_main_rejected) ... ok
+test_empty_owner_rejected (test_repository_tools.PublisherTests.test_empty_owner_rejected) ... ok
+test_empty_remote_not_claimed_complete (test_repository_tools.PublisherTests.test_empty_remote_not_claimed_complete) ... ok
+test_expected_target_valid (test_repository_tools.PublisherTests.test_expected_target_valid) ... ok
+test_git_suffix_rejected (test_repository_tools.PublisherTests.test_git_suffix_rejected) ... ok
+test_matching_main (test_repository_tools.PublisherTests.test_matching_main) ... ok
+test_non_boolean_visibility_rejected (test_repository_tools.PublisherTests.test_non_boolean_visibility_rejected) ... ok
+test_option_injection_rejected (test_repository_tools.PublisherTests.test_option_injection_rejected) ... ok
+test_other_branch_rejected (test_repository_tools.PublisherTests.test_other_branch_rejected) ... ok
+test_path_traversal_rejected (test_repository_tools.PublisherTests.test_path_traversal_rejected) ... ok
+test_private_exact_repo_accepted (test_repository_tools.PublisherTests.test_private_exact_repo_accepted) ... ok
+test_public_repo_rejected (test_repository_tools.PublisherTests.test_public_repo_rejected) ... ok
+test_real_check_only_does_not_invoke_network (test_repository_tools.PublisherTests.test_real_check_only_does_not_invoke_network) ... 106 archivos revisados. Destino previsto: devopssolutionsia/umbra (PRIVATE).
+ok
+test_url_rejected (test_repository_tools.PublisherTests.test_url_rejected) ... ok
+test_wrong_repo_rejected (test_repository_tools.PublisherTests.test_wrong_repo_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 46 tests in 0.887s
+
+OK
+Solo comprobación local. No se creó ni subió nada a GitHub.
