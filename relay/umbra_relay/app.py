@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -18,6 +19,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from .guard import RequestLimits
 from .maintenance import RetentionHealth, retention_loop
+from .schema import validate_constraints
 
 MAX_BODY = 1_000_000
 MAX_CIPHERTEXT = 720_000
@@ -92,6 +94,7 @@ class Database:
         required = legacy | {"seq"} if version == 2 else legacy
         if columns != required:
             raise ValueError("Incompatible message schema; explicit migration required")
+        validate_constraints(conn, tables, version)
 
     @contextmanager
     def connect(self, write: bool = False):
@@ -337,6 +340,16 @@ def create_app(database_path: str | None = None, *, rate_limit: int = 240) -> Fa
             authorize(conn, box, authorization, "read")
             conn.execute("DELETE FROM boxes WHERE id=?", (box,))
         return Response(status_code=204)
+
+    @app.exception_handler(sqlite3.Error)
+    async def storage_error(request: Request, exc: sqlite3.Error):
+        # Transactions have already rolled back. Do not expose SQL diagnostics to
+        # clients or let the ASGI server log request-associated tracebacks.
+        app.state.retention_health.healthy = False
+        logging.getLogger("umbra_relay.storage").warning(
+            "Relay storage operation failed (SQLite code %s)", getattr(exc, "sqlite_errorcode", None))
+        return JSONResponse({"detail": "Storage temporarily unavailable"}, status_code=503,
+                            headers={"Retry-After": "60"})
 
     # Never return validation errors that echo secrets or ciphertext from request input.
     from fastapi.exceptions import RequestValidationError

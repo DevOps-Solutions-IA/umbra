@@ -1,8 +1,8 @@
-FROM python:3.12-slim
+FROM python:3.12-slim@sha256:2f17fc044b579bab302c2e8054d3a686e2cb9a83de48e70534b94cd8ebbe06a9
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 UMBRA_DB=/data/umbra.sqlite3
 WORKDIR /app
-COPY requirements.lock ./
-RUN pip install --no-cache-dir -r requirements.lock && \
+COPY requirements-hashed.lock ./
+RUN pip install --no-cache-dir -r requirements-hashed.lock && \
     groupadd -g 10001 umbra && useradd --uid 10001 --gid 10001 --no-create-home umbra && \
     mkdir /data && chown 10001:10001 /data
 COPY umbra_relay ./umbra_relay
