@@ -13,7 +13,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import publish_github as p
 
 class PublicationFlowTests(unittest.TestCase):
-    def simulate(self, private=True, remote_sha=None, owner='devopssolutionsia'):
+    def simulate(self, private=True, remote_sha=None, owner='synthetic-publisher'):
         calls=[]
         sha='a'*40
         with tempfile.TemporaryDirectory() as temp:
@@ -30,10 +30,15 @@ class PublicationFlowTests(unittest.TestCase):
                     endpoint=args[4]
                     if endpoint=='user':
                         value={'id':123,'login':owner}
+                    elif endpoint == 'orgs/DevOps-Solutions-IA':
+                        value={'login':'DevOps-Solutions-IA'}
+                    elif endpoint == 'user/memberships/orgs/DevOps-Solutions-IA':
+                        value={'state':'active','role':'admin','user':{'login':'synthetic-publisher'},
+                               'organization':{'login':'DevOps-Solutions-IA'}}
                     elif endpoint.endswith('/git/ref/heads/main'):
                         value={'object':{'sha':sha}}
                     else:
-                        value={'full_name':'devopssolutionsia/umbra','private':private,'default_branch':'main'}
+                        value={'full_name':'DevOps-Solutions-IA/umbra','private':private,'default_branch':'main'}
                     out=json.dumps(value)
                 elif args[:3]==('git','rev-parse','--show-toplevel'): out=str(root)
                 elif args[:3]==('git','symbolic-ref','--short'): out='main'
@@ -60,7 +65,7 @@ class PublicationFlowTests(unittest.TestCase):
         self.assertEqual(result,0); self.assertIsNone(error)
         create=next(i for i,c in enumerate(calls) if c[:3]==('gh','repo','create'))
         self.assertIn('--private',calls[create])
-        verify=next(i for i,c in enumerate(calls) if c[:4]==('gh','api','--hostname','github.com') and c[-1]=='repos/devopssolutionsia/umbra')
+        verify=next(i for i,c in enumerate(calls) if c[:4]==('gh','api','--hostname','github.com') and c[-1]=='repos/DevOps-Solutions-IA/umbra')
         push=next(i for i,c in enumerate(calls) if 'push' in c)
         self.assertLess(create,verify); self.assertLess(verify,push)
         self.assertEqual(calls[push][-1],'main:main')
