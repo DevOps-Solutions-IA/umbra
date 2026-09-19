@@ -3,6 +3,7 @@ import contextlib
 import io
 from pathlib import Path
 import sys
+import struct
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -13,13 +14,24 @@ import check_debug_apks as gate
 
 
 class ApkGateTests(unittest.TestCase):
-    def inspect(self, permissions, variant="offline", missing=None, desktop=False, testing=False):
+    def inspect(self, permissions, variant="offline", missing=None, desktop=False, testing=False, wrong_abi=False, duplicate=False):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             apk = root / "synthetic.apk"
             with zipfile.ZipFile(apk, "w") as package:
                 for abi in gate.ABIS - {missing}:
-                    package.writestr(f"lib/{abi}/libsignal_jni.so", b"\x7fELFsynthetic")
+                    machine = {"arm64-v8a": 183, "armeabi-v7a": 40, "x86": 3, "x86_64": 62}[abi]
+                    elf_class = 2 if abi in {"arm64-v8a", "x86_64"} else 1
+                    header = bytearray(64 if elf_class == 2 else 52)
+                    header[:7] = b"\x7fELF" + bytes([elf_class, 1, 1])
+                    struct.pack_into("<HHI", header, 16, 3, 65535 if wrong_abi else machine, 1)
+                    name = f"lib/{abi}/libsignal_jni.so"
+                    package.writestr(name, header)
+                    if duplicate:
+                        import warnings
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore", UserWarning)
+                            package.writestr(name, header)
                 if desktop:
                     package.writestr("libsignal_jni_amd64.so", b"synthetic")
                 if testing:
@@ -56,3 +68,19 @@ class ApkGateTests(unittest.TestCase):
     def test_client_testing_jni_rejected(self):
         with self.assertRaises(RuntimeError):
             self.inspect({"android.permission.BLUETOOTH_CONNECT"}, testing=True)
+
+    def test_unexpected_sensitive_permission_rejected(self):
+        with self.assertRaises(RuntimeError):
+            self.inspect({"android.permission.BLUETOOTH_CONNECT", "android.permission.READ_CONTACTS"})
+
+    def test_misspelled_variant_is_not_treated_as_offline(self):
+        with self.assertRaises(ValueError):
+            self.inspect({"android.permission.BLUETOOTH_CONNECT"}, variant="offlien")
+
+    def test_wrong_machine_in_elf_header_rejected(self):
+        with self.assertRaises(RuntimeError):
+            self.inspect({"android.permission.BLUETOOTH_CONNECT"}, wrong_abi=True)
+
+    def test_duplicate_zip_entry_rejected(self):
+        with self.assertRaises(RuntimeError):
+            self.inspect({"android.permission.BLUETOOTH_CONNECT"}, duplicate=True)
