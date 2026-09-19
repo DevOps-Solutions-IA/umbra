@@ -17,6 +17,7 @@ from fastapi import FastAPI, Header, HTTPException, Request, Response, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from .guard import RequestLimits
+from .maintenance import RetentionHealth, retention_loop
 
 MAX_BODY = 1_000_000
 MAX_CIPHERTEXT = 720_000
@@ -46,8 +47,10 @@ class Database:
                 raise ValueError("Database must not be a symlink")
         os.chmod(path, 0o600)
         with self.connect() as conn:
+            self.validate_schema(conn)
             conn.execute("PRAGMA journal_mode=WAL")
         with self.connect(write=True) as conn:
+            self.validate_schema(conn)
             conn.execute("CREATE TABLE IF NOT EXISTS invites(token_hash TEXT PRIMARY KEY, expires INTEGER NOT NULL)")
             conn.execute("CREATE TABLE IF NOT EXISTS boxes(id TEXT PRIMARY KEY, read_hash TEXT NOT NULL, write_hash TEXT NOT NULL, created INTEGER NOT NULL)")
             conn.execute("CREATE TABLE IF NOT EXISTS acknowledged(box TEXT NOT NULL REFERENCES boxes(id) ON DELETE CASCADE, id TEXT NOT NULL, digest TEXT NOT NULL, expires INTEGER NOT NULL, PRIMARY KEY(box,id))")
@@ -70,6 +73,25 @@ class Database:
             conn.execute("CREATE INDEX IF NOT EXISTS messages_box_seq ON messages(box,seq)")
             conn.execute("CREATE INDEX IF NOT EXISTS acknowledged_expiry ON acknowledged(expires)")
             conn.execute("PRAGMA user_version=2")
+
+    @staticmethod
+    def validate_schema(conn: sqlite3.Connection) -> None:
+        """Refuse destructive schema adoption/downgrade before any migration or WAL change."""
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        expected = {"invites", "boxes", "acknowledged", "messages"}
+        tables = {row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
+        if version not in (0, 1, 2) or not tables <= expected:
+            raise ValueError("Unsupported database schema; explicit migration required")
+        if version == 0 and not tables:
+            return  # The only path allowed to initialize an empty database.
+        if not {"boxes", "messages"} <= tables or (version == 2 and tables != expected):
+            raise ValueError("Incomplete database schema; refusing silent recreation")
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+        legacy = {"box", "id", "digest", "envelope", "size", "expires", "created"}
+        required = legacy | {"seq"} if version == 2 else legacy
+        if columns != required:
+            raise ValueError("Incompatible message schema; explicit migration required")
 
     @contextmanager
     def connect(self, write: bool = False):
@@ -194,14 +216,10 @@ def create_app(database_path: str | None = None, *, rate_limit: int = 240) -> Fa
     @asynccontextmanager
     async def lifespan(app):
         import asyncio
-        async def sweep():
-            while True:
-                await asyncio.sleep(60)
-                await asyncio.to_thread(cleanup)
         def cleanup():
             with db.connect(write=True) as conn:
                 db.purge(conn, int(time.time()))
-        task = asyncio.create_task(sweep())
+        task = asyncio.create_task(retention_loop(cleanup, app.state.retention_health))
         try:
             yield
         finally:
@@ -214,6 +232,7 @@ def create_app(database_path: str | None = None, *, rate_limit: int = 240) -> Fa
     app = FastAPI(title="UMBRA Relay", version="0.2.0", docs_url=None,
                   redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.database = db
+    app.state.retention_health = RetentionHealth()
     app.add_middleware(RequestLimits, per_minute=rate_limit, max_body=MAX_BODY)
 
     def authorize(conn, box: str, authorization: str | None, mode: str):
@@ -227,6 +246,8 @@ def create_app(database_path: str | None = None, *, rate_limit: int = 240) -> Fa
 
     @app.get("/healthz")
     def health():
+        if not app.state.retention_health.healthy:
+            return JSONResponse({"status": "degraded"}, status_code=503)
         return {"status": "ok"}
 
     @app.post("/v1/boxes", status_code=201)

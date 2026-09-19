@@ -6,29 +6,39 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import struct
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-NETWORK = {"android.permission.INTERNET", "android.permission.ACCESS_NETWORK_STATE"}
+from permission_policy import NETWORK, validate_permissions
 ABIS = {"arm64-v8a", "armeabi-v7a", "x86", "x86_64"}
 
 
 def inspect(apk: Path, aapt: Path, variant: str) -> None:
+    if variant not in {"connected", "offline"}:
+        raise ValueError("Unknown transport variant")
     output = subprocess.check_output([str(aapt), "dump", "permissions", str(apk)], text=True)
     permissions = set(re.findall(r"uses-permission(?:-sdk-\d+)?: name='([^']+)'", output))
     if not permissions:
         raise RuntimeError(f"No permissions decoded: {apk}")
-    expected = NETWORK if variant == "connected" else set()
-    if permissions & NETWORK != expected:
-        raise RuntimeError(f"Unexpected network permissions: {variant}: {permissions & NETWORK}")
+    validate_permissions(permissions, variant)
     with zipfile.ZipFile(apk) as package:
+        if len(package.namelist()) != len(set(package.namelist())):
+            raise RuntimeError("Ambiguous duplicate ZIP entries")
         if any(n.endswith("/libsignal_jni_testing.so") for n in package.namelist()):
             raise RuntimeError("Client-testing JNI must not ship in the app")
         for abi in sorted(ABIS):
             name = f"lib/{abi}/libsignal_jni.so"
             with package.open(name) as library:
-                if library.read(4) != b"\x7fELF":
-                    raise RuntimeError(f"Missing/invalid Signal JNI ELF: {name}")
+                header = library.read(64)
+                expected_class, expected_machine = {
+                    "arm64-v8a": (2, 183), "armeabi-v7a": (1, 40),
+                    "x86": (1, 3), "x86_64": (2, 62),
+                }[abi]
+                minimum = 64 if expected_class == 2 else 52
+                if (len(header) < minimum or header[:7] != b"\x7fELF" + bytes([expected_class, 1, 1]) or
+                        struct.unpack_from("<HHI", header, 16) != (3, expected_machine, 1)):
+                    raise RuntimeError(f"Invalid Signal JNI ELF class/machine/header: {name}")
         desktop = [n for n in package.namelist() if not n.startswith("lib/")
                    and re.search(r"(?:libsignal_jni.*\.(?:so|dylib)|signal_jni.*\.dll)$", n)]
         if desktop:

@@ -2,6 +2,7 @@
 """Check explicit source configuration only. Does not inspect an APK or certify security."""
 from pathlib import Path
 import xml.etree.ElementTree as ET
+from permission_policy import manifest_permissions, validate_permissions
 
 ROOT = Path(__file__).resolve().parents[1]
 ANDROID = '{http://schemas.android.com/apk/res/android}'
@@ -30,7 +31,8 @@ def main() -> None:
     removed = {x.get(ANDROID + 'name') for x in overlay.findall('uses-permission') if x.get(TOOLS + 'node') == 'remove'}
     require('android.permission.INTERNET' in removed, 'offline overlay removes INTERNET')
     require('android.permission.ACCESS_NETWORK_STATE' in removed, 'offline overlay removes NETWORK_STATE')
-    permissions = {x.get(ANDROID + 'name') for x in manifest.findall('uses-permission')}
+    permissions = manifest_permissions(manifest)
+    validate_permissions(permissions, 'connected')
     forbidden = {'android.permission.READ_CONTACTS', 'android.permission.READ_SMS',
                  'android.permission.READ_PHONE_STATE', 'android.permission.ACCESS_FINE_LOCATION',
                  'android.permission.QUERY_ALL_PACKAGES', 'android.permission.MANAGE_EXTERNAL_STORAGE'}
