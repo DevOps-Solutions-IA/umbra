@@ -30,7 +30,8 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         if (oldVersion != 1 || newVersion != 2) throw new IllegalStateException("Explicit migration required");
         AccessGate.Lease lease = gate.enter();
         // SQLiteOpenHelper wraps this method AND user_version in its upgrade transaction.
-        // Rechecking authorization at the end causes rollback on lock or authentication expiry.
+        // Checks roll back locks observed during migration; SQLiteOpenHelper owns the final commit.
+        // Do not claim the last check is atomic with that later framework commit.
         try {
             createTable(db, "records_v2");
             try (Cursor c = db.rawQuery("SELECT bucket,k,nonce,value FROM records", null)) {
@@ -54,11 +55,19 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         } catch (Exception e) { throw new IllegalStateException("Migration failed; original transaction must be preserved", e); }
     }
     @Override public void onConfigure(SQLiteDatabase db) {
-        db.execSQL("PRAGMA secure_delete=ON"); db.execSQL("PRAGMA synchronous=FULL");
+        // secure_delete returns a row even when setting the value; execSQL rejects it on Android.
+        try (Cursor result = db.rawQuery("PRAGMA secure_delete=ON", null)) {
+            if (!result.moveToFirst() || result.getInt(0) != 1)
+                throw new IllegalStateException("SQLite secure_delete could not be enabled");
+        }
+        db.execSQL("PRAGMA synchronous=FULL");
         db.execSQL("PRAGMA temp_store=MEMORY");
     }
-    /** Execute before authentication; never replace an existing data key that has disappeared. */
-    public static void prepareKey(Context context) throws Exception {
+    /** Execute before authentication; never replace an existing data key that has disappeared.
+     * Serialize creation/deletion across Activity instances: AndroidKeyStore generation replaces
+     * an existing alias, so check-then-generate must not race another preparation.
+     */
+    public static synchronized void prepareKey(Context context) throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore"); store.load(null);
         if (!store.containsAlias(AES_ALIAS) && context.getDatabasePath("umbra.db").exists())
             throw new SecurityException("La clave de la bóveda no está disponible; no se reemplazará automáticamente");
@@ -179,7 +188,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
             ended = true; return value;
         } finally { if (!ended && db.inTransaction()) db.endTransaction(); }
     }
-    public static void destroyKey() throws Exception {
+    public static synchronized void destroyKey() throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore"); store.load(null);
         store.deleteEntry(AES_ALIAS); store.deleteEntry(INDEX_ALIAS);
     }
