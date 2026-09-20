@@ -13,7 +13,7 @@ def snapshot(path):
                 db.execute("PRAGMA journal_mode").fetchone()[0])
 
 
-@pytest.mark.parametrize("version", [-1, 3, 2147483647])
+@pytest.mark.parametrize("version", [-1, 4, 2147483647])
 def test_unknown_schema_version_is_preserved(tmp_path, version):
     path = tmp_path / "unknown.sqlite3"
     with sqlite3.connect(path) as db:

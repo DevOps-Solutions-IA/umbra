@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from .guard import RequestLimits
 from .maintenance import RetentionHealth, retention_loop
 from .schema import validate_constraints
+from .pairing import install_pairing
 
 MAX_BODY = 1_000_000
 MAX_CIPHERTEXT = 720_000
@@ -74,24 +75,32 @@ class Database:
             conn.execute("CREATE INDEX IF NOT EXISTS messages_expiry ON messages(expires)")
             conn.execute("CREATE INDEX IF NOT EXISTS messages_box_seq ON messages(box,seq)")
             conn.execute("CREATE INDEX IF NOT EXISTS acknowledged_expiry ON acknowledged(expires)")
-            conn.execute("PRAGMA user_version=2")
+            conn.execute("""CREATE TABLE IF NOT EXISTS pairing_invites(
+                id_hash TEXT PRIMARY KEY, box TEXT NOT NULL REFERENCES boxes(id) ON DELETE CASCADE,
+                consume_hash TEXT NOT NULL, revoke_hash TEXT NOT NULL, expires INTEGER NOT NULL,
+                request_hash TEXT, revoked INTEGER NOT NULL)""")
+            conn.execute("CREATE INDEX IF NOT EXISTS pairing_expiry ON pairing_invites(expires)")
+            conn.execute("CREATE INDEX IF NOT EXISTS pairing_box ON pairing_invites(box)")
+            conn.execute("PRAGMA user_version=3")
 
     @staticmethod
     def validate_schema(conn: sqlite3.Connection) -> None:
         """Refuse destructive schema adoption/downgrade before any migration or WAL change."""
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         expected = {"invites", "boxes", "acknowledged", "messages"}
+        if version == 3:
+            expected.add("pairing_invites")
         tables = {row[0] for row in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        if version not in (0, 1, 2) or not tables <= expected:
+        if version not in (0, 1, 2, 3) or not tables <= expected:
             raise ValueError("Unsupported database schema; explicit migration required")
         if version == 0 and not tables:
             return  # The only path allowed to initialize an empty database.
-        if not {"boxes", "messages"} <= tables or (version == 2 and tables != expected):
+        if not {"boxes", "messages"} <= tables or (version >= 2 and tables != expected):
             raise ValueError("Incomplete database schema; refusing silent recreation")
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
         legacy = {"box", "id", "digest", "envelope", "size", "expires", "created"}
-        required = legacy | {"seq"} if version == 2 else legacy
+        required = legacy | {"seq"} if version >= 2 else legacy
         if columns != required:
             raise ValueError("Incompatible message schema; explicit migration required")
         validate_constraints(conn, tables, version)
@@ -122,6 +131,7 @@ class Database:
         db.execute("DELETE FROM messages WHERE expires<=?", (now,))
         db.execute("DELETE FROM acknowledged WHERE expires<=?", (now,))
         db.execute("DELETE FROM invites WHERE expires<=?", (now,))
+        db.execute("DELETE FROM pairing_invites WHERE expires<=?", (now,))
 
     def issue_invite(self, ttl: int = 3600) -> str:
         import secrets
@@ -246,6 +256,8 @@ def create_app(database_path: str | None = None, *, rate_limit: int = 240) -> Fa
         expected = row[f"{mode}_hash"] if row else "1" * 64
         if not hmac.compare_digest(actual, expected):
             raise HTTPException(401, "Unauthorized")
+
+    install_pairing(app, db, authorize, validate_token, token_hash)
 
     @app.get("/healthz")
     def health():

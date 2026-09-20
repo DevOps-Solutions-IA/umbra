@@ -20,6 +20,7 @@ public final class BluetoothLink implements AutoCloseable {
         String acceptCard(JSONObject card) throws Exception;
         byte[] prove(boolean dialer, String peer, byte[] ownNonce, byte[] peerNonce) throws Exception;
         void verify(boolean peerIsDialer, String peer, byte[] peerNonce, byte[] ownNonce, byte[] proof, boolean enrolling) throws Exception;
+        void authorizeSend(String peer) throws Exception;
         void receive(String peer, JSONObject envelope) throws Exception;
         void status(String text);
     }
@@ -169,6 +170,7 @@ public final class BluetoothLink implements AutoCloseable {
             writes.execute(() -> {
                 try {
                     if (result.isDone() || socket != expected || !recipient.equals(peer)) throw new IOException("Link changed");
+                    listener.authorizeSend(recipient);
                     write(expected, new JSONObject().put("kind", "message").put("envelope", immutableEnvelope)); result.complete(null);
                 } catch (Exception e) { result.completeExceptionally(e); }
                 finally { inFlight.remove(id, result); }

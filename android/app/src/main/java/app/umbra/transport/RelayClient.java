@@ -79,6 +79,23 @@ public final class RelayClient implements AutoCloseable {
         request("POST", "/v1/boxes", null, new JSONObject().put("id", profile.getString("box"))
             .put("read_token", profile.getString("read")).put("write_token", profile.getString("write")).put("invitation", invitation.trim()));
     }
+    public void registerPairing(JSONObject profile, JSONObject registration) throws Exception {
+        JSONObject response = request("POST", "/v1/boxes/" + Wire.uuid(profile.getString("box")) + "/pairing-invites",
+            profile.getString("read"), registration);
+        Wire.fields(response, "registered");
+        if (!Boolean.TRUE.equals(response.get("registered"))) throw new SecurityException("Invalid pairing response");
+    }
+    public void claimPairing(String invite, String requestPayload) throws Exception {
+        String id = app.umbra.pairing.PairingService.invitationId(invite);
+        JSONObject response = request("POST", "/v1/pairing-invites/" + id + "/claim",
+            app.umbra.pairing.PairingService.consumeToken(invite),
+            new JSONObject().put("request_hash", Bytes.sha256(Bytes.utf8(requestPayload))));
+        Wire.fields(response, "claimed");
+        if (!Boolean.TRUE.equals(response.get("claimed"))) throw new SecurityException("Invalid pairing response");
+    }
+    public void revokePairing(String id, String capability) throws Exception {
+        request("DELETE", "/v1/pairing-invites/" + app.umbra.pairing.PairingService.token(id), capability, null);
+    }
     public void send(JSONObject card, JSONObject envelope) throws Exception {
         request("PUT", "/v1/boxes/" + Wire.uuid(card.getString("box")) + "/messages/" + Wire.uuid(envelope.getString("id")), card.getString("write"), envelope);
     }

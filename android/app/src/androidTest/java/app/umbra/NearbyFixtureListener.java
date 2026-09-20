@@ -57,6 +57,7 @@ public final class NearbyFixtureListener extends RunListener {
                 public void verify(boolean d, String peer, byte[] a, byte[] b, byte[] proof, boolean enrolling) throws Exception {
                     synchronized (recordsLock) { engine.verifyNearby(d, peer, a, b, proof, enrolling); }
                 }
+                public void authorizeSend(String peer) throws Exception { synchronized (recordsLock) { engine.authorizeTransport(peer); } }
                 public void receive(String peer, JSONObject envelope) throws Exception {
                     synchronized (recordsLock) {
                         try { engine.receive(envelope); }
