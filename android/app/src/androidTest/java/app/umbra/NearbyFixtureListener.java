@@ -91,7 +91,6 @@ public final class NearbyFixtureListener extends RunListener {
             }
             Set<String> sent = new HashSet<>();
             long deadline = SystemClock.elapsedRealtime() + 45000;
-            boolean duplicateSent = false;
             while (SystemClock.elapsedRealtime() < deadline) {
                 if (receiveFailure != null) throw new AssertionError("Incoming processing failed", receiveFailure);
                 List<JSONObject> queue;
@@ -101,10 +100,9 @@ public final class NearbyFixtureListener extends RunListener {
                     String id = envelope.getString("id");
                     if (!sent.add(id)) continue;
                     link.sendAsync(peer, envelope).get(15, TimeUnit.SECONDS);
-                    if (!duplicateSent && !queued.optBoolean("receipt")) {
+                    if (!queued.optBoolean("receipt")) {
                         Thread.sleep(100); // Let the bounded write queue retire its completed entry.
                         link.sendAsync(peer, new JSONObject(envelope.toString())).get(15, TimeUnit.SECONDS);
-                        duplicateSent = true;
                     }
                     synchronized (recordsLock) { engine.transported(id, false); }
                 }

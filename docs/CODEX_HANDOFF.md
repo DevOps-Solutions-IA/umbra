@@ -7,12 +7,16 @@ USER_DECISION — Rama `codex/device-linking-core`, PR dependiente de #4 hacia
 no se modifica main ni las ramas previas. Consultar el nuevo informe antes de
 atribuir resultados de CI al commit actual.
 
-IMPLEMENTED / VALIDATION IN PROGRESS — autoridad A1, claves Signal por dispositivo,
+VERIFIED — implementación `ef1106f` y CI `35544189738`: cuatro trabajos SUCCESS.
+92 JVM por variante, 136 backend, 18 instrumentadas por variante; autoridad A1, claves Signal por dispositivo,
 ceremonia con consentimiento de sesión, lista firmada/versionada, aprobación de
 conjunto, fanout independiente y revocación local/capacidad delegada del relay.
 [Protocolo](protocol/DEVICE_LINKING.md), [ADR](adr/ADR-device-model.md),
 [evidencia](validation/2026-09-20-device-linking-core.md). Harness A1/A2/B1 real
 HTTPS/JNI y SQLite de instrumentación aislado; no interfaz definitiva de dispositivos.
+
+El HEAD posterior de evidencia/fixtures y su CI propia se registran en la
+[PR #5](https://github.com/DevOps-Solutions-IA/umbra/pull/5); comprobarlos antes de continuar.
 
 BLOCKED — hardware Keystore, Bluetooth físico, recuperación exportable y revisión
 independiente. Ubicación/voz/vídeo/TURN siguen fuera de esta entrega. Consultar los

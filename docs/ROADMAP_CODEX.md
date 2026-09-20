@@ -4,7 +4,9 @@
 
 `codex/device-linking-core` parte del HEAD abierto de #4. Añade autoridad/listas,
 ceremonia, sesiones por dispositivo, fanout y revocación; ver [informe nuevo](validation/2026-09-20-device-linking-core.md)
-para resultados sobre el commit probado. No declarar cerrado P0-03 por SQLite de
+para resultados sobre el commit probado: `ef1106f`, CI `35544189738` con cuatro
+SUCCESS. El HEAD de evidencia/fixtures posterior requiere su CI propia en PR #5.
+No declarar cerrado P0-03 por SQLite de
 laboratorio ni P0-11 por Bluetooth emulado. UI de administración completa e historial
 sincronizado siguen pendientes; ubicación, voz, vídeo y TURN no implementados.
 
