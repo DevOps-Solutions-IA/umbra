@@ -9,5 +9,7 @@ public interface Records {
     void remove(String bucket, String key);
     List<String> keys(String bucket);
     <T> T transaction(Work<T> work) throws Exception;
+    /** Captures the current unlock epoch. Implementations without an access gate fail closed. */
+    default Runnable authorization() { throw new SecurityException("Session authorization unavailable"); }
     interface Work<T> { T run() throws Exception; }
 }
