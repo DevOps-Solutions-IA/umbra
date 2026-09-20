@@ -52,3 +52,22 @@ como invitaciones de un uso. Los dos extremos necesitan verificación humana.
 Ver [identidad](adr/ADR-identity-model.md), [metadatos](adr/ADR-metadata.md),
 [recuperación](adr/ADR-recovery.md) y [protocolo](protocol/PAIRING.md).
 Dispositivos, ubicación y llamadas aún no forman parte del bloque implementado.
+
+
+## Dispositivos v1 — segunda entrega
+
+[ADR de autoridad](adr/ADR-device-model.md) y [protocolo](protocol/DEVICE_LINKING.md).
+La lista firmada no equivale a verificación humana: agregar una clave exige aprobar
+el conjunto completo desde una raíz ya verificada. Engine rechaza claves revocadas
+incluso por APIs de tarjetas/Bluetooth antiguas. A1 administra y cada dispositivo
+tiene claves/ratchets propios; el relay no concede pertenencia. Retirar A1 es terminal.
+
+La delegación de borrado de buzón se transmite cifrada y no concede lectura. Antes
+de recibirla no se promete revocación remota. Un cambio local no retira bytes ya
+emitidos ni copias recibidas. Clientes desconectados aplican cambios al aprenderlos;
+listas caducadas requieren renovación/importación. No hay detección global de
+forks/retención ni defensa contra rollback privilegiado de toda la bóveda.
+
+Los harnesses usan identidades sintéticas. SQLite de androidTest se ejecuta en UID
+debug `.dev`, distinto de release y en directorio sintético exclusivo y está ausente de release; no rebaja Keystore. Véase el [informe](validation/2026-09-20-device-linking-core.md)
+para distinguir integración ejecutada de hardware y auditoría pendientes.

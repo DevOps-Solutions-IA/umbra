@@ -186,3 +186,16 @@ remoto. Hay que coordinar transporte y presentación sin anunciar una revocació
 si la petición falló. El cliente valida respuestas `registered`/`claimed` como booleano
 verdadero y rechaza campos adicionales. Un claim puede negar servicio si un poseedor del
 bearer lo consume con un digest ajeno; no permite suplantar firmas de identidad.
+
+## Autoridad y compatibilidad con dispositivos
+
+El emisor concreto de `pairing-issued` es la autoridad de consumo offline. La
+respuesta debe volver a ese emisor; dos copias desconectadas de su bóveda no ofrecen
+consumo único global. La reclamación del relay es rendezvous opcional; sus estados
+no se confunden con el commit local ni con la recepción del ACK en el solicitante.
+A1 CONSUMED prueba aceptación local, no que el solicitante haya completado. Reintento
+idéntico conserva ACK hasta vencer; revocación local no debe anunciarse aplicada al
+relay hasta recibir su respuesta. Las tarjetas permanentes `umbra-contact-v1` y
+el enrolamiento Bluetooth anterior no son invitaciones de un uso. Ninguna de esas
+rutas verifica humanamente por posesión; Engine mantiene VERIFIED_ONLY. La ceremonia
+de [dispositivos](DEVICE_LINKING.md) usa prefijo/propósito distintos e incompatibles.

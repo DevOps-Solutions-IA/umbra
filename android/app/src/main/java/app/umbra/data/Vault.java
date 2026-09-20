@@ -20,6 +20,8 @@ public final class Vault extends SQLiteOpenHelper implements Records {
     private static final String AES_ALIAS = "umbra.vault.v1", INDEX_ALIAS = "umbra.index.v2";
     private static final long MAX_ENCRYPTED_BYTES = 64L * 1024 * 1024;
     private final AccessGate gate;
+    private int transactionDepth;
+    private boolean rollbackOnly;
     public Vault(Context context, AccessGate gate) { super(context, "umbra.db", null, 2); this.gate = gate; }
     private static void createTable(SQLiteDatabase db, String table) {
         // Table identifiers are internal constants, never user input.
@@ -178,15 +180,26 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         } catch (AccessGate.LockedException e) { throw e; }
         catch (Exception e) { throw new IllegalStateException("Cannot enumerate locked vault", e); }
     }
+    @Override public Runnable authorization() {
+        AccessGate.Lease lease = gate.enter();
+        return () -> gate.check(lease);
+    }
     @Override public synchronized <T> T transaction(Work<T> work) throws Exception {
         AccessGate.Lease lease = gate.enter(); SQLiteDatabase db = getWritableDatabase(); db.beginTransaction();
         boolean ended = false;
+        if (transactionDepth++ == 0) rollbackOnly = false;
         try {
             T value = work.run();
+            if (rollbackOnly) throw new IllegalStateException("Nested vault transaction failed");
             // Prevent the UI lock from interleaving between the authorization check and SQLite commit.
             gate.commit(lease, () -> { db.setTransactionSuccessful(); db.endTransaction(); return null; });
             ended = true; return value;
-        } finally { if (!ended && db.inTransaction()) db.endTransaction(); }
+        } catch (Exception | Error failure) {
+            rollbackOnly = true; throw failure;
+        } finally {
+            try { if (!ended && db.inTransaction()) db.endTransaction(); }
+            finally { if (--transactionDepth == 0) rollbackOnly = false; }
+        }
     }
     public static synchronized void destroyKey() throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore"); store.load(null);

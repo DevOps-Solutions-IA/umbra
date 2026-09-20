@@ -71,11 +71,12 @@ def main() -> int:
     sources = ROOT / "android/app/src/main/java/app/umbra"
     java_sources = sorted((sources / "core").glob("*.java")) + sorted((sources / "crypto").glob("*.java"))
     java_sources += sorted((sources / "pairing").glob("*.java"))
+    java_sources += sorted((sources / "devices").glob("*.java"))
     java_sources += sorted((sources / "verification").glob("*.java"))
     java_sources += [sources / "protocol/Wire.java", sources / "data/Records.java",
                      sources / "transport/RelayClient.java",
                      ROOT / "android/app/src/test/java/app/umbra/MemoryRecords.java",
-                     ROOT / "scripts/RelayIntegrationTest.java"]
+                     ROOT / "scripts/RelayIntegrationTest.java", ROOT / "scripts/DeviceRelayIntegration.java"]
     with tempfile.TemporaryDirectory(prefix="umbra-https-integration-") as directory:
         temporary = Path(directory)
         classes = temporary / "classes"
@@ -97,7 +98,7 @@ def main() -> int:
         exchange = temporary / "exchange"
         exchange.mkdir(mode=0o700)
         invitations = exchange / "invitations"
-        invitations.write_text(database.issue_invite() + "\n" + database.issue_invite() + "\n")
+        invitations.write_text("".join(database.issue_invite() + "\n" for _ in range(5)))
         invitations.chmod(0o600)
         environment = dict(os.environ, UMBRA_DB=database.path, PYTHONPATH=str(ROOT / "relay"))
         context = ssl.create_default_context(cafile=str(cert))

@@ -36,18 +36,18 @@ class AndroidExecutionTests(unittest.TestCase):
 
     def test_skip_cannot_be_hidden_by_summary(self):
         with self.assertRaises(SystemExit):
-            self.run_single('INSTRUMENTATION_STATUS_CODE: -3\nOK (16 tests)\nINSTRUMENTATION_CODE: -1\n')
+            self.run_single('INSTRUMENTATION_STATUS_CODE: -3\nOK (18 tests)\nINSTRUMENTATION_CODE: -1\n')
 
     def test_missing_completion_is_failure(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (16 tests)\n')
+            self.run_single('OK (18 tests)\n')
 
     def test_adb_failure_is_not_overridden_by_test_summary(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (16 tests)\nINSTRUMENTATION_CODE: -1\n', returncode=1)
+            self.run_single('OK (18 tests)\nINSTRUMENTATION_CODE: -1\n', returncode=1)
 
-    def test_sixteen_executed_checks_and_completion_pass(self):
-        self.run_single('OK (16 tests)\nINSTRUMENTATION_CODE: -1\n')
+    def test_eighteen_executed_checks_and_completion_pass(self):
+        self.run_single('OK (18 tests)\nINSTRUMENTATION_CODE: -1\n')
 
     def test_physical_device_rejected_before_install_or_radio_changes(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -72,20 +72,22 @@ public class DeviceVaultTransactionTest {
         gate.unlock(); assertEquals(1, count());
     }
     @Test public void reauthenticationDoesNotAuthorizeAnOldTransaction() throws Exception {
+        Runnable authorization = vault.authorization();
         vault.transaction(() -> { marker("before"); return null; });
         assertThrows(AccessGate.LockedException.class, () -> vault.transaction(() -> {
             marker("must-rollback"); gate.lock(); gate.unlock(); return null;
         }));
         assertEquals(1, count());
+        assertThrows(AccessGate.LockedException.class, authorization::run);
     }
     @Test public void nestedFailureCannotCommitOuterWritesEvenIfCaught() throws Exception {
         vault.transaction(() -> { marker("before"); return null; });
-        vault.transaction(() -> {
+        assertThrows(IllegalStateException.class, () -> vault.transaction(() -> {
             marker("outer-must-rollback");
             try { vault.transaction(() -> { marker("inner-must-rollback"); throw new IllegalArgumentException("synthetic nested failure"); }); }
             catch (IllegalArgumentException expected) { /* Outer code cannot reverse SQLite's failed child marker. */ }
             return null;
-        });
+        }));
         assertEquals(1, count());
     }
     @Test public void rejectedLegacyMigrationPreservesOriginalSchemaAndRows() throws Exception {

@@ -50,13 +50,21 @@ public final class Wire {
             case "text" -> names.add("text");
             case "file" -> { names.add("name"); names.add("data"); }
             case "receipt" -> names.add("ackFor");
+            case "device-roster" -> names.add("roster");
+            case "device-grant" -> { names.add("box"); names.add("token"); names.add("proof"); }
             default -> throw new SecurityException("Unsupported content");
+        }
+        long version = integer(c, "v");
+        if (version == 2) {
+            if (kind.equals("receipt") || kind.startsWith("device-")) throw new SecurityException("Receipt version unsupported");
+            names.addAll(List.of("logicalId", "logicalFrom", "logicalTo"));
+            uuid(string(c, "logicalId", 36)); identity(string(c, "logicalFrom", 64)); identity(string(c, "logicalTo", 64));
         }
         fields(c, names.toArray(new String[0]));
         for (String key : List.of("id", "from", "to"))
             if (!string(c, key, 64).equals(envelope.getString(key))) throw new SecurityException("Envelope substitution");
         long created = integer(c, "created"), ms = integer(c, "createdMs"), expiry = integer(c, "expires");
-        if (integer(c, "v") != 1 || expiry != integer(envelope, "expires") || created < now - maxTtl || created > now + 300 ||
+        if ((version != 1 && version != 2) || expiry != integer(envelope, "expires") || created < now - maxTtl || created > now + 300 ||
             expiry <= created || expiry - created > maxTtl || ms < 0 || Math.abs(ms / 1000 - created) > 1)
             throw new SecurityException("Authenticated timestamp mismatch");
         if (kind.equals("text")) {
@@ -68,6 +76,11 @@ public final class Wire {
             byte[] data = Bytes.unb64(string(c, "data", 350_000));
             try { if (data.length < 1 || data.length > maxAttachment) throw new SecurityException("Invalid attachment length"); }
             finally { Arrays.fill(data, (byte) 0); }
+        } else if (kind.equals("device-roster")) {
+            app.umbra.devices.DeviceRoster.parse(string(c, "roster", 32000));
+        } else if (kind.equals("device-grant")) {
+            uuid(string(c, "box", 36)); app.umbra.pairing.PairingService.token(string(c, "token", 43));
+            if (Bytes.unb64(string(c, "proof", 88)).length != 64) throw new SecurityException("Invalid delegation proof");
         } else uuid(string(c, "ackFor", 36));
     }
 }

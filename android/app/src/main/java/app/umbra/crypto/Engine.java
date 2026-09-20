@@ -33,7 +33,7 @@ public final class Engine {
             // A missing identity is only a fresh install when no application records remain.
             // Never offer re-enrollment over a partially lost or damaged vault.
             for (String bucket : new String[]{"meta", "contact", "trusted", "session", "prekey", "signed", "kyber",
-                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export", "pairing-issued", "pairing-pending"})
+                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export", "pairing-issued", "pairing-pending", "device-roster", "device-index", "device-issued", "device-pending", "device-relay"})
                 if (!db.keys(bucket).isEmpty()) throw new IllegalStateException("Identity missing from existing vault");
             return false;
         }
@@ -43,6 +43,11 @@ public final class Engine {
         if (savedProfile == null || !Bytes.identity(pair.getPublicKey().serialize()).equals(savedProfile.getString("id")) ||
                 registration < 1 || registration > 16380)
             throw new IllegalStateException("Stored identity metadata is inconsistent");
+        JSONObject affiliation = get("meta", "device-affiliation");
+        if (affiliation == null && (!db.keys("device-roster").isEmpty() || !db.keys("device-index").isEmpty()))
+            throw new SecurityException("Device affiliation missing from existing vault");
+        if (affiliation != null && (get("device-roster", affiliation.getString("root")) == null || get("device-index", id()) == null))
+            throw new SecurityException("Device membership missing from existing vault");
         return true;
     }
     public void initialize(String alias) throws Exception {
@@ -68,6 +73,7 @@ public final class Engine {
     }
     public JSONObject createCard() throws Exception {
         return db.transaction(() -> {
+            app.umbra.devices.DevicePolicy.authorize(db, id(), id());
             // Bound unused key material: exporting indefinitely cannot fill storage without limit.
             if (db.keys("key-expiry").size() >= 200) throw new IllegalStateException("Demasiadas invitaciones pendientes; espere su vencimiento");
             IdentityKeyPair identity = signal.getIdentityKeyPair();
@@ -189,12 +195,21 @@ public final class Engine {
         });
     }
     private JSONObject requiredContact(String peer, boolean verified) throws Exception {
+        app.umbra.devices.DevicePolicy.authorize(db, id(), peer);
         JSONObject contact = get("contact", peer);
         if (contact == null || contact.optBoolean("blocked") || contact.optBoolean("identityChanged")) throw new SecurityException("Contacto desconocido o bloqueado");
         if (verified && !contact.optBoolean("verified")) throw new SecurityException("Verifique el código de seguridad antes de conversar");
         return contact;
     }
     /** Recheck immediately before a transport starts a queued write. Already emitted bytes cannot be recalled. */
+    public void authorizeTransportSelf() throws Exception {
+        db.transaction(() -> { app.umbra.devices.DevicePolicy.authorize(db, id(), id()); return null; });
+    }
+    /** A queued network write must not acquire a fresh authorization after lock/reopen. */
+    public Records.Work<Void> deliveryAuthorization(String peer) throws Exception {
+        Runnable lease = db.authorization(); authorizeTransport(peer);
+        return () -> { lease.run(); authorizeTransport(peer); return null; };
+    }
     public void authorizeTransport(String peer) throws Exception {
         db.transaction(() -> { requiredContact(peer, true); return null; });
     }
@@ -208,7 +223,7 @@ public final class Engine {
         List<JSONObject> result = new ArrayList<>();
         for (String k : db.keys("message")) {
             JSONObject message = get("message", k);
-            if (peer.equals(message.getString("peer")) && message.getLong("expires") > Bytes.now()) result.add(message);
+            if (!message.optString("kind").startsWith("device-") && peer.equals(message.getString("peer")) && message.getLong("expires") > Bytes.now()) result.add(message);
         }
         result.sort(Comparator.comparingLong(m -> m.optLong("createdMs", m.optLong("created") * 1000)));
         return result;
@@ -221,6 +236,40 @@ public final class Engine {
         if (content.length < 1 || content.length > MAX_ATTACHMENT) throw new IllegalArgumentException("Adjunto máximo: 256 KiB");
         name = app.umbra.core.FileNames.sanitize(name);
         return send(peer, new JSONObject().put("kind", "file").put("name", name).put("data", Bytes.b64(content)), ttl);
+    }
+    public String sendDeviceRoster(String peer) throws Exception {
+        return db.transaction(() -> {
+            JSONObject own = get("meta", "device-affiliation");
+            if (own == null) throw new SecurityException("Device migration required");
+            return send(peer, new JSONObject().put("kind", "device-roster").put("roster",
+                new app.umbra.devices.DeviceService(db).roster(own.getString("root"))), 600);
+        });
+    }
+    public String sendDeviceDelegation() throws Exception {
+        return db.transaction(() -> {
+            JSONObject grant = new app.umbra.devices.DeviceService(db).relayDelegation();
+            return send(grant.getString("root"), new JSONObject().put("kind", "device-grant").put("box", grant.getString("box")).put("token", grant.getString("token")).put("proof", grant.getString("proof")), 600);
+        });
+    }
+    /** Atomic fanout to the explicitly approved current recipient set, with independent sessions. */
+    public String sendIdentityText(String root, String text, long ttl) throws Exception {
+        if (text.trim().isEmpty() || Bytes.utf8(text).length > 16_000) throw new IllegalArgumentException("Invalid text");
+        return sendIdentity(root, new JSONObject().put("kind", "text").put("text", text), ttl);
+    }
+    public String sendIdentityFile(String root, String name, byte[] data, long ttl) throws Exception {
+        if (data.length < 1 || data.length > MAX_ATTACHMENT) throw new IllegalArgumentException("Invalid attachment");
+        return sendIdentity(root, new JSONObject().put("kind", "file").put("name", app.umbra.core.FileNames.sanitize(name)).put("data", Bytes.b64(data)), ttl);
+    }
+    private String sendIdentity(String root, JSONObject content, long ttl) throws Exception {
+        return db.transaction(() -> {
+            JSONObject own = get("meta", "device-affiliation");
+            if (own == null) throw new SecurityException("Explicit device migration required");
+            List<String> recipients = new app.umbra.devices.DeviceService(db).recipients(root);
+            String logicalId = UUID.randomUUID().toString();
+            content.put("logicalId", logicalId).put("logicalFrom", own.getString("root")).put("logicalTo", root);
+            for (String peer : recipients) send(peer, new JSONObject(content.toString()), ttl);
+            return logicalId;
+        });
     }
     private String send(String peer, JSONObject content, long ttl) throws Exception {
         if (ttl < 60 || ttl > MAX_TTL) throw new IllegalArgumentException("Caducidad inválida");
@@ -248,7 +297,7 @@ public final class Engine {
             new SessionBuilder(signal, remote, local).process(bundle);
         }
         String messageId = UUID.randomUUID().toString();
-        content.put("createdMs", System.currentTimeMillis()).put("v", 1).put("id", messageId).put("from", id()).put("to", peer).put("created", Bytes.now()).put("expires", expiry);
+        content.put("createdMs", System.currentTimeMillis()).put("v", content.has("logicalId") ? 2 : 1).put("id", messageId).put("from", id()).put("to", peer).put("created", Bytes.now()).put("expires", expiry);
         byte[] clear = Bytes.utf8(content.toString()), padded = Padding.pad(clear);
         CiphertextMessage encrypted;
         try { encrypted = new SessionCipher(signal, local, remote).encrypt(padded); }
@@ -304,6 +353,12 @@ public final class Engine {
             try { raw = Padding.unpad(padded); content = Wire.parse(raw, Padding.MAX_CLEAR); }
             finally { Arrays.fill(padded, (byte) 0); if (raw != null) Arrays.fill(raw, (byte) 0); }
             Wire.content(content, envelope, now, MAX_TTL, MAX_ATTACHMENT);
+            if (content.getInt("v") == 2) {
+                JSONObject own = get("meta", "device-affiliation"), sender = get("device-index", peer);
+                if (own == null || sender == null || !own.getString("root").equals(content.getString("logicalTo")) ||
+                    !sender.getString("root").equals(content.getString("logicalFrom")))
+                    throw new SecurityException("Logical identity substitution");
+            }
             String kind = content.getString("kind");
             JSONObject seenValue = new JSONObject().put("digest", fingerprint).put("expires", now + MAX_TTL);
             if (kind.equals("receipt")) {
@@ -313,16 +368,29 @@ public final class Engine {
                     sent.put("status", "Entregado"); put("message", acknowledged, sent); db.remove("outbox", acknowledged);
                 }
             } else {
-                if (kind.equals("text")) {
+                boolean acknowledge = true;
+                if (kind.equals("device-roster")) {
+                    app.umbra.devices.DeviceRoster roster = app.umbra.devices.DeviceRoster.parse(content.getString("roster"));
+                    JSONObject senderIndex = get("device-index", peer);
+                    if (!peer.equals(roster.root) && (senderIndex == null || !senderIndex.getString("root").equals(roster.root)))
+                        throw new SecurityException("Unrelated device roster sender");
+                    new app.umbra.devices.DeviceService(db).apply(roster.transcript);
+                    acknowledge = (!roster.members.containsKey(peer) || roster.active(peer)) &&
+                        (!roster.members.containsKey(id()) || roster.active(id()));
+                } else if (kind.equals("device-grant")) {
+                    new app.umbra.devices.DeviceService(db).receiveRelayDelegation(peer, content);
+                } else if (kind.equals("text")) {
                     if (Bytes.utf8(content.getString("text")).length > 16_000) throw new SecurityException("Text too large");
                 } else if (kind.equals("file")) {
                     if (Bytes.unb64(content.getString("data")).length > MAX_ATTACHMENT || content.getString("name").length() > 120)
                         throw new SecurityException("Attachment too large");
                 } else throw new SecurityException("Unsupported content");
                 if (db.keys("message").size() >= MAX_MESSAGES) throw new LocalCapacityException();
-                put("message", peer + ":" + messageId, new JSONObject(content.toString()).put("peer", peer).put("outgoing", false).put("status", "Recibido"));
-                JSONObject receipt = encrypt(peer, new JSONObject().put("kind", "receipt").put("ackFor", messageId), Math.min(expiry, now + 86400));
-                putOutbox(peer, receipt, true); seenValue.put("receipt", receipt);
+                if (!kind.startsWith("device-")) put("message", peer + ":" + messageId, new JSONObject(content.toString()).put("peer", peer).put("outgoing", false).put("status", "Recibido"));
+                if (acknowledge) {
+                    JSONObject receipt = encrypt(peer, new JSONObject().put("kind", "receipt").put("ackFor", messageId), Math.min(expiry, now + 86400));
+                    putOutbox(peer, receipt, true); seenValue.put("receipt", receipt);
+                }
             }
             put("seen", seenKey, seenValue); return null;
         });

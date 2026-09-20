@@ -21,6 +21,7 @@ from .guard import RequestLimits
 from .maintenance import RetentionHealth, retention_loop
 from .schema import validate_constraints
 from .pairing import install_pairing
+from .devices import install_devices
 
 MAX_BODY = 1_000_000
 MAX_CIPHERTEXT = 720_000
@@ -81,18 +82,21 @@ class Database:
                 request_hash TEXT, revoked INTEGER NOT NULL)""")
             conn.execute("CREATE INDEX IF NOT EXISTS pairing_expiry ON pairing_invites(expires)")
             conn.execute("CREATE INDEX IF NOT EXISTS pairing_box ON pairing_invites(box)")
-            conn.execute("PRAGMA user_version=3")
+            conn.execute("CREATE TABLE IF NOT EXISTS device_revocations(box TEXT PRIMARY KEY, cap_hash TEXT NOT NULL, revoked INTEGER NOT NULL, created INTEGER NOT NULL)")
+            conn.execute("PRAGMA user_version=4")
 
     @staticmethod
     def validate_schema(conn: sqlite3.Connection) -> None:
         """Refuse destructive schema adoption/downgrade before any migration or WAL change."""
         version = conn.execute("PRAGMA user_version").fetchone()[0]
         expected = {"invites", "boxes", "acknowledged", "messages"}
-        if version == 3:
+        if version >= 3:
             expected.add("pairing_invites")
+        if version >= 4:
+            expected.add("device_revocations")
         tables = {row[0] for row in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        if version not in (0, 1, 2, 3) or not tables <= expected:
+        if version not in (0, 1, 2, 3, 4) or not tables <= expected:
             raise ValueError("Unsupported database schema; explicit migration required")
         if version == 0 and not tables:
             return  # The only path allowed to initialize an empty database.
@@ -258,6 +262,7 @@ def create_app(database_path: str | None = None, *, rate_limit: int = 240) -> Fa
             raise HTTPException(401, "Unauthorized")
 
     install_pairing(app, db, authorize, validate_token, token_hash)
+    install_devices(app, db, authorize, validate_token, token_hash)
 
     @app.get("/healthz")
     def health():
@@ -279,6 +284,8 @@ def create_app(database_path: str | None = None, *, rate_limit: int = 240) -> Fa
                         hmac.compare_digest(existing["write_hash"], token_hash(data.write_token))):
                     response.status_code = 200
                     return {"id": data.id, "registered": True}
+                raise HTTPException(409, "Mailbox unavailable")
+            if conn.execute("SELECT 1 FROM device_revocations WHERE box=?", (data.id,)).fetchone():
                 raise HTTPException(409, "Mailbox unavailable")
             if conn.execute("SELECT COUNT(*) FROM boxes").fetchone()[0] >= MAX_BOXES:
                 raise HTTPException(503, "Mailbox capacity reached")
@@ -350,6 +357,7 @@ def create_app(database_path: str | None = None, *, rate_limit: int = 240) -> Fa
     def delete_box(box: str, authorization: Annotated[str | None, Header()] = None):
         with db.connect(write=True) as conn:
             authorize(conn, box, authorization, "read")
+            conn.execute("UPDATE device_revocations SET revoked=1 WHERE box=?", (box,))
             conn.execute("DELETE FROM boxes WHERE id=?", (box,))
         return Response(status_code=204)
 

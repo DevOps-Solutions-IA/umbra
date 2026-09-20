@@ -29,8 +29,12 @@ public final class RelayClient implements AutoCloseable {
     private void allowed() throws IOException {
         if (closed || !permitted.getAsBoolean()) throw new IOException("Conexión cancelada por la política local");
     }
+    @FunctionalInterface private interface Authorization { void check() throws Exception; }
     private JSONObject request(String method, String path, String token, JSONObject body) throws Exception {
-        allowed();
+        return request(method, path, token, body, () -> {});
+    }
+    private JSONObject request(String method, String path, String token, JSONObject body, Authorization authorization) throws Exception {
+        allowed(); authorization.check();
         HttpsURLConnection connection = (HttpsURLConnection) new URI(base + path).toURL().openConnection();
         synchronized (this) {
             allowed(); if (active != null) throw new IOException("Relay client already in use"); active = connection;
@@ -52,7 +56,7 @@ public final class RelayClient implements AutoCloseable {
                     if (bytes.length > 1_000_000) throw new IOException("Solicitud demasiado grande");
                     connection.setRequestProperty("Content-Type", "application/json");
                     connection.setDoOutput(true); connection.setFixedLengthStreamingMode(bytes.length); allowed();
-                    try (OutputStream output = connection.getOutputStream()) { output.write(bytes); }
+                    try (OutputStream output = connection.getOutputStream()) { allowed(); authorization.check(); output.write(bytes); }
                 } finally { java.util.Arrays.fill(bytes, (byte) 0); }
             }
             allowed(); int status = connection.getResponseCode();
@@ -95,6 +99,20 @@ public final class RelayClient implements AutoCloseable {
     }
     public void revokePairing(String id, String capability) throws Exception {
         request("DELETE", "/v1/pairing-invites/" + app.umbra.pairing.PairingService.token(id), capability, null);
+    }
+    public void delegateDeviceRevocation(JSONObject profile, String capability) throws Exception {
+        JSONObject result = request("PUT", "/v1/boxes/" + Wire.uuid(profile.getString("box")) + "/revocation", profile.getString("read"),
+            new JSONObject().put("token", app.umbra.pairing.PairingService.token(capability)));
+        Wire.fields(result, "delegated");
+        if (!Boolean.TRUE.equals(result.get("delegated"))) throw new SecurityException("Invalid device delegation response");
+    }
+    public void revokeDevice(String box, String capability) throws Exception {
+        request("DELETE", "/v1/boxes/" + Wire.uuid(box) + "/revocation", capability, null);
+    }
+    public void sendAuthorized(app.umbra.crypto.Engine engine, JSONObject card, JSONObject envelope) throws Exception {
+        var authorization = engine.deliveryAuthorization(envelope.getString("to"));
+        request("PUT", "/v1/boxes/" + Wire.uuid(card.getString("box")) + "/messages/" + Wire.uuid(envelope.getString("id")),
+            card.getString("write"), envelope, () -> authorization.run());
     }
     public void send(JSONObject card, JSONObject envelope) throws Exception {
         request("PUT", "/v1/boxes/" + Wire.uuid(card.getString("box")) + "/messages/" + Wire.uuid(envelope.getString("id")), card.getString("write"), envelope);
