@@ -123,22 +123,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -r /dev/kvm && test -w /dev/kvm
-          printf 'no\n' | avdmanager create avd --name umbra-ci --package 'system-images;android-35;default;x86_64'
-          mkdir -p android/app/build/reports/device
-          "$ANDROID_HOME/emulator/emulator" -avd umbra-ci -port 5554 -no-window -no-audio \
-            -no-boot-anim -no-snapshot -gpu swiftshader -accel on \
-            > android/app/build/reports/device/emulator.log 2>&1 &
-          emulator_pid=$!
-          trap 'adb -s emulator-5554 emu kill; wait "$emulator_pid"' EXIT
-          timeout 120 adb -s emulator-5554 wait-for-device
-          for attempt in $(seq 1 120); do
-            if [ "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then
-              break
-            fi
-            sleep 1
-          done
-          test "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" = 1
+          source scripts/ci_emulator.sh
+          umbra_start_avd umbra-ci 5554
           python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor connected --log android/app/build/reports/device/connected.log
           python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor offline --log android/app/build/reports/device/offline.log
           python scripts/smoke_release_launch.py --serial emulator-5554 > android/app/build/reports/device/release-launch.log
