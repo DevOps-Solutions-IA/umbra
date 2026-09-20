@@ -33,7 +33,7 @@ public final class Engine {
             // A missing identity is only a fresh install when no application records remain.
             // Never offer re-enrollment over a partially lost or damaged vault.
             for (String bucket : new String[]{"meta", "contact", "trusted", "session", "prekey", "signed", "kyber",
-                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export"})
+                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export", "pairing-issued", "pairing-pending"})
                 if (!db.keys(bucket).isEmpty()) throw new IllegalStateException("Identity missing from existing vault");
             return false;
         }
@@ -136,15 +136,14 @@ public final class Engine {
                 throw new SecurityException("No se permite retroceder una tarjeta de contacto");
             put("contact", peer, new JSONObject().put("id", peer).put("card", body)
                 .put("verified", old != null && old.optBoolean("verified"))
-                .put("blocked", old != null && old.optBoolean("blocked")));
+                .put("blocked", old != null && old.optBoolean("blocked"))
+                .put("identityChanged", old != null && old.optBoolean("identityChanged")));
             return peer;
         });
     }
     public void verify(String peer, String typedCode) throws Exception {
         db.transaction(() -> {
-            String expected = Bytes.safetyCode(id(), peer);
-            String entered = typedCode.toLowerCase(Locale.ROOT).replaceAll("\\s", "");
-            if (!Bytes.equal(Bytes.utf8(expected), Bytes.utf8(entered))) throw new SecurityException("El código no coincide");
+            if (!app.umbra.verification.Verification.matches(id(), peer, typedCode)) throw new SecurityException("El código no coincide");
             JSONObject contact = requiredContact(peer, false);
             signal.pin(peer, new IdentityKey(new ECPublicKey(Bytes.unb64(contact.getJSONObject("card").getString("identity")))));
             contact.put("verified", true); put("contact", peer, contact); return null;
@@ -159,11 +158,45 @@ public final class Engine {
             return null;
         });
     }
+    public enum TrustState { UNVERIFIED, VERIFIED, IDENTITY_CHANGED, BLOCKED }
+    /** Production policy remains VERIFIED_ONLY for every message, including text. */
+    public TrustState trustState(String peer) throws Exception {
+        JSONObject contact = get("contact", peer);
+        if (contact == null) throw new SecurityException("Unknown contact");
+        if (contact.optBoolean("blocked")) return TrustState.BLOCKED;
+        if (contact.optBoolean("identityChanged")) return TrustState.IDENTITY_CHANGED;
+        return contact.optBoolean("verified") ? TrustState.VERIFIED : TrustState.UNVERIFIED;
+    }
+    /** A reported key change suspends the old association immediately, even before a new card exists. */
+    public void identityChanged(String peer) throws Exception {
+        db.transaction(() -> {
+            JSONObject contact = get("contact", peer);
+            if (contact == null) throw new SecurityException("Unknown contact");
+            contact.put("identityChanged", true).put("verified", false); put("contact", peer, contact);
+            for (String k : db.keys("outbox")) if (get("outbox", k).getString("peer").equals(peer)) db.remove("outbox", k);
+            signal.deleteAllSessions(peer); return null;
+        });
+    }
+    /** Explicit human confirmation of the NEW fingerprint. Alias equality never authorizes replacement. */
+    public String confirmIdentityChange(String oldPeer, JSONObject newCard, String newCode) throws Exception {
+        return db.transaction(() -> {
+            JSONObject old = get("contact", oldPeer);
+            if (old == null || !old.optBoolean("identityChanged")) throw new SecurityException("No pending identity change");
+            String replacement = importCard(newCard);
+            if (replacement.equals(oldPeer)) throw new SecurityException("Expected a distinct new identity");
+            verify(replacement, newCode);
+            old.put("blocked", true); put("contact", oldPeer, old); return replacement;
+        });
+    }
     private JSONObject requiredContact(String peer, boolean verified) throws Exception {
         JSONObject contact = get("contact", peer);
-        if (contact == null || contact.optBoolean("blocked")) throw new SecurityException("Contacto desconocido o bloqueado");
+        if (contact == null || contact.optBoolean("blocked") || contact.optBoolean("identityChanged")) throw new SecurityException("Contacto desconocido o bloqueado");
         if (verified && !contact.optBoolean("verified")) throw new SecurityException("Verifique el código de seguridad antes de conversar");
         return contact;
+    }
+    /** Recheck immediately before a transport starts a queued write. Already emitted bytes cannot be recalled. */
+    public void authorizeTransport(String peer) throws Exception {
+        db.transaction(() -> { requiredContact(peer, true); return null; });
     }
     public List<JSONObject> contacts() throws Exception {
         List<JSONObject> result = new ArrayList<>();
@@ -364,7 +397,7 @@ public final class Engine {
     public void expire() throws Exception {
         db.transaction(() -> {
             long now = Bytes.now();
-            for (String bucket : new String[]{"message", "seen", "outbox", "export"}) for (String k : db.keys(bucket)) {
+            for (String bucket : new String[]{"message", "seen", "outbox", "export", "pairing-issued", "pairing-pending"}) for (String k : db.keys(bucket)) {
                 JSONObject item = get(bucket, k);
                 long expiry = bucket.equals("outbox") ? item.getJSONObject("envelope").getLong("expires") : item.getLong("expires");
                 if (expiry <= now) db.remove(bucket, k);

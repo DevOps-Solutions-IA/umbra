@@ -25,3 +25,30 @@ Las dependencias conservan versiones explícitas, pero el grafo transitorio, has
 ## Reporte y operación
 
 No existe todavía un canal de vulnerabilidades de producción configurado. El propietario deberá establecer uno, con responsables de respuesta y actualizaciones. No enviar secretos, tokens de buzón ni claves privadas en reportes. Conservar un caso de reproducción mínimo con identidades sintéticas y comunicar el hash de la revisión probada.
+
+
+## Identidad y emparejamiento v1 — bloque de 2026-09-20
+
+La nueva invitación es un secreto bearer firmado, no un directorio ni una prueba
+humana. El QR compacto contiene clave pública, capacidad y tiempos; quien obtenga
+el archivo puede intentar consumirlo primero. Request/ack revelan tarjetas a los
+participantes y generan transcripciones firmadas transferibles. No extender a
+esas transcripciones las propiedades de deniability de mensajes libsignal.
+
+El relay persiste hashes y un digest de solicitud, nunca tarjetas ni nuevas claves
+privadas. Ve capacidades durante las solicitudes HTTPS y puede correlacionar
+creación/consumo/IP/tiempos. Un relay hostil puede negar servicio; no puede marcar
+contactos verificados ni hacer que se acepte una firma inválida. El consumo local
+con contacto y confirmación comparte transacción; reintentar el mismo transcript
+es idempotente, otro solicitante pierde. Revocar después de vincular no deshace
+el contacto: bloquearlo es una operación distinta.
+
+VERIFIED_ONLY se aplica a texto y archivos en Engine, incluidas llamadas directas.
+Una sustitución requiere suspender la identidad anterior y verificar explícitamente
+la nueva; el alias no transfiere confianza. Invitaciones de tarjetas históricas y
+vinculación Bluetooth siguen disponibles por compatibilidad: no se reclasifican
+como invitaciones de un uso. Los dos extremos necesitan verificación humana.
+
+Ver [identidad](adr/ADR-identity-model.md), [metadatos](adr/ADR-metadata.md),
+[recuperación](adr/ADR-recovery.md) y [protocolo](protocol/PAIRING.md).
+Dispositivos, ubicación y llamadas aún no forman parte del bloque implementado.

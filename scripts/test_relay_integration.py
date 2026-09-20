@@ -70,6 +70,8 @@ def main() -> int:
         raise RuntimeError("Resolved JVM dependency classpath is missing or invalid")
     sources = ROOT / "android/app/src/main/java/app/umbra"
     java_sources = sorted((sources / "core").glob("*.java")) + sorted((sources / "crypto").glob("*.java"))
+    java_sources += sorted((sources / "pairing").glob("*.java"))
+    java_sources += sorted((sources / "verification").glob("*.java"))
     java_sources += [sources / "protocol/Wire.java", sources / "data/Records.java",
                      sources / "transport/RelayClient.java",
                      ROOT / "android/app/src/test/java/app/umbra/MemoryRecords.java",

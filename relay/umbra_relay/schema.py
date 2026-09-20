@@ -4,6 +4,10 @@ import sqlite3
 
 # name, SQLite declared type, NOT NULL flag, primary-key position.
 COLUMNS = {
+    "pairing_invites": [("id_hash", "TEXT", 0, 1), ("box", "TEXT", 1, 0),
+                        ("consume_hash", "TEXT", 1, 0), ("revoke_hash", "TEXT", 1, 0),
+                        ("expires", "INTEGER", 1, 0), ("request_hash", "TEXT", 0, 0),
+                        ("revoked", "INTEGER", 1, 0)],
     "invites": [("token_hash", "TEXT", 0, 1), ("expires", "INTEGER", 1, 0)],
     "boxes": [("id", "TEXT", 0, 1), ("read_hash", "TEXT", 1, 0),
               ("write_hash", "TEXT", 1, 0), ("created", "INTEGER", 1, 0)],
@@ -14,19 +18,19 @@ COLUMNS = {
                  ("envelope", "TEXT", 1, 0), ("size", "INTEGER", 1, 0),
                  ("expires", "INTEGER", 1, 0), ("created", "INTEGER", 1, 0)],
 }
-UNIQUE_KEYS = {"invites": {("token_hash",)}, "boxes": {("id",)},
+UNIQUE_KEYS = {"pairing_invites": {("id_hash",)}, "invites": {("token_hash",)}, "boxes": {("id",)},
                "acknowledged": {("box", "id")}, "messages": {("box", "id")}}
 
 
 def validate_constraints(conn: sqlite3.Connection, tables: set[str], version: int) -> None:
-    """Version 2 needs its full invariants; legacy messages are checked by migration.
+    """Versions 2/3 need full invariants; legacy messages are checked by migration.
 
     Legacy messages allowed a nullable envelope and had no foreign key; copying
     them into v2 enforces those constraints inside the migration transaction.
     Other tables retain the same schema across supported versions.
     """
     for table in tables:
-        if table == "messages" and version != 2:
+        if table == "messages" and version < 2:
             continue
         # Table names come from the fixed allowlist validated by Database.
         columns = [(r["name"], r["type"].upper(), r["notnull"], r["pk"])
@@ -43,10 +47,10 @@ def validate_constraints(conn: sqlite3.Connection, tables: set[str], version: in
             raise ValueError("Incompatible database schema uniqueness constraints")
         foreign_keys = [(r["table"], r["from"], r["to"], r["on_update"], r["on_delete"])
                         for r in conn.execute(f'PRAGMA foreign_key_list("{table}")')]
-        expected = [("boxes", "box", "id", "NO ACTION", "CASCADE")] if table in ("messages", "acknowledged") else []
+        expected = [("boxes", "box", "id", "NO ACTION", "CASCADE")] if table in ("messages", "acknowledged", "pairing_invites") else []
         if foreign_keys != expected:
             raise ValueError("Incompatible database schema foreign keys")
-    if version == 2:
+    if version >= 2:
         sql = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='messages'").fetchone()[0]
         # Column/PK metadata alone cannot distinguish reusable ROWIDs from the
         # AUTOINCREMENT sequence required by the polling cursor contract.

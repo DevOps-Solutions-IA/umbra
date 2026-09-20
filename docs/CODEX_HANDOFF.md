@@ -1,5 +1,27 @@
 # Transferencia técnica a Codex
 
+## Núcleo de identidad — 2026-09-20
+
+VERIFIED — PR #3 continúa abierta en `757027020a4a2da51e3f69196f1514eccf2c10c9`.
+CI `35532763825`: cuatro jobs SUCCESS. El fallo histórico del AVD está resuelto.
+Repositorio PUBLIC. Rama nueva `codex/secure-identity-media-core`, PR dependiente
+[#4](https://github.com/DevOps-Solutions-IA/umbra/pull/4) hacia la rama de #3.
+No modificar la rama de estabilización ni asumir fusión de las PR anteriores.
+
+VERIFIED — Correcciones Vault en `b1a865c` (CI `35535038549` SUCCESS),
+identidad en `d1598e2` (CI `35535786431`, cuatro jobs SUCCESS),
+emparejamiento firmado de un uso, consumo local/relay atómico, verificación humana
+separada, estados de confianza y suspensión por cambio de identidad. Misma identidad
+libsignal, sin teléfono ni correo. UI mínima por archivos; no rediseño gráfico.
+[Evidencia del bloque](validation/2026-09-20-secure-identity-media-core.md).
+
+PARTIAL — La misión completa NO está terminada. Dispositivos múltiples, ubicación,
+señalización, voz/video y TURN todavía no están implementados en este bloque.
+RECOVERABLE bloqueado por los requisitos del ADR; sin mecanismo de recuperación
+central. MAXIMUM conserva pérdida de identidad si se pierden todos los dispositivos.
+Hardware físico, bóveda cifrada sobre hardware y revisión independiente pendientes.
+Los informes históricos siguientes no representan el estado actual de CI.
+
 ## Continuidad de estabilización — 2026-09-19 UTC
 
 VERIFIED — Rama `codex/repository-audit-fixes`; código validado

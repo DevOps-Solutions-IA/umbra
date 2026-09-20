@@ -23,6 +23,7 @@ import app.umbra.protocol.Wire;
 import app.umbra.BuildConfig;
 import app.umbra.R;
 import app.umbra.crypto.Engine;
+import app.umbra.pairing.PairingService;
 import app.umbra.data.Vault;
 import app.umbra.transport.*;
 import com.google.zxing.BarcodeFormat;
@@ -321,6 +322,9 @@ public final class MainActivity extends Activity {
             @Override public void verify(boolean peerDialer, String peer, byte[] a, byte[] b, byte[] proof, boolean enrolling) throws Exception {
                 nearbyOperation(ticket, () -> { engine.verifyNearby(peerDialer, peer, a, b, proof, enrolling); return null; });
             }
+            @Override public void authorizeSend(String peer) throws Exception {
+                nearbyOperation(ticket, () -> { engine.authorizeTransport(peer); return null; });
+            }
             @Override public void receive(String peer, JSONObject envelope) throws Exception {
                 nearbyOperation(ticket, () -> { engine.receive(envelope); return null; });
                 main.post(() -> { if (unlocked && ticket == generation) { refresh(); syncNow(); } });
@@ -554,14 +558,32 @@ public final class MainActivity extends Activity {
         LinearLayout card = card(page); label(card, "Identidad pública del dispositivo", 16, TEXT);
         TextView fingerprint = label(card, group(profile.optString("id")), 14, MINT); fingerprint.setTypeface(Typeface.MONOSPACE);
         label(card, "Esta huella no es una contraseña. La verificación de cada conversación está en la ficha del contacto.", 13, MUTED);
-        button(page, "Crear y exportar una invitación", () -> action(() -> engine.stageExport(Bytes.utf8(engine.createCard().toString())), key -> {
-            pendingExportKey = key;
-            external(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE)
-                .putExtra(Intent.EXTRA_TITLE, "umbra-contacto.json"), EXPORT_CONTACT);
-        }), true);
-        button(page, "Importar invitación de otra persona", this::pickContact, false);
-        label(page, "Cada invitación es para una sola persona y vence en 7 días. Comparte una nueva con cada contacto. Incluye claves públicas y permiso para escribir a tu buzón, nunca tu clave privada ni permiso de lectura.", 14, MUTED);
+        button(page, "Crear invitación de un uso (1 hora)", () -> action(() -> {
+            String invite = new PairingService(vault).createInvitation(3600);
+            return engine.stageExport(Bytes.utf8(invite));
+        }, this::exportPairing), true);
+        button(page, "Importar invitación, solicitud o confirmación", this::pickContact, false);
+        button(page, "Revocar invitaciones sin consumir", () -> confirm("Revocar invitaciones", "Los archivos ya compartidos dejarán de permitir nuevos vínculos. Los contactos existentes no se eliminan.",
+            () -> action(() -> new PairingService(vault).revokeUnused(), count -> notice("Invitaciones revocadas: " + count))), false);
+        label(page, "Intercambia tres archivos: invitación, solicitud y confirmación. La invitación es un secreto de un uso y vence en una hora. Después, ambos deben comparar y verificar el código del contacto. Los archivos externos no están protegidos por la bóveda.", 14, MUTED);
         label(page, "Para conversar por internet, ambas personas deben registrar su buzón en el mismo servidor privado.", 14, MUTED);
+    }
+    private void exportPairing(String key) {
+        pendingExportKey = key;
+        external(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE)
+            .putExtra(Intent.EXTRA_TITLE, "umbra-vinculacion.txt"), EXPORT_CONTACT);
+    }
+    private record PairingResult(String peer, String exportKey) {}
+    private PairingResult importPairing(Uri uri) throws Exception {
+        byte[] bytes = readBounded(uri, 24000);
+        try {
+            String value = Bytes.text(bytes); PairingService pairing = new PairingService(vault);
+            if (value.startsWith("umbra:invite:")) return new PairingResult(null, engine.stageExport(Bytes.utf8(pairing.request(value))));
+            if (value.startsWith("umbra:request:")) return new PairingResult(null, engine.stageExport(Bytes.utf8(pairing.accept(value))));
+            if (value.startsWith("umbra:ack:")) return new PairingResult(pairing.complete(value), null);
+            // Existing signed cards remain an explicit manual enrollment path, never one-use invitations.
+            return new PairingResult(engine.importCard(Wire.parse(bytes, 16000)), null);
+        } finally { Arrays.fill(bytes, (byte) 0); }
     }
     private void pickContact() { external(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_CONTACT); }
     private void renderSecurity(String peer) {
@@ -573,7 +595,7 @@ public final class MainActivity extends Activity {
             contact.optBoolean("verified") ? MINT : AMBER);
         label(card, "Comparen este código completo en persona o por un canal previamente confiable. Debe ser igual en los dos teléfonos.", 14, MUTED);
         try {
-            BitMatrix matrix = new MultiFormatWriter().encode("umbra-verify-v1:" + code, BarcodeFormat.QR_CODE, 320, 320);
+            BitMatrix matrix = new MultiFormatWriter().encode(app.umbra.verification.Verification.qr(profile.optString("id"), peer), BarcodeFormat.QR_CODE, 320, 320);
             Bitmap bitmap = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888);
             for (int y = 0; y < 320; y++) for (int x = 0; x < 320; x++) bitmap.setPixel(x, y, matrix.get(x, y) ? Color.BLACK : Color.WHITE);
             ImageView qr = new ImageView(this); qr.setImageBitmap(bitmap); card.addView(qr, new LinearLayout.LayoutParams(dp(220), dp(220)));
@@ -586,7 +608,11 @@ public final class MainActivity extends Activity {
                 action(() -> { engine.verify(peer, codeEntered); return true; }, ok -> { peerDetails = null; chat = peer; refresh(); syncNow(); });
             }, true);
         }
-        button(page, contact.optBoolean("blocked") ? "Desbloquear contacto" : "Bloquear contacto", () -> action(() -> { engine.block(peer, !contact.optBoolean("blocked")); return true; }, ok -> refresh()), false);
+        button(page, contact.optBoolean("blocked") ? "Desbloquear contacto" : "Bloquear contacto", () -> action(() -> { engine.block(peer, !contact.optBoolean("blocked")); return true; }, ok -> {
+            BluetoothLink active = bluetooth;
+            if (active != null && peer.equals(active.connectedPeer())) { active.close(); bluetooth = null; }
+            cancelRelay(); refresh();
+        }), false);
         button(page, "Vaciar conversación local", () -> confirm("Vaciar conversación", "Borra el historial local y la cola pendiente. No borra las copias del otro teléfono ni revoca lo ya enviado al relay.",
             () -> action(() -> { engine.clearConversation(peer); return true; }, ok -> refresh())), false);
     }
@@ -646,7 +672,10 @@ public final class MainActivity extends Activity {
         PendingResult result = pendingResult; if (result == null || !unlocked || engine == null) return;
         pendingResult = null; Uri uri = result.uri(); int request = result.request();
         if (!"content".equals(uri.getScheme())) { notice("Elige un documento mediante el selector de Android."); return; }
-        if (request == PICK_CONTACT) action(() -> engine.importCard(Wire.parse(readBounded(uri, 16_000), 16_000)), peer -> { peerDetails = peer; refresh(); });
+        if (request == PICK_CONTACT) confirm("Procesar vinculación", "Solo continúa si solicitaste este intercambio. La posesión del archivo no verifica a la persona. Una solicitud válida consume la invitación y crea un contacto sin verificar.", () -> action(() -> importPairing(uri), processed -> {
+            if (processed.exportKey() != null) exportPairing(processed.exportKey());
+            else { peerDetails = processed.peer(); refresh(); }
+        }));
         else if (request == PICK_FILE) {
             String recipient = pendingAttachmentPeer; long lifetime = pendingAttachmentTtl;
             action(() -> {

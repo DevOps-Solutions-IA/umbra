@@ -1,5 +1,20 @@
 # Backlog de finalización verificable
 
+## Bloques del núcleo — 2026-09-20
+
+PR #4 depende de #3, cuya CI 35532763825 pasó cuatro jobs. Esta nueva rama
+no modifica estabilización ni main. Consultar el informe de identidad para la
+validación del nuevo commit; una CI anterior no lo valida.
+
+- Bóveda: corregidos apertura SQLite y carrera de alias, con reproducción Android.
+  P0-03 sigue parcial: hardware/migración completa y commit del framework pendientes.
+- Identidad/emparejamiento: implementación de invitación firmada compacta, request/ack,
+  consumo atómico, revocación, límites, confianza y cambio explícito; validación del código `d1598e2` en CI `35535786431`: cuatro jobs SUCCESS. Exportación/importación mínima en la interfaz existente.
+- Dispositivos/recuperación: siguiente bloque; RECOVERABLE bloqueado según ADR.
+- Ubicación cifrada, señalización, voz y vídeo WebRTC: NOT EXECUTED en este bloque.
+  No confundir los contratos propuestos en la misión con funcionalidad terminada.
+
+
 Actualización integral 2026-09-19 UTC: [nuevo informe](validation/2026-09-19-integral-stabilization.md)
 con evidencia local ampliada P0-01/P0-02, instrumentación limitada, Bluetooth emulado,
 cliente real/relay, contenedor y R8. Esto no cierra en bloque P0-03–P0-12: quedan
