@@ -25,7 +25,11 @@ public final class DevicePolicy {
             if (row.getJSONObject("active").has(peer)) throw new SecurityException("Peer device index missing");
         }
     }
+
     private static void member(Records db, String root, String device, boolean approval) throws Exception {
+        JSONObject authority = read(db, "contact", root);
+        if (authority != null && (authority.optBoolean("blocked") || authority.optBoolean("identityChanged")))
+            throw new SecurityException("Device authority trust is suspended");
         JSONObject row = read(db, "device-roster", root);
         if (row == null || row.getLong("expires") <= Bytes.now() || row.optBoolean("retired") ||
             !row.getJSONObject("active").optBoolean(device) ||

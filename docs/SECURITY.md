@@ -69,5 +69,5 @@ listas caducadas requieren renovación/importación. No hay detección global de
 forks/retención ni defensa contra rollback privilegiado de toda la bóveda.
 
 Los harnesses usan identidades sintéticas. SQLite de androidTest se ejecuta en UID
-de test y está ausente de release; no rebaja Keystore. Véase el [informe](validation/2026-09-20-device-linking-core.md)
+debug `.dev`, distinto de release y en directorio sintético exclusivo y está ausente de release; no rebaja Keystore. Véase el [informe](validation/2026-09-20-device-linking-core.md)
 para distinguir integración ejecutada de hardware y auditoría pendientes.

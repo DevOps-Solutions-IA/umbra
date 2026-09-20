@@ -208,7 +208,6 @@ public final class MainActivity extends Activity {
                 if (!unlocked || ticket != generation) return;
                 gate.requireUnlocked(); engine.expire();
                 JSONObject me = engine.profile();
-                engine.authorizeTransportSelf();
                 boolean online = BuildConfig.ALLOW_RELAY && me.optBoolean("registered") && me.optBoolean("online") && !networkPaused;
                 relay = online ? openRelay(me.getString("relay"), ticket, true) : null;
                 // Do not let an unreachable internet relay prevent offline Bluetooth delivery.
@@ -240,6 +239,7 @@ public final class MainActivity extends Activity {
                         relay.revokeDevice(revocation.getString("box"), revocation.getString("token"));
                         devices.relayRevoked(revocation.getString("device"), revocation.getString("box"));
                     }
+                    engine.authorizeTransportSelf();
                     long cursor = 0;
                     for (int pageNumber = 0; pageNumber < 26 && unlocked && !networkPaused; pageNumber++) {
                         JSONObject batch = relay.poll(me, cursor);

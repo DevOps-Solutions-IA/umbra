@@ -110,8 +110,9 @@ public final class RelayClient implements AutoCloseable {
         request("DELETE", "/v1/boxes/" + Wire.uuid(box) + "/revocation", capability, null);
     }
     public void sendAuthorized(app.umbra.crypto.Engine engine, JSONObject card, JSONObject envelope) throws Exception {
+        var authorization = engine.deliveryAuthorization(envelope.getString("to"));
         request("PUT", "/v1/boxes/" + Wire.uuid(card.getString("box")) + "/messages/" + Wire.uuid(envelope.getString("id")),
-            card.getString("write"), envelope, () -> engine.authorizeTransport(envelope.getString("to")));
+            card.getString("write"), envelope, () -> authorization.run());
     }
     public void send(JSONObject card, JSONObject envelope) throws Exception {
         request("PUT", "/v1/boxes/" + Wire.uuid(card.getString("box")) + "/messages/" + Wire.uuid(envelope.getString("id")), card.getString("write"), envelope);

@@ -22,7 +22,7 @@ reabrió; se conserva su reparación y su evidencia.
 - Backend: delegación opaca solo de borrado, esquema 3→4, tombstones permanentes,
   rechazo de capacidades revocadas y recreación del mismo UUID. Sin claves privadas,
   nombres humanos o directorio de identidades.
-- SQLite de laboratorio únicamente en androidTest, UID de test, datos sintéticos.
+- SQLite de laboratorio únicamente en androidTest, UID debug `.dev`, distinto de release, en un directorio sintético exclusivo, datos sintéticos.
   No es Vault cifrado, Keystore hardware ni una variante productiva con fallback.
 - Corrección de Vault: un fallo anidado capturado por el llamador no debe devolver
   éxito después de que SQLite revierta toda la transacción; se conserva la regresión

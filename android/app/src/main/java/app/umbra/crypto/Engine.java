@@ -205,6 +205,11 @@ public final class Engine {
     public void authorizeTransportSelf() throws Exception {
         db.transaction(() -> { app.umbra.devices.DevicePolicy.authorize(db, id(), id()); return null; });
     }
+    /** A queued network write must not acquire a fresh authorization after lock/reopen. */
+    public Records.Work<Void> deliveryAuthorization(String peer) throws Exception {
+        Runnable lease = db.authorization(); authorizeTransport(peer);
+        return () -> { lease.run(); authorizeTransport(peer); return null; };
+    }
     public void authorizeTransport(String peer) throws Exception {
         db.transaction(() -> { requiredContact(peer, true); return null; });
     }

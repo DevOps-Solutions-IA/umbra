@@ -10,16 +10,18 @@ import app.umbra.data.Records;
 import java.io.File;
 import java.util.*;
 
-/** TEST APK ONLY. Plaintext synthetic records in the test UID; never a production Vault fallback. */
+/** TEST APK ONLY. Plaintext synthetic records in an isolated debug-UID cache directory; never a production Vault fallback. */
 public final class SqliteDeviceRecords implements Records, AutoCloseable {
     public final AccessGate gate = new AccessGate();
     private final File path;
     private SQLiteDatabase database;
     public String failBucket;
     public SqliteDeviceRecords() {
-        var context = InstrumentationRegistry.getInstrumentation().getContext();
-        if (!BuildConfig.DEBUG || !context.getPackageName().endsWith(".test")) throw new SecurityException("Test-only storage");
-        path = new File(context.getCacheDir(), "synthetic-device-" + UUID.randomUUID() + ".db");
+        var context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        if (!BuildConfig.DEBUG || !context.getPackageName().endsWith(".dev")) throw new SecurityException("Test-only storage");
+        File directory = new File(context.getCacheDir(), "synthetic-device-membership-lab");
+        if (!directory.isDirectory() && !directory.mkdirs()) throw new IllegalStateException("Cannot create isolated test database directory");
+        path = new File(directory, "synthetic-device-" + UUID.randomUUID() + ".db");
         gate.unlock(); reopen();
         database.execSQL("CREATE TABLE records(bucket TEXT NOT NULL,k TEXT NOT NULL,value BLOB NOT NULL,PRIMARY KEY(bucket,k))");
     }

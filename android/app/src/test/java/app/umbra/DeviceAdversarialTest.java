@@ -104,4 +104,17 @@ public class DeviceAdversarialTest {
             assertThrows(SecurityException.class,() -> b.e.authorizeTransport(id));
         } finally { pool.shutdownNow(); assertTrue(pool.awaitTermination(5,java.util.concurrent.TimeUnit.SECONDS)); }
     }
+    @Test public void transportLeaseCannotResumeAfterLockAndReauthentication() throws Exception {
+        Device a=new Device("A1"),b=new Device("B1"); pair(a,b);
+        var write=a.e.deliveryAuthorization(b.e.id()); a.db.gate.lock(); a.db.gate.unlock();
+        assertThrows(SecurityException.class,write::run);
+        var current=a.e.deliveryAuthorization(b.e.id()); a.e.block(b.e.id(),true);
+        assertThrows(SecurityException.class,current::run);
+    }
+    @Test public void administratorIdentityChangeSuspendsEveryChildEvenViaLegacyApi() throws Exception {
+        Device a=new Device("A1"),n=new Device("A2"),b=new Device("B1"); pair(a,b); a.d.migrate(); b.d.migrate(); link(a,n); approveSet(b,a,n);
+        b.e.identityChanged(a.e.id());
+        assertThrows(SecurityException.class,() -> b.e.sendText(n.e.id(),"must reject changed root",600));
+        assertThrows(SecurityException.class,() -> b.e.authorizeTransport(n.e.id()));
+    }
 }
