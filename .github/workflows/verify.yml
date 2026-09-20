@@ -119,15 +119,27 @@ jobs:
         run: python scripts/test_relay_integration.py
       - name: Install disposable Android 35 emulator
         run: sdkmanager "emulator" "system-images;android-35;default;x86_64"
+      - name: Grant this ephemeral runner group access to KVM
+        run: |
+          test -c /dev/kvm
+          sudo chgrp "$(id -gn)" /dev/kvm
+          sudo chmod g+rw /dev/kvm
+          test -r /dev/kvm
+          test -w /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -accel-check
       - name: Execute both variants on Android (software Keystore rejection, no hardware claim)
         shell: bash
         run: |
           set -euo pipefail
+          if command -v android; then android --help; else echo "Android CLI absent; using installed avdmanager"; fi
+          nproc
+          free -m
           source scripts/ci_emulator.sh
           umbra_start_avd umbra-ci 5554
           python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor connected --log android/app/build/reports/device/connected.log
           python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor offline --log android/app/build/reports/device/offline.log
           python scripts/smoke_release_launch.py --serial emulator-5554 > android/app/build/reports/device/release-launch.log
+          source scripts/ci_bluetooth.sh
       - name: Record checked-out commit and APK digests
         run: |
           git rev-parse HEAD > android/app/build/reports/commit.txt

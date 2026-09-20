@@ -24,12 +24,14 @@ def wait_boot(pid, serial, adb, log, timeout, *, alive=None, run=subprocess.run,
             if not alive():
                 raise RuntimeError('emulator process died before boot')
             try:
-                devices = run([adb, 'devices'], capture_output=True, text=True, timeout=5)
+                devices = run([adb, 'devices'], capture_output=True, text=True, timeout=min(5, max(0.01, deadline - now())))
                 print(devices.stdout, flush=True)
                 connected = devices.returncode == 0 and any(line.split() == [serial, 'device'] for line in devices.stdout.splitlines())
+                if now() >= deadline:
+                    break
                 if connected:
-                    result = run([adb, '-s', serial, 'shell', 'getprop', 'sys.boot_completed'], capture_output=True, text=True, timeout=5)
-                    if result.returncode == 0 and result.stdout.strip() == '1' and alive():
+                    result = run([adb, '-s', serial, 'shell', 'getprop', 'sys.boot_completed'], capture_output=True, text=True, timeout=min(5, max(0.01, deadline - now())))
+                    if result.returncode == 0 and result.stdout.strip() == '1' and alive() and now() < deadline:
                         print(f'PASS boot: {serial}, live PID {pid}', flush=True)
                         return
                     last = 'adb connected, sys.boot_completed not 1'

@@ -15,12 +15,16 @@ umbra_cleanup() {
   for index in "${!UMBRA_EMULATOR_PIDS[@]}"; do
     pid="${UMBRA_EMULATOR_PIDS[$index]}"; serial="${UMBRA_EMULATOR_SERIALS[$index]}"
     if kill -0 "$pid" 2>/dev/null; then
-      if timeout 10 "$ANDROID_HOME/platform-tools/adb" -s "$serial" emu kill; then :; else kill "$pid"; fi
+      if timeout 10 "$ANDROID_HOME/platform-tools/adb" -s "$serial" emu kill; then :; else
+        if kill "$pid" 2>/dev/null; then :; else echo "Emulator $serial already exited during cleanup" >&2; fi
+      fi
       for attempt in {1..20}; do
         if ! kill -0 "$pid" 2>/dev/null; then break; fi
         sleep 0.5
       done
-      if kill -0 "$pid" 2>/dev/null; then kill -KILL "$pid"; cleanup_status=1; fi
+      if kill -0 "$pid" 2>/dev/null; then
+        if kill -KILL "$pid" 2>/dev/null; then cleanup_status=1; fi
+      fi
     fi
     if wait "$pid"; then :; else
       echo "Emulator $serial exited abnormally (original status $original)" >&2
@@ -31,9 +35,14 @@ umbra_cleanup() {
   exit "$cleanup_status"
 }
 trap umbra_cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 umbra_start_avd() {
   local name="$1" port="$2" avd="$ANDROID_AVD_HOME/$1.avd" log="$UMBRA_DEVICE_REPORTS/$1-emulator.log"
-  test -r /dev/kvm && test -w /dev/kvm
+  if ! test -r /dev/kvm || ! test -w /dev/kvm; then
+    echo "BLOCKED: readable/writable /dev/kvm is mandatory" >&2
+    return 1
+  fi
   timeout 15 "$ANDROID_HOME/emulator/emulator" -accel-check
   timeout 60 avdmanager create avd --force --name "$name" --path "$avd" \
     --package 'system-images;android-35;default;x86_64' --abi x86_64 --device pixel_2 </dev/null
@@ -45,8 +54,12 @@ umbra_start_avd() {
     find "$ANDROID_AVD_HOME" -maxdepth 2 -type f -name '*.ini' -print >&2
     return 1
   fi
+  # Small display bounds host SwiftShader buffers without changing Android security.
+  sed -i -e 's/^hw.lcd.width[[:space:]]*=.*/hw.lcd.width=480/' \
+    -e 's/^hw.lcd.height[[:space:]]*=.*/hw.lcd.height=800/' \
+    -e 's/^hw.lcd.density[[:space:]]*=.*/hw.lcd.density=160/' "$avd/config.ini"
   "$ANDROID_HOME/emulator/emulator" -avd "$name" -port "$port" -no-window -no-audio \
-    -no-boot-anim -no-snapshot -gpu swiftshader -accel on -memory 1536 -cores 2 > "$log" 2>&1 &
+    -no-boot-anim -no-snapshot -gpu swiftshader -feature -Vulkan -accel on -memory 1536 -cores 2 > "$log" 2>&1 &
   local pid=$!
   UMBRA_EMULATOR_PIDS+=("$pid"); UMBRA_EMULATOR_SERIALS+=("emulator-$port")
   python scripts/wait_emulator.py --pid "$pid" --serial "emulator-$port" --log "$log" --timeout 180
