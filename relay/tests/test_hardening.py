@@ -120,7 +120,7 @@ def test_registration_capacity_does_not_consume_invitation(client, app, monkeypa
 def test_database_starts_private_and_at_v3(app):
     assert os.stat(app.state.database.path).st_mode & 0o777 == 0o600
     with app.state.database.connect() as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
         assert db.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         assert db.execute("PRAGMA synchronous").fetchone()[0] == 2
 
@@ -145,7 +145,7 @@ def test_legacy_database_migration_is_preserving_and_idempotent(tmp_path):
     with database.connect() as db:
         row = dict(db.execute("SELECT * FROM messages").fetchone())
         assert row["box"] == box and row["id"] == identity and row["envelope"] == "{}" and row["seq"] == 1
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 4
         assert not db.execute("SELECT 1 FROM sqlite_master WHERE name='messages_v1'").fetchone()
 
 

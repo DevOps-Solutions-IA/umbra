@@ -1,5 +1,24 @@
 # Transferencia técnica a Codex
 
+## Segunda entrega de dispositivos — 2026-09-20
+
+USER_DECISION — Rama `codex/device-linking-core`, PR dependiente de #4 hacia
+`codex/secure-identity-media-core`. Base remota #4 comprobada OPEN en `5193b73`;
+no se modifica main ni las ramas previas. Consultar el nuevo informe antes de
+atribuir resultados de CI al commit actual.
+
+IMPLEMENTED / VALIDATION IN PROGRESS — autoridad A1, claves Signal por dispositivo,
+ceremonia con consentimiento de sesión, lista firmada/versionada, aprobación de
+conjunto, fanout independiente y revocación local/capacidad delegada del relay.
+[Protocolo](protocol/DEVICE_LINKING.md), [ADR](adr/ADR-device-model.md),
+[evidencia](validation/2026-09-20-device-linking-core.md). Harness A1/A2/B1 real
+HTTPS/JNI y SQLite de instrumentación aislado; no interfaz definitiva de dispositivos.
+
+BLOCKED — hardware Keystore, Bluetooth físico, recuperación exportable y revisión
+independiente. Ubicación/voz/vídeo/TURN siguen fuera de esta entrega. Consultar los
+límites de revocación mientras no se haya instalado/recibido delegación del buzón.
+
+
 ## Núcleo de identidad — 2026-09-20
 
 VERIFIED — PR #3 continúa abierta en `757027020a4a2da51e3f69196f1514eccf2c10c9`.

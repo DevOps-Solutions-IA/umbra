@@ -4,6 +4,8 @@ import sqlite3
 
 # name, SQLite declared type, NOT NULL flag, primary-key position.
 COLUMNS = {
+    "device_revocations": [("box", "TEXT", 0, 1), ("cap_hash", "TEXT", 1, 0),
+                           ("revoked", "INTEGER", 1, 0), ("created", "INTEGER", 1, 0)],
     "pairing_invites": [("id_hash", "TEXT", 0, 1), ("box", "TEXT", 1, 0),
                         ("consume_hash", "TEXT", 1, 0), ("revoke_hash", "TEXT", 1, 0),
                         ("expires", "INTEGER", 1, 0), ("request_hash", "TEXT", 0, 0),
@@ -18,7 +20,7 @@ COLUMNS = {
                  ("envelope", "TEXT", 1, 0), ("size", "INTEGER", 1, 0),
                  ("expires", "INTEGER", 1, 0), ("created", "INTEGER", 1, 0)],
 }
-UNIQUE_KEYS = {"pairing_invites": {("id_hash",)}, "invites": {("token_hash",)}, "boxes": {("id",)},
+UNIQUE_KEYS = {"device_revocations": {("box",)}, "pairing_invites": {("id_hash",)}, "invites": {("token_hash",)}, "boxes": {("id",)},
                "acknowledged": {("box", "id")}, "messages": {("box", "id")}}
 
 

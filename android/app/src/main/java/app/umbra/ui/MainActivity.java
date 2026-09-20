@@ -208,6 +208,7 @@ public final class MainActivity extends Activity {
                 if (!unlocked || ticket != generation) return;
                 gate.requireUnlocked(); engine.expire();
                 JSONObject me = engine.profile();
+                engine.authorizeTransportSelf();
                 boolean online = BuildConfig.ALLOW_RELAY && me.optBoolean("registered") && me.optBoolean("online") && !networkPaused;
                 relay = online ? openRelay(me.getString("relay"), ticket, true) : null;
                 // Do not let an unreachable internet relay prevent offline Bluetooth delivery.
@@ -234,6 +235,11 @@ public final class MainActivity extends Activity {
                     }
                 }
                 if (relay != null && unlocked) {
+                    app.umbra.devices.DeviceService devices = new app.umbra.devices.DeviceService(vault);
+                    for (JSONObject revocation : devices.pendingRelayRevocations()) {
+                        relay.revokeDevice(revocation.getString("box"), revocation.getString("token"));
+                        devices.relayRevoked(revocation.getString("device"), revocation.getString("box"));
+                    }
                     long cursor = 0;
                     for (int pageNumber = 0; pageNumber < 26 && unlocked && !networkPaused; pageNumber++) {
                         JSONObject batch = relay.poll(me, cursor);
@@ -268,7 +274,7 @@ public final class MainActivity extends Activity {
                     if (contact == null || contact.optBoolean("blocked") || !contact.optBoolean("verified")) continue;
                     if (relay != null && queued.optLong("nextRelay", 0) <= Bytes.now() && unlocked && !networkPaused && ticket == generation) {
                         try {
-                            relay.send(contact.getJSONObject("card"), envelope); engine.transported(envelope.getString("id"), true); changed = true;
+                            relay.sendAuthorized(engine, contact.getJSONObject("card"), envelope); engine.transported(envelope.getString("id"), true); changed = true;
                         } catch (java.io.IOException transportFailure) {
                             if (unlocked && ticket == generation) engine.relayFailed(envelope.getString("id"));
                             break; // Backoff; do not flood an unavailable server or starve local work.

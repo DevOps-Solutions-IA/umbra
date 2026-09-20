@@ -1,5 +1,14 @@
 # Backlog de finalización verificable
 
+## Segunda entrega — dispositivos
+
+`codex/device-linking-core` parte del HEAD abierto de #4. Añade autoridad/listas,
+ceremonia, sesiones por dispositivo, fanout y revocación; ver [informe nuevo](validation/2026-09-20-device-linking-core.md)
+para resultados sobre el commit probado. No declarar cerrado P0-03 por SQLite de
+laboratorio ni P0-11 por Bluetooth emulado. UI de administración completa e historial
+sincronizado siguen pendientes; ubicación, voz, vídeo y TURN no implementados.
+
+
 ## Bloques del núcleo — 2026-09-20
 
 PR #4 depende de #3, cuya CI 35532763825 pasó cuatro jobs. Esta nueva rama
