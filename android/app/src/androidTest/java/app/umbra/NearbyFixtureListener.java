@@ -46,7 +46,9 @@ public final class NearbyFixtureListener extends RunListener {
             require(adapter != null && adapter.isEnabled(), "Bluetooth adapter must be enabled");
             BluetoothDevice device = adapter.getRemoteDevice(arguments.getString("address", ""));
             require(device.getBondState() == BluetoothDevice.BOND_BONDED, "Pair the synthetic devices in Android first");
-            engine = new Engine(new DeviceMemoryRecords()); engine.initialize("Synthetic " + role);
+            DeviceMemoryRecords records = new DeviceMemoryRecords();
+            engine = new Engine(records); engine.initialize("Synthetic " + role);
+            new app.umbra.devices.DeviceService(records).migrate();
             link = new BluetoothLink(InstrumentationRegistry.getInstrumentation().getTargetContext(), new BluetoothLink.Listener() {
                 public String ownId() throws Exception { synchronized (recordsLock) { return engine.id(); } }
                 public JSONObject ownCard() throws Exception { synchronized (recordsLock) { return engine.createCard(); } }
@@ -83,6 +85,7 @@ public final class NearbyFixtureListener extends RunListener {
             await(() -> approval.exists(), 30000, "Host transfer barrier not released");
             Files.delete(approval.toPath());
             synchronized (recordsLock) {
+                engine.sendDeviceRoster(peer);
                 engine.sendText(peer, "Synthetic " + role + " text", 3600);
                 engine.sendFile(peer, "synthetic.bin", Bytes.utf8("Synthetic " + role + " attachment"), 3600);
             }
@@ -111,7 +114,7 @@ public final class NearbyFixtureListener extends RunListener {
                     long incoming = messages.stream().filter(m -> !m.optBoolean("outgoing")).count();
                     long delivered = messages.stream().filter(m -> m.optBoolean("outgoing") && "Entregado".equals(m.optString("status"))).count();
                     require(incoming <= 2, "Duplicate displayed more than once");
-                    complete = incoming == 2 && delivered == 2;
+                    complete = incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null;
                     if (complete) {
                         String other = dialer ? "listener" : "dialer";
                         for (JSONObject m : messages) if (!m.optBoolean("outgoing")) {
@@ -124,7 +127,7 @@ public final class NearbyFixtureListener extends RunListener {
                 }
                 if (complete) {
                     Thread.sleep(1500); // Keep the reader available for the peer's final receipt checks.
-                    status("nearbyResult", "PASS: RFCOMM, challenge, host verification, bidirectional text/attachment, duplicate, receipts");
+                    status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, duplicate, receipts");
                     return;
                 }
                 Thread.sleep(100);

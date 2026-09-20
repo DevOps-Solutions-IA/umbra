@@ -33,7 +33,13 @@ public class DeviceMembershipPersistenceTest {
             br.reopen(); b=new Engine(br);
             for(JSONObject delivery:b.outbox()) {
                 JSONObject envelope=delivery.getJSONObject("envelope");
-                if(delivery.getString("peer").equals(a.id())) a.receive(envelope); else n.receive(envelope);
+                if(delivery.getString("peer").equals(a.id())) {
+                    // A1 has not accepted B1's logical membership yet. Reject and roll back,
+                    // then accept the exact same ciphertext after explicit set approval.
+                    assertThrows(SecurityException.class,() -> a.receive(envelope));
+                    ad.apply(bRoster); var approved=ad.reviewRoster(bRoster);
+                    ad.approveRoster(approved,approved.fingerprint(),true); a.receive(envelope);
+                } else n.receive(envelope);
             }
             nr.reopen(); assertEquals(logical,new Engine(nr).messages(b.id()).get(0).getString("logicalId"));
             String revoked=ad.revoke(n.id()); bd.apply(revoked); nd.apply(revoked);

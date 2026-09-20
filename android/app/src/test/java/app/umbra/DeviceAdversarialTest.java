@@ -117,4 +117,15 @@ public class DeviceAdversarialTest {
         assertThrows(SecurityException.class,() -> b.e.sendText(n.e.id(),"must reject changed root",600));
         assertThrows(SecurityException.class,() -> b.e.authorizeTransport(n.e.id()));
     }
+    @Test public void expiredMembershipStopsOperationsUntilAdministratorRenews() throws Exception {
+        Device a=new Device("A1"); a.d.migrate(); String[] f=fields(a.d.roster(a.e.id()));
+        f[3]=""+(Bytes.now()-600); f[4]=""+(Bytes.now()-1); String expired=signed(a,"roster",f);
+        assertThrows(SecurityException.class,() -> DeviceRoster.parse(expired));
+        a.db.transaction(() -> {
+            JSONObject row=a.e.get("device-roster",a.e.id()).put("transcript",expired).put("expires",Bytes.now()-1);
+            a.db.put("device-roster",a.e.id(),Bytes.utf8(row.toString())); return null;
+        });
+        assertThrows(SecurityException.class,() -> a.e.createCard());
+        assertEquals(2,DeviceRoster.parse(a.d.renew()).version); assertNotNull(a.e.createCard());
+    }
 }

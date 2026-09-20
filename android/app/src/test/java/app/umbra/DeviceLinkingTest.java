@@ -162,4 +162,16 @@ public class DeviceLinkingTest {
         assertThrows(SecurityException.class,() -> new DeviceService(a.db).challenge(n.d.publicKey(),600));
         assertThrows(SecurityException.class,() -> new Engine(a.db).sendFile(n.e.id(),"synthetic.txt",new byte[]{1},600));
     }
+    @Test public void attachmentFanoutUsesIndependentDeliveriesAndReceipts() throws Exception {
+        Device a=new Device("A1"),n=new Device("A2"),b=new Device("B1"); pair(a,b); a.d.migrate(); b.d.migrate(); link(a,n);
+        approveSet(b,a,n); pair(n,b); approveSet(a,b); approveSet(n,b);
+        byte[] bytes=new byte[]{0,1,2,3,4};
+        String logical=b.e.sendIdentityFile(a.e.id(),"synthetic.bin",bytes,600);
+        deliver(b,a); deliver(b,n); deliver(a,b); deliver(n,b);
+        for(Device receiver:List.of(a,n)) {
+            JSONObject file=receiver.e.messages(b.e.id()).get(0);
+            assertEquals(logical,file.getString("logicalId")); assertArrayEquals(bytes,Bytes.unb64(file.getString("data")));
+        }
+        assertTrue(b.e.outbox().isEmpty());
+    }
 }
