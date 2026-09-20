@@ -1,4 +1,5 @@
 plugins { id("com.android.application") }
+val relayIntegrationClasspath by configurations.creating
 android {
     namespace = "app.umbra"
     compileSdk = 36
@@ -46,10 +47,25 @@ android {
     }
 }
 dependencies {
+    add(relayIntegrationClasspath.name, "org.signal:libsignal-client:0.102.3")
+    add(relayIntegrationClasspath.name, "org.json:json:20250517")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
     implementation("org.signal:libsignal-android:0.102.3")
     implementation("org.signal:libsignal-client:0.102.3")
     implementation("com.google.zxing:core:3.5.3")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+}
+
+tasks.register("writeRelayIntegrationClasspath") {
+    val destination = layout.buildDirectory.file("integration/classpath.txt")
+    outputs.file(destination)
+    doLast {
+        destination.get().asFile.apply {
+            parentFile.mkdirs()
+            writeText(relayIntegrationClasspath.asPath)
+        }
+    }
 }

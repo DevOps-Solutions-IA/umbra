@@ -1,0 +1,374 @@
+VERIFIED — Command output excerpts, 2026-09-19 UTC; full local logs retained.
+Source: 8fdea14efb3c8a78a0faf66d01f9d254a8dc8a20. All final commands below exited 0.
+
+baseline-local.log
+80 passed in 4.96s
+PASS Base64 roundtrip
+PASS SHA-256 known vector
+PASS Symmetric safety code
+PASS Safety code rejects bad identities
+PASS Tokens: shape and uniqueness
+PASS Padding: boundary cases
+PASS Padding: random cases
+PASS Padding rejects empty message
+PASS Padding rejects oversized message
+PASS Padding rejects invalid block length
+PASS Padding rejects forged inner length
+PASS Padding is randomized
+PASS Frame roundtrip
+PASS Fragmented stream
+PASS Multiple consecutive frames
+PASS Frame rejects invalid prefixes
+PASS Frame rejects truncation
+PASS Frame rejects empty output
+PASS Frame accepts maximum bounded size
+PASS Constant-time comparator functional behavior
+20 utility test scenarios passed. libsignal/Android/hardware NOT exercised.
+PASS Gate begins locked
+PASS Gate authenticates explicitly
+PASS Lock invalidates an outstanding operation
+PASS Reauthentication never revives an old lease
+PASS Gate rejects exact expiry boundary
+PASS Gate rejects backward test clock
+PASS Commit callback is not run after a lock
+PASS Expiry blocks commit even without a UI tick
+PASS Worker cannot reuse pre-lock authorization
+PASS Authorized commit returns its actual result
+PASS Invalid gate duration rejected
+PASS Strict UTF-8 decoder rejects invalid sequence
+PASS Strict UTF-8 encoder rejects unpaired UTF-16
+PASS Strict UTF-8 encoder roundtrips multilingual text
+PASS Filename removes traversal separators and formatting controls
+PASS Filename truncation preserves complete Unicode code points
+PASS Filename rejects an unsafe received name
+PASS Filename handles missing and blank display names
+PASS Filename handles dot-only names
+PASS Filename keeps a multilingual legitimate name
+PASS Strict Base64 rejects omitted padding
+PASS Strict Base64 rejects nonzero pad bits
+PASS Strict Base64 rejects whitespace
+PASS Base64 explicit local bound permits a valid large record
+PASS Base64 local bound cannot disable allocation limits
+PASS JSON accepts nested structured content
+PASS JSON accepts multilingual content and surrogate pair
+PASS JSON rejects adversarial syntax 1
+PASS JSON rejects adversarial syntax 2
+PASS JSON rejects adversarial syntax 3
+PASS JSON rejects adversarial syntax 4
+PASS JSON rejects adversarial syntax 5
+PASS JSON rejects adversarial syntax 6
+PASS JSON rejects adversarial syntax 7
+PASS JSON rejects adversarial syntax 8
+PASS JSON rejects adversarial syntax 9
+PASS JSON rejects adversarial syntax 10
+PASS JSON rejects adversarial syntax 11
+PASS JSON rejects adversarial syntax 12
+PASS JSON rejects adversarial syntax 13
+PASS JSON rejects adversarial syntax 14
+PASS JSON rejects adversarial syntax 15
+PASS JSON rejects adversarial syntax 16
+PASS JSON rejects adversarial syntax 17
+PASS JSON rejects adversarial syntax 18
+PASS JSON rejects adversarial syntax 19
+PASS JSON rejects adversarial syntax 20
+PASS JSON rejects adversarial syntax 21
+PASS JSON rejects adversarial syntax 22
+PASS JSON rejects adversarial syntax 23
+PASS JSON rejects adversarial syntax 24
+PASS JSON rejects adversarial syntax 25
+PASS JSON rejects adversarial syntax 26
+PASS JSON rejects deep nesting
+PASS JSON rejects excessive node count
+PASS JSON rejects oversized field name
+PASS JSON enforces byte limit before parsing
+PASS Handshake frame has its own allocation limit
+PASS Handshake frame accepts fragmented input
+PASS Retry delay is bounded under extreme attempts
+PASS Retry rejects invalid jitter
+PASS Retry schedules from the supplied clock
+PASS Nearby transcript is deterministic
+PASS Nearby proof binds fresh verifier nonce
+PASS Nearby proof binds signer role
+PASS Nearby proof binds identities and direction
+PASS Nearby reflection and self-connection rejected
+PASS Nearby malformed nonce rejected
+PASS Vault codec authenticates roundtrip
+PASS Blind index is deterministic for the same key
+PASS Blind index is not an unkeyed dictionary hash
+PASS Blind index is separated across vault keys
+PASS Blind index is separated by record category
+PASS Index inputs have unambiguous framing
+PASS GCM rejects wrong key
+PASS GCM rejects bucket substitution
+PASS GCM rejects index substitution
+PASS GCM rejects nonce mutation
+PASS GCM rejects every single-bit ciphertext mutation
+PASS GCM rejects truncated and invalid nonce lengths
+PASS Sealed record getters do not expose mutable backing arrays
+PASS Vault randomized IV uniqueness sample
+PASS Legacy codec migration preserves authenticated content
+PASS Vault bounds cleartext before encryption
+PASS Framing fuzz: malformed negative prefixes never allocate
+85 additional JVM security test scenarios passed. Android/libsignal/Bluetooth radio NOT exercised.
+Parsed Java syntax: 20 files. Android/libsignal compilation NOT performed.
+PASS source policy: application declared
+PASS source policy: backup disabled in source
+PASS source policy: legacy backup disabled
+PASS source policy: cleartext networking disabled
+PASS source policy: network policy denies cleartext
+PASS source policy: only system trust anchors
+PASS source policy: offline overlay removes INTERNET
+PASS source policy: offline overlay removes NETWORK_STATE
+PASS source policy: no contact/SMS/phone/location/broad-storage permissions
+PASS source policy: cloud-backup excludes private storage
+PASS source policy: device-transfer excludes private storage
+PASS source policy: offline compile-time relay switch
+12 source policy checks passed. Merged manifest/APK verification remains separate.
+
+baseline-tools.log
+Ran 46 tests in 1.277s
+OK
+
+baseline-android.log
+> Task :app:testConnectedDebugUnitTest UP-TO-DATE
+> Task :app:testOfflineDebugUnitTest UP-TO-DATE
+BUILD SUCCESSFUL in 26s
+105 actionable tasks: 2 executed, 103 up-to-date
+PASS merged manifest: offlineDebug; INTERNET=False
+PASS merged manifest: connectedDebug; INTERNET=True
+PASS connected: permissions=android.permission.ACCESS_NETWORK_STATE,android.permission.BLUETOOTH_ADVERTISE,android.permission.BLUETOOTH_CONNECT,android.permission.BLUETOOTH_SCAN,android.permission.HIDE_OVERLAY_WINDOWS,android.permission.INTERNET,android.permission.USE_BIOMETRIC
+PASS Signal JNI ELF packaged for arm64-v8a,armeabi-v7a,x86,x86_64; desktop/testing JNI excluded
+SHA256 7f6708f28163f6c1a6fa4d559a1f71fab91e157f0cbaa2b1ef1a2b93420f84ce  android/app/build/outputs/apk/connected/debug/app-connected-debug.apk
+PASS offline: permissions=android.permission.BLUETOOTH_ADVERTISE,android.permission.BLUETOOTH_CONNECT,android.permission.BLUETOOTH_SCAN,android.permission.HIDE_OVERLAY_WINDOWS,android.permission.USE_BIOMETRIC
+PASS Signal JNI ELF packaged for arm64-v8a,armeabi-v7a,x86,x86_64; desktop/testing JNI excluded
+SHA256 c6e9ff4b94c6f175d358c63a1b4ab827940e47be08089c122de1626302187d7a  android/app/build/outputs/apk/offline/debug/app-offline-debug.apk
+
+final-setup.log
+Python environment ready. Activate: . .venv/bin/activate
+
+final-clean.log
+BUILD SUCCESSFUL in 49s
+
+final-local.log
+108 passed, 1 warning in 11.45s
+PASS Base64 roundtrip
+PASS SHA-256 known vector
+PASS Symmetric safety code
+PASS Safety code rejects bad identities
+PASS Tokens: shape and uniqueness
+PASS Padding: boundary cases
+PASS Padding: random cases
+PASS Padding rejects empty message
+PASS Padding rejects oversized message
+PASS Padding rejects invalid block length
+PASS Padding rejects forged inner length
+PASS Padding is randomized
+PASS Frame roundtrip
+PASS Fragmented stream
+PASS Multiple consecutive frames
+PASS Frame rejects invalid prefixes
+PASS Frame rejects truncation
+PASS Frame rejects empty output
+PASS Frame accepts maximum bounded size
+PASS Constant-time comparator functional behavior
+20 utility test scenarios passed. libsignal/Android/hardware NOT exercised.
+PASS Gate begins locked
+PASS Gate authenticates explicitly
+PASS Lock invalidates an outstanding operation
+PASS Reauthentication never revives an old lease
+PASS Gate rejects exact expiry boundary
+PASS Gate rejects backward test clock
+PASS Commit callback is not run after a lock
+PASS Expiry blocks commit even without a UI tick
+PASS Worker cannot reuse pre-lock authorization
+PASS Authorized commit returns its actual result
+PASS Invalid gate duration rejected
+PASS Strict UTF-8 decoder rejects invalid sequence
+PASS Strict UTF-8 encoder rejects unpaired UTF-16
+PASS Strict UTF-8 encoder roundtrips multilingual text
+PASS Filename removes traversal separators and formatting controls
+PASS Filename truncation preserves complete Unicode code points
+PASS Filename rejects an unsafe received name
+PASS Filename handles missing and blank display names
+PASS Filename handles dot-only names
+PASS Filename keeps a multilingual legitimate name
+PASS Strict Base64 rejects omitted padding
+PASS Strict Base64 rejects nonzero pad bits
+PASS Strict Base64 rejects whitespace
+PASS Base64 explicit local bound permits a valid large record
+PASS Base64 local bound cannot disable allocation limits
+PASS JSON accepts nested structured content
+PASS JSON accepts multilingual content and surrogate pair
+PASS JSON rejects adversarial syntax 1
+PASS JSON rejects adversarial syntax 2
+PASS JSON rejects adversarial syntax 3
+PASS JSON rejects adversarial syntax 4
+PASS JSON rejects adversarial syntax 5
+PASS JSON rejects adversarial syntax 6
+PASS JSON rejects adversarial syntax 7
+PASS JSON rejects adversarial syntax 8
+PASS JSON rejects adversarial syntax 9
+PASS JSON rejects adversarial syntax 10
+PASS JSON rejects adversarial syntax 11
+PASS JSON rejects adversarial syntax 12
+PASS JSON rejects adversarial syntax 13
+PASS JSON rejects adversarial syntax 14
+PASS JSON rejects adversarial syntax 15
+PASS JSON rejects adversarial syntax 16
+PASS JSON rejects adversarial syntax 17
+PASS JSON rejects adversarial syntax 18
+PASS JSON rejects adversarial syntax 19
+PASS JSON rejects adversarial syntax 20
+PASS JSON rejects adversarial syntax 21
+PASS JSON rejects adversarial syntax 22
+PASS JSON rejects adversarial syntax 23
+PASS JSON rejects adversarial syntax 24
+PASS JSON rejects adversarial syntax 25
+PASS JSON rejects adversarial syntax 26
+PASS JSON rejects deep nesting
+PASS JSON rejects excessive node count
+PASS JSON rejects oversized field name
+PASS JSON enforces byte limit before parsing
+PASS Handshake frame has its own allocation limit
+PASS Handshake frame accepts fragmented input
+PASS Retry delay is bounded under extreme attempts
+PASS Retry rejects invalid jitter
+PASS Retry schedules from the supplied clock
+PASS Nearby transcript is deterministic
+PASS Nearby proof binds fresh verifier nonce
+PASS Nearby proof binds signer role
+PASS Nearby proof binds identities and direction
+PASS Nearby reflection and self-connection rejected
+PASS Nearby malformed nonce rejected
+PASS Vault codec authenticates roundtrip
+PASS Blind index is deterministic for the same key
+PASS Blind index is not an unkeyed dictionary hash
+PASS Blind index is separated across vault keys
+PASS Blind index is separated by record category
+PASS Index inputs have unambiguous framing
+PASS GCM rejects wrong key
+PASS GCM rejects bucket substitution
+PASS GCM rejects index substitution
+PASS GCM rejects nonce mutation
+PASS GCM rejects every single-bit ciphertext mutation
+PASS GCM rejects truncated and invalid nonce lengths
+PASS Sealed record getters do not expose mutable backing arrays
+PASS Vault randomized IV uniqueness sample
+PASS Legacy codec migration preserves authenticated content
+PASS Vault bounds cleartext before encryption
+PASS Framing fuzz: malformed negative prefixes never allocate
+85 additional JVM security test scenarios passed. Android/libsignal/Bluetooth radio NOT exercised.
+Parsed Java syntax: 29 files. Android/libsignal compilation NOT performed.
+PASS source policy: application declared
+PASS source policy: backup disabled in source
+PASS source policy: legacy backup disabled
+PASS source policy: cleartext networking disabled
+PASS source policy: network policy denies cleartext
+PASS source policy: only system trust anchors
+PASS source policy: offline overlay removes INTERNET
+PASS source policy: offline overlay removes NETWORK_STATE
+PASS source policy: no contact/SMS/phone/location/broad-storage permissions
+PASS source policy: cloud-backup excludes private storage
+PASS source policy: device-transfer excludes private storage
+PASS source policy: offline compile-time relay switch
+12 source policy checks passed. Merged manifest/APK verification remains separate.
+
+final-tools.log
+Ran 83 tests in 1.294s
+OK
+
+final-android.log
+> Task :app:testConnectedDebugUnitTest
+> Task :app:testOfflineDebugUnitTest
+BUILD SUCCESSFUL in 3m 10s
+211 actionable tasks: 203 executed, 8 up-to-date
+PASS merged manifest: offlineDebug; INTERNET=False
+PASS merged manifest: connectedDebug; INTERNET=True
+PASS Connected: 55 JVM tests, no failures/errors/skips
+PASS Offline: 55 JVM tests, no failures/errors/skips
+PASS connected: permissions=android.permission.ACCESS_NETWORK_STATE,android.permission.BLUETOOTH_ADVERTISE,android.permission.BLUETOOTH_CONNECT,android.permission.BLUETOOTH_SCAN,android.permission.HIDE_OVERLAY_WINDOWS,android.permission.INTERNET,android.permission.USE_BIOMETRIC
+PASS Signal JNI ELF packaged for arm64-v8a,armeabi-v7a,x86,x86_64; desktop/testing JNI excluded
+SHA256 8cd1a977b9e41d3cc9c724c18ffc061daf5c3e87c07c187c37e92abafdbb08d8  android/app/build/outputs/apk/connected/debug/app-connected-debug.apk
+PASS connected: permissions=android.permission.ACCESS_NETWORK_STATE,android.permission.BLUETOOTH_ADVERTISE,android.permission.BLUETOOTH_CONNECT,android.permission.BLUETOOTH_SCAN,android.permission.HIDE_OVERLAY_WINDOWS,android.permission.INTERNET,android.permission.USE_BIOMETRIC
+PASS Signal JNI ELF packaged for arm64-v8a,armeabi-v7a,x86,x86_64; desktop/testing JNI excluded
+SHA256 e6c370622bf8a84b72eb254f1c6aa5c1215b866025ef647a05d7432ad3b79a7b  android/app/build/outputs/apk/connected/release/app-connected-release-unsigned.apk
+PASS offline: permissions=android.permission.BLUETOOTH_ADVERTISE,android.permission.BLUETOOTH_CONNECT,android.permission.BLUETOOTH_SCAN,android.permission.HIDE_OVERLAY_WINDOWS,android.permission.USE_BIOMETRIC
+PASS Signal JNI ELF packaged for arm64-v8a,armeabi-v7a,x86,x86_64; desktop/testing JNI excluded
+SHA256 5da848c3f6c0ec87e25e8bc10a33a12dd8d304360e70417954776f6fd4c80151  android/app/build/outputs/apk/offline/debug/app-offline-debug.apk
+PASS offline: permissions=android.permission.BLUETOOTH_ADVERTISE,android.permission.BLUETOOTH_CONNECT,android.permission.BLUETOOTH_SCAN,android.permission.HIDE_OVERLAY_WINDOWS,android.permission.USE_BIOMETRIC
+PASS Signal JNI ELF packaged for arm64-v8a,armeabi-v7a,x86,x86_64; desktop/testing JNI excluded
+SHA256 8747c9511841d7ecf5bca45a3709b57982ea32589051e8af24ad21bf59853351  android/app/build/outputs/apk/offline/release/app-offline-release-unsigned.apk
+PASS APK policy connected/debug: package, exported entry, backup, TLS, debug flag, no test/lab DEX
+PASS APK policy offline/debug: package, exported entry, backup, TLS, debug flag, no test/lab DEX
+PASS APK policy connected/release: package, exported entry, backup, TLS, debug flag, no test/lab DEX
+PASS APK policy offline/release: package, exported entry, backup, TLS, debug flag, no test/lab DEX
+
+final-test-apks.log
+BUILD SUCCESSFUL in 31s
+98 actionable tasks: 54 executed, 44 up-to-date
+
+final-integration.log
+BUILD SUCCESSFUL in 14s
+PASS invitation cannot be reused by another mailbox
+PASS mailbox read capability isolation
+PASS engine restart preserves queued ciphertext
+PASS restart retains queue and five-envelope pagination
+PASS cursor reaches remaining envelopes
+PASS modified ciphertext rejected before persistence
+PASS wrong recipient rejected
+PASS relay rejects truncated ciphertext
+PASS relay rejects oversized ciphertext
+PASS relay rejects excessive TTL
+PASS out-of-order real Signal messages persisted once
+PASS acknowledged messages leave the relay queue
+PASS authenticated receipts clear sender outbox
+PASS retry after lost acknowledgement does not resurrect message
+PASS locked policy prevents network operation
+PASS locking cancels a pending HTTPS read promptly
+PASS cancelled HTTPS read never reports success
+PASS revoked read capability rejected
+PASS revoked write capability rejected
+PASS isolated relay remained healthy
+20 real HTTPS relay integration checks passed; no Android Keystore or Bluetooth exercised.
+
+final-device-connected.log
+INSTRUMENTATION_STATUS: keystoreProbeHardwareReported=false
+INSTRUMENTATION_STATUS: keystoreProbeSecurityLevel=0
+OK (8 tests)
+INSTRUMENTATION_CODE: -1
+
+final-device-offline.log
+INSTRUMENTATION_STATUS: keystoreProbeHardwareReported=false
+INSTRUMENTATION_STATUS: keystoreProbeSecurityLevel=0
+OK (8 tests)
+INSTRUMENTATION_CODE: -1
+
+final-bt-connected/nearby-listener.log
+INSTRUMENTATION_STATUS: nearbyResult=PASS: RFCOMM, challenge, host verification, bidirectional text/attachment, duplicate, receipts
+OK (3 tests)
+INSTRUMENTATION_CODE: -1
+
+final-bt-connected/nearby-dialer.log
+INSTRUMENTATION_STATUS: nearbyResult=PASS: RFCOMM, challenge, host verification, bidirectional text/attachment, duplicate, receipts
+OK (3 tests)
+INSTRUMENTATION_CODE: -1
+
+final-bt-offline/nearby-listener.log
+INSTRUMENTATION_STATUS: nearbyResult=PASS: RFCOMM, challenge, host verification, bidirectional text/attachment, duplicate, receipts
+OK (3 tests)
+INSTRUMENTATION_CODE: -1
+
+final-bt-offline/nearby-dialer.log
+INSTRUMENTATION_STATUS: nearbyResult=PASS: RFCOMM, challenge, host verification, bidirectional text/attachment, duplicate, receipts
+OK (3 tests)
+INSTRUMENTATION_CODE: -1
+
+final-r8-launch-script.log
+PASS connected release/R8 installed using ephemeral synthetic signer, resumed and displayed locked UI; no unlock/native-crypto/Keystore claim
+PASS offline release/R8 installed using ephemeral synthetic signer, resumed and displayed locked UI; no unlock/native-crypto/Keystore claim
+PASS temporary signing key/copies deleted, both synthetic release installations removed
+
+final-guard.log
+Current source files checked: 151
+Reachable historical blobs checked: 172
+No prohibited filenames or supported credential patterns found. Not a security audit.

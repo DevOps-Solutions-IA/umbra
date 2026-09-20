@@ -27,7 +27,24 @@ public final class Engine {
         byte[] value = db.get(bucket, key); return value == null ? null : new JSONObject(Bytes.text(value));
     }
     private void put(String bucket, String key, JSONObject value) { db.put(bucket, key, Bytes.utf8(value.toString())); }
-    public boolean initialized() { return db.get("meta", "identity") != null; }
+    public boolean initialized() throws Exception {
+        byte[] identity = db.get("meta", "identity");
+        if (identity == null) {
+            // A missing identity is only a fresh install when no application records remain.
+            // Never offer re-enrollment over a partially lost or damaged vault.
+            for (String bucket : new String[]{"meta", "contact", "trusted", "session", "prekey", "signed", "kyber",
+                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export"})
+                if (!db.keys(bucket).isEmpty()) throw new IllegalStateException("Identity missing from existing vault");
+            return false;
+        }
+        IdentityKeyPair pair = new IdentityKeyPair(identity);
+        JSONObject savedProfile = profile();
+        int registration = signal.getLocalRegistrationId();
+        if (savedProfile == null || !Bytes.identity(pair.getPublicKey().serialize()).equals(savedProfile.getString("id")) ||
+                registration < 1 || registration > 16380)
+            throw new IllegalStateException("Stored identity metadata is inconsistent");
+        return true;
+    }
     public void initialize(String alias) throws Exception {
         if (alias.trim().isEmpty() || alias.length() > 40 || alias.codePoints().anyMatch(c -> Character.isISOControl(c) || Character.getType(c) == Character.FORMAT)) throw new IllegalArgumentException("Alias de 1 a 40 caracteres");
         db.transaction(() -> {
@@ -87,7 +104,7 @@ public final class Engine {
             Wire.fields(body, "v", "id", "alias", "identity", "registration", "keyId", "oneTime", "signed", "signedSig", "kem", "kemSig", "box", "write", "created", "expires");
             for (String f : new String[]{"v", "registration", "keyId", "created", "expires"}) Wire.integer(body, f);
             for (String f : new String[]{"id", "alias", "identity", "oneTime", "signed", "signedSig", "kem", "kemSig", "box", "write"}) Wire.string(body, f, 4096);
-            if (body.getInt("v") != 1) throw new SecurityException("Versión de contacto no compatible");
+            if (Wire.integer(body, "v") != 1) throw new SecurityException("Versión de contacto no compatible");
             String peer = body.getString("id");
             ECPublicKey key = new ECPublicKey(Bytes.unb64(body.getString("identity")));
             if (!peer.equals(Bytes.identity(key.serialize())) || peer.equals(id())) throw new SecurityException("Identidad inválida");
@@ -96,12 +113,17 @@ public final class Engine {
                 !key.verifySignature(Bytes.unb64(body.getString("kem")), Bytes.unb64(body.getString("kemSig"))))
                 throw new SecurityException("Firma de preclave inválida");
             long now = Bytes.now(), expiry = body.getLong("expires"), created = body.getLong("created");
-            if (expiry <= now || created > now + 300 || expiry > created + MAX_TTL || created < now - MAX_TTL)
+            if (created < now - MAX_TTL || created > now + 300 || expiry <= now || expiry <= created || expiry - created > MAX_TTL)
                 throw new SecurityException("Invitación vencida o reloj incorrecto");
-            if (body.getInt("registration") < 1 || body.getInt("registration") > 16380 || body.getInt("keyId") < 1)
+            long registration = Wire.integer(body, "registration"), keyId = Wire.integer(body, "keyId");
+            // Validate before any getInt()/libsignal conversion; Number.intValue() can wrap.
+            if (registration < 1 || registration > 16380 || keyId < 1 || keyId > Integer.MAX_VALUE)
                 throw new SecurityException("Preclaves inválidas");
             Wire.uuid(body.getString("box"));
-            if (!body.getString("write").matches("[A-Za-z0-9_-]{43}")) throw new SecurityException("Buzón inválido");
+            String writeToken = body.getString("write");
+            if (!writeToken.matches("[A-Za-z0-9_-]{43}") ||
+                !Base64.getUrlEncoder().withoutPadding().encodeToString(Base64.getUrlDecoder().decode(writeToken)).equals(writeToken))
+                throw new SecurityException("Buzón inválido");
             if (body.getString("alias").trim().isEmpty() || body.getString("alias").length() > 40 || body.getString("alias").codePoints().anyMatch(c -> Character.isISOControl(c) || Character.getType(c) == Character.FORMAT)) throw new SecurityException("Alias inválido");
             // Parse key encodings now rather than deferring failures until first send.
             new ECPublicKey(Bytes.unb64(body.getString("oneTime")));
@@ -349,7 +371,10 @@ public final class Engine {
             }
             for (String keyId : db.keys("key-expiry")) {
                 long expiry = Long.parseLong(Bytes.text(db.get("key-expiry", keyId)));
-                if (expiry <= now) {
+                // Invitation expiry stops NEW sessions. Already encrypted initial messages
+                // may remain in transit for MAX_TTL; retain unused prekeys for that window.
+                // Consumed one-time keys are still removed immediately by SignalStore.
+                if (expiry <= now - MAX_TTL) {
                     db.remove("prekey", keyId); db.remove("signed", keyId); db.remove("kyber", keyId); db.remove("key-expiry", keyId);
                 }
             }

@@ -1,26 +1,17 @@
 # UMBRA — código fuente de mensajería privada
 
-## Preparación para GitHub y Codex
+## Repositorio y continuidad
 
-**Publicación remota pendiente.** Objetivo: `devopssolutionsia/umbra`, privado. Esta carpeta
-incluye el código 0.2.0-dev más herramientas e instrucciones de continuidad; no incorpora
-funciones nuevas de aplicación ni convierte esta entrega en una release.
-
-Desde esta carpeta, con Python 3, Git y GitHub CLI instalados:
-```bash
-python scripts/publish_github.py --check-only
-python scripts/publish_github.py
-```
-El segundo comando se ejecuta en el equipo autenticado del propietario. Abre el inicio de
-sesión de GitHub CLI cuando hace falta; no solicita pegar tokens en un chat. No reemplaza
-repositorios existentes, no hace force-push y comprueba privacidad/SHA remoto. Ante una
-interrupción después de crear el repositorio, `--resume` exige un remoto privado vacío o
-que `main` ya corresponda exactamente al commit local. Ver `docs/GITHUB_SETUP.md`.
+Repositorio privado existente: [DevOps-Solutions-IA/umbra](https://github.com/DevOps-Solutions-IA/umbra),
+rama predeterminada `main`. Continuar mediante ramas y PRs revisables; consultar el estado
+real de las PRs antes de elegir la base. No ejecutar el publicador inicial para actualizar
+este repositorio ni hacer push directo a `main`.
 
 Para continuar en Codex: `AGENTS.md`, `PROMPT_CODEX.md`, `docs/CODEX_HANDOFF.md`,
-`docs/ROADMAP_CODEX.md` y `docs/TESTING_WITHOUT_PHONES.md`. La CI está configurada,
-no ejecutada en GitHub en esta entrega. Los resultados locales nuevos están en
-`docs/validation/handoff-summary.md`.
+`docs/ROADMAP_CODEX.md` y `docs/TESTING_WITHOUT_PHONES.md`. Las ejecuciones de CI y los
+artefactos solo validan su commit correspondiente; consultar Actions y los informes
+fechados de `docs/validation/`. El procedimiento de publicación inicial, conservado para
+un destino nuevo autorizado, está en [docs/GITHUB_SETUP.md](docs/GITHUB_SETUP.md).
 
 ---
 
@@ -28,7 +19,7 @@ no ejecutada en GitHub en esta entrega. Los resultados locales nuevos están en
 
 Cliente Android nativo con interfaz propia, chats individuales, adjuntos pequeños, identidad local sin teléfono, transporte Bluetooth directo y relay HTTPS. Esta revisión modifica el código anterior: no es una maqueta de pantallas ni un documento de propuesta.
 
-**Entrega de desarrollo, no de una aplicación certificada para secretos reales.** P0-01 ejecuta las pruebas del servidor, núcleo Java y libsignal/JNI, y genera APKs debug de ambas variantes con lint e inspección de permisos. Siguen pendientes las pruebas Android instrumentadas, entre teléfonos y una auditoría independiente. No se afirma que sea más segura que WhatsApp, Signal u otra aplicación auditada.
+**Entrega de desarrollo, no de una aplicación certificada para secretos reales.** P0-01 ejecuta las pruebas del servidor, núcleo Java y libsignal/JNI, y genera APKs debug de ambas variantes con lint e inspección de permisos. La estabilización ejecutó instrumentación limitada y Bluetooth del stack emulado; siguen pendientes la bóveda con hardware real, pruebas entre teléfonos y una auditoría independiente. No se afirma que sea más segura que WhatsApp, Signal u otra aplicación auditada.
 
 ## Qué cambia en esta revisión
 
@@ -44,7 +35,20 @@ Cliente Android nativo con interfaz propia, chats individuales, adjuntos pequeñ
 
 El cifrado de mensajes mantiene la integración con **libsignal 0.102.3**; no se sustituyó por un cifrado casero. El desafío adicional de Bluetooth es protocolo propio de aplicación y **requiere revisión independiente**. La clave que protege los registros se gestiona en Keystore; las claves del protocolo se descifran en memoria cuando se necesitan. No se afirma que todas las claves de mensajería residan siempre dentro del hardware.
 
-## Evidencia de esta entrega
+## Estabilización integral verificada localmente
+
+108 pruebas backend, 105 escenarios core, 55 pruebas JVM por variante y 8 pruebas
+Android por variante aprobadas. Se ejecutaron cliente real/relay HTTPS aislado,
+Bluetooth RFCOMM emulado entre dos AVD en ambas variantes y arranque bloqueado de
+copias R8 con firma sintética. Se generaron los cuatro APK debug/release unsigned;
+offline carece de permisos de red en ambos. No equivale a hardware real ni a una
+bóveda productiva desbloqueada en el emulador.
+
+[Informe integral: hallazgos, comandos, resultados, advertencias y bloqueos](docs/validation/2026-09-19-integral-stabilization.md).
+La CI del commit final se consulta por separado; existe un bloqueo de cuenta reportado
+por GitHub, que no se presenta como éxito de las pruebas.
+
+## Evidencia histórica de P0-01
 
 | Validación | Resultado observado |
 |---|---|
@@ -62,7 +66,7 @@ La evidencia actual de P0-01 está en [el informe fechado](docs/validation/2026-
 
 **Connected** conserva mensajería por relay HTTPS y Bluetooth. Su interruptor «solo Bluetooth» cancela conexiones propias en curso y pausa nuevos intentos de red; no puede retirar bytes que ya se hayan enviado.
 
-**Offline** tiene un identificador de aplicación distinto, `BuildConfig.ALLOW_RELAY=false` y un manifiesto de variante que elimina `INTERNET` y `ACCESS_NETWORK_STATE`. La ausencia de ambos permisos se verifica en los manifiestos combinados y con aapt sobre el APK debug final. El script posterior a la compilación falla si falta un manifiesto o si conserva los permisos prohibidos. Esta variante no comparte automáticamente identidad ni historial con Connected.
+**Offline** tiene un identificador de aplicación distinto, `BuildConfig.ALLOW_RELAY=false` y un manifiesto de variante que elimina `INTERNET` y `ACCESS_NETWORK_STATE`. La ausencia de ambos permisos se verifica en los manifiestos combinados y con aapt sobre los APK debug y release finales. El script posterior a la compilación falla si falta un manifiesto o si conserva los permisos prohibidos. Esta variante no comparte automáticamente identidad ni historial con Connected.
 
 La restricción se refiere al proceso de UMBRA: un selector de documentos o aplicación externa puede usar su propia conexión a internet. No convierte el teléfono completo en un dispositivo sin red ni oculta la actividad de radio Bluetooth.
 
@@ -81,17 +85,17 @@ docs/HARDENING_0_2.md      Cambios, amenazas cubiertas y limitaciones
 
 ## Ejecutar las pruebas locales
 
-Python 3.12+ y JDK 21. Se utilizó Python 3.13.5 en esta entrega.
+Python 3.12/3.13 y JDK 21. Los locks con hashes incluyen wheels para ambas versiones de Python.
 
 ```bash
 cd UMBRA
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -r relay/requirements-test.txt
+python -m pip install --require-hashes -r relay/requirements-test.lock
 bash scripts/test_local.sh
 ```
 
-En Windows: activar `.venv\Scripts\Activate.ps1` y utilizar Git Bash/WSL para el script de shell, o ejecutar por separado las órdenes que contiene. Las dependencias de ejecución permanecen fijadas como en la base; no se ha completado una revisión de vulnerabilidades ni generado un lock con hashes de todos los artefactos.
+En Windows: activar `.venv\Scripts\Activate.ps1` y utilizar Git Bash/WSL para el script de shell, o ejecutar por separado las órdenes que contiene. Las dependencias Python de ejecución y pruebas están fijadas con hashes de wheels. La consulta de avisos conocidos, actualizaciones justificadas y límites de cobertura se documentan en [la revisión de dependencias](docs/validation/2026-09-19-dependencies-review.md).
 
 ## Compilar Android y ambas variantes
 
@@ -117,7 +121,7 @@ android/app/build/outputs/apk/connected/debug/app-connected-debug.apk
 android/app/build/outputs/apk/offline/debug/app-offline-debug.apk
 ```
 
-No hay claves de firma de publicación. El flujo GitHub Actions no se ejecutó ni se publicó en una cuenta. Las acciones de CI se fijaron por SHA en esta preparación. Las imágenes, toolchains y demás artefactos de terceros todavía requieren fijación/revisión adicional antes de una distribución sensible.
+No hay claves de firma de publicación. El flujo GitHub Actions debe comprobarse sobre el SHA de cada entrega. Las acciones de CI están fijadas por SHA. Las imágenes, toolchains y demás artefactos de terceros todavía requieren fijación/revisión adicional antes de una distribución sensible.
 
 ## Prueba de aceptación Bluetooth, pendiente
 

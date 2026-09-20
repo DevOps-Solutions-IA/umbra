@@ -1,5 +1,25 @@
 # Transferencia técnica a Codex
 
+## Continuidad de estabilización — 2026-09-19 UTC
+
+VERIFIED — Rama `codex/repository-audit-fixes`; código validado
+`8fdea14efb3c8a78a0faf66d01f9d254a8dc8a20`. PR #1 permanece abierta en
+`0f4d566880454939dda130167c42de3ac8b4fe77`; se preservó además el HEAD de #2,
+`47b26169717fcf57cfd9e01d79e10b68562ded56`. No partir de main suponiendo merge.
+Consultar GitHub antes de continuar; entregar la corrección hacia la rama de #1.
+
+VERIFIED — Backend 108, core 105, JVM 55 por variante, instrumentación 8 por variante,
+integración HTTPS real y Bluetooth RFCOMM emulado ambas variantes; cuatro APK/lint y
+arranque R8 bloqueado verificados. [Evidencia integral y hashes](validation/2026-09-19-integral-stabilization.md).
+Los documentos siguientes describen etapas históricas y no sustituyen ese inventario.
+
+BLOCKED — CI remota por pagos/límite de gasto según anotación GitHub; hardware físico
+no disponible. NOT_VERIFIED — Bóveda Android productiva con hardware, migraciones/
+fallos/cancelación Android completos, matriz UX y reconexión adversarial Bluetooth.
+Siguiente trabajo: revisión humana de los cambios de identidad/almacenamiento/dependencias,
+resolver por el propietario el bloqueo de Actions y repetir CI; continuar P0-03 y
+las matrices pendientes sin relajar Keystore. No se autoriza auto-merge.
+
 ## Actualización P0-01 — 2026-09-19 UTC
 
 VERIFIED — Repositorio privado publicado; base main comprobada:

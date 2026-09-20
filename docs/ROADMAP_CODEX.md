@@ -1,6 +1,11 @@
 # Backlog de finalización verificable
 
-Actualización 2026-09-19 UTC: P0-01 verificado localmente en la rama
+Actualización integral 2026-09-19 UTC: [nuevo informe](validation/2026-09-19-integral-stabilization.md)
+con evidencia local ampliada P0-01/P0-02, instrumentación limitada, Bluetooth emulado,
+cliente real/relay, contenedor y R8. Esto no cierra en bloque P0-03–P0-12: quedan
+matrices sin ejecutar, hardware y revisión/CI remota pendientes. No hay auto-merge.
+
+Actualización histórica 2026-09-19 UTC: P0-01 verificado localmente en la rama
 `codex/android-build-validation`; [evidencia](validation/2026-09-19-p0-01.md).
 PR y CI deben revisarse antes de fusionar. Se verificaron permisos y JNI de los APK
 debug, pero P0-02 completo (incluido release) y los demás paquetes siguen abiertos.
