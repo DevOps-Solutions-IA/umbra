@@ -9,8 +9,7 @@ validación del nuevo commit; una CI anterior no lo valida.
 - Bóveda: corregidos apertura SQLite y carrera de alias, con reproducción Android.
   P0-03 sigue parcial: hardware/migración completa y commit del framework pendientes.
 - Identidad/emparejamiento: implementación de invitación firmada compacta, request/ack,
-  consumo atómico, revocación, límites, confianza y cambio explícito; validación final
-  en curso. Exportación/importación mínima en la interfaz existente.
+  consumo atómico, revocación, límites, confianza y cambio explícito; validación del código `d1598e2` en CI `35535786431`: cuatro jobs SUCCESS. Exportación/importación mínima en la interfaz existente.
 - Dispositivos/recuperación: siguiente bloque; RECOVERABLE bloqueado según ADR.
 - Ubicación cifrada, señalización, voz y vídeo WebRTC: NOT EXECUTED en este bloque.
   No confundir los contratos propuestos en la misión con funcionalidad terminada.

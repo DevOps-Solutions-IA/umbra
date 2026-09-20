@@ -165,3 +165,24 @@ Logs `transport-final-*` conservan este conjunto separado del intermedio.
 | connected/release | `d9bb1ef4aaf9a45a41c8ac7bc1471783f5782bf622344f4d4e4ea9fbdcc2d800` |
 | offline/debug | `3a7c89d5ed6e9ee0a5addf78ce1bc48ca9aaf81dd0e07dd63fdeadcb145eceb1` |
 | offline/release | `01023a84dc383ed5a07f9cbf623369bb02549e8f37e2b77754a9fe97846504bc` |
+
+
+## CI del código de identidad — resultado verificado
+
+VERIFIED: commit `d1598e2c2d5e1ea3743f029125c3ba5c1c5697f0`,
+[Actions 35535786431](https://github.com/DevOps-Solutions-IA/umbra/actions/runs/35535786431),
+cuatro jobs SUCCESS. Checkout de prueba (merge sintético):
+`f34452bf666b3893d738da7c7cb5981347996d6f`. Reportes descargados y contrastados:
+16 pruebas Android por variante; ambos endpoints RFCOMM del stack emulado PASS en
+connected y offline; smokeR8 ambas; artefactos subidos. Los ZIP descargados coinciden
+con sus digests de Actions y los dos APK debug coinciden con el manifiesto SHA.
+
+El [recibo estructurado](2026-09-20-identity-ci-receipt.json) conserva jobs/IDs,
+hashes de ZIP y los cuatro APK. Los hashes de ambos release unsigned coinciden
+además con el build local final: una comparación concreta local/CI, no garantía
+de reproducibilidad universal. Debug difiere por la firma de depuración del runner.
+No se publicaron binarios release ni se usaron claves de producción.
+
+Este recibo describe el commit de código indicado. Un commit posterior que sólo
+registra evidencia debe comprobar su propia CI; la PR mantiene esa relación.
+La misión global permanece PARTIAL, con los bloques restantes enumerados arriba.

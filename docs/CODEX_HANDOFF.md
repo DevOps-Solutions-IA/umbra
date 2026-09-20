@@ -8,7 +8,8 @@ Repositorio PUBLIC. Rama nueva `codex/secure-identity-media-core`, PR dependient
 [#4](https://github.com/DevOps-Solutions-IA/umbra/pull/4) hacia la rama de #3.
 No modificar la rama de estabilización ni asumir fusión de las PR anteriores.
 
-IMPLEMENTED / VALIDATION IN PROGRESS — Correcciones Vault en `b1a865c`,
+VERIFIED — Correcciones Vault en `b1a865c` (CI `35535038549` SUCCESS),
+identidad en `d1598e2` (CI `35535786431`, cuatro jobs SUCCESS),
 emparejamiento firmado de un uso, consumo local/relay atómico, verificación humana
 separada, estados de confianza y suspensión por cambio de identidad. Misma identidad
 libsignal, sin teléfono ni correo. UI mínima por archivos; no rediseño gráfico.
