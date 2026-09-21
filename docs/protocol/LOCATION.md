@@ -83,7 +83,8 @@ Secuencias menores/repetidas se consumen sin sustituir la posición, con dedupli
 Signal/Engine y ACK transaccional. Un terminal no acepta una reactivación. Una nueva
 instancia receptora no presenta una sesión anterior como activa automáticamente.
 
-Vista ACTIVE solo indica RECENT si la última medición tiene ≤30 s; si no, LAST_KNOWN.
+Vista ACTIVE solo indica RECENT si la última medición tiene ≤30 s por reloj de pared
+y por la edad al recibir más el tiempo monotónico transcurrido; si no, LAST_KNOWN.
 STOPPED/EXPIRED/INTERRUPTED nunca se presentan como en vivo. La duración receptora
 se acota también por plazo monotónico en ese proceso. STOP no entregado no extiende
 ends. El contenido de la última posición se elimina tras ends+120 s; el tombstone

@@ -163,6 +163,11 @@ public class LocationTest {
         p.time.addAndGet(901000);
         assertEquals("EXPIRED",receiver.locations().received(p.a.e.id()).get(0).getString("display"));
         assertEquals("EXPIRED",new Engine(p.b.db).locations().received(p.a.e.id()).get(0).getString("display"));
+        Pair fresh=new Pair(); Engine recipient=new Engine(fresh.b.db,fresh.time::get); String active=fresh.live(); fresh.update(active);
+        for(JSONObject e:fresh.envelopes()) recipient.receive(e);
+        assertEquals("RECENT",recipient.locations().received(fresh.a.e.id()).get(0).getString("display"));
+        fresh.time.addAndGet(31000); // Wall time unchanged: freshness must still end.
+        assertEquals("LAST_KNOWN",recipient.locations().received(fresh.a.e.id()).get(0).getString("display"));
     }
     @Test public void expiryWhileWaitingForTransactionRechecksConsent() throws Exception {
         Pair p=new Pair(); var consent=p.sender.locations().review(p.b.e.id(),LocationPayload.Mode.ZONE,900,true);

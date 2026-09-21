@@ -254,7 +254,7 @@ public final class LocationService {
         if(old!=null && old.has("lastPoint") && p.has("point") && p.getJSONObject("point").getLong("measured")<old.getJSONObject("lastPoint").getLong("measured")) return;
         if(old==null && db.keys("location-in").size()>=256) throw new IllegalStateException("Location inbox capacity reached");
         String type=p.getString("type"); String state=type.equals("LOCATION_LIVE_STOP")?"STOPPED":type.equals("LOCATION_POINT")?"POINT":p.getLong("ends")<=Bytes.now()?"EXPIRED":"ACTIVE";
-        JSONObject row=new JSONObject().put("payload",new JSONObject(p.toString())).put("state",state).put("received",Bytes.now()).put("runtime",runtime)
+        JSONObject row=new JSONObject().put("payload",new JSONObject(p.toString())).put("state",state).put("received",Bytes.now()).put("receivedElapsed",elapsed.getAsLong()).put("runtime",runtime)
             .put("deadline",old==null?elapsed.getAsLong()+Math.max(0,p.getLong("ends")-Bytes.now())*1000:old.getLong("deadline"))
             .put("retainUntil",p.getLong("ends")+Engine.MAX_TTL+300);
         if(p.has("point")) row.put("lastPoint",p.getJSONObject("point"));
@@ -281,7 +281,16 @@ public final class LocationService {
             for(String key:db.keys("location-in")) { JSONObject row=get("location-in",key); JSONObject p=row.getJSONObject("payload");
                 if(row.optBoolean("hidden") || !p.getString("device").equals(peer)) continue;
                 String display=row.getString("state");
-                if(display.equals("ACTIVE")) display=row.has("lastPoint") && Bytes.now()-row.getJSONObject("lastPoint").getLong("measured")<=30?"RECENT":"LAST_KNOWN";
+                if(display.equals("ACTIVE")) {
+                    boolean recent=false;
+                    if(row.has("lastPoint")) {
+                        long measured=row.getJSONObject("lastPoint").getLong("measured");
+                        long elapsedAge=elapsed.getAsLong()-row.getLong("receivedElapsed");
+                        long initialAge=Math.max(0,row.getLong("received")-measured);
+                        recent=Bytes.now()-measured<=30 && elapsedAge>=0 && elapsedAge+initialAge*1000<=30000;
+                    }
+                    display=recent?"RECENT":"LAST_KNOWN";
+                }
                 row.put("display",display); result.add(row);
             } return result;
         });
