@@ -10,7 +10,7 @@ from check_voice_artifact import ABIS, verify_apk
 
 
 class VoiceArtifactTests(unittest.TestCase):
-    def archive(self, voice=True, altered=False, extra=False, dex=False, missing=False, license_asset=False, tampered_license=False):
+    def archive(self, voice=True, altered=False, extra=False, dex=False, missing=False, license_asset=False, tampered_license=False, missing_binding=None):
         data = io.BytesIO()
         pin = {"entries": {}}
         with zipfile.ZipFile(data, "w") as z:
@@ -29,6 +29,9 @@ class VoiceArtifactTests(unittest.TestCase):
                 z.writestr("lib/x86/libunexpected.so", b"extra")
             if dex:
                 z.writestr("classes2.dex", b"Lorg/webrtc/PeerConnection;")
+            if voice or missing_binding is not None:
+                bindings = [b"Lorg/jni_zero/JniZero;", b"Lorg/jni_zero/CommonApis;"]
+                z.writestr("classes.dex", b"\n".join(b for b in bindings if b != missing_binding))
         return zipfile.ZipFile(data), pin
 
     def test_exact_connected_distribution(self):
@@ -42,6 +45,15 @@ class VoiceArtifactTests(unittest.TestCase):
                 archive, pin = self.archive(**kwargs)
                 with archive, self.assertRaises(RuntimeError):
                     verify_apk(archive, "connected", pin)
+
+    def test_r8_removed_jni_zero_entry_rejected(self):
+        for binding in (b"Lorg/jni_zero/JniZero;", b"Lorg/jni_zero/CommonApis;"):
+            archive, pin = self.archive(missing_binding=binding)
+            with archive, self.assertRaisesRegex(RuntimeError, "JNI Zero"):
+                verify_apk(archive, "connected", pin)
+        archive, pin = self.archive(voice=False, missing_binding=b"Lorg/jni_zero/CommonApis;")
+        with archive, self.assertRaisesRegex(RuntimeError, "DEX leaked"):
+            verify_apk(archive, "offline", pin)
 
     def test_offline_rejects_native_or_java_webrtc(self):
         for kwargs in ({}, {"voice": False, "dex": True}):

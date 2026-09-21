@@ -10,11 +10,13 @@ import time
 import tempfile
 import ipaddress
 import shutil
+import shlex
 from voice_network_evidence import summarize, count
 from turn_lab import TurnLab, docker
 from voice_relay_lab import voice_relay
 from android_apk_install import ensure_apk
 from voice_direct_route import probe_udp
+from check_optimized_media import inspect as inspect_optimized_media
 
 ROOT=Path(__file__).resolve().parents[1]
 PACKAGE="app.umbra.privatechat.dev"
@@ -46,18 +48,29 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--a",required=True); parser.add_argument("--b",required=True)
     parser.add_argument("--reports",type=Path,required=True)
+    parser.add_argument("--optimized",action="store_true",help="Run the isolated non-debuggable R8 mediaLab APK on rooted AOSP AVDs")
     parser.add_argument("--scenario",choices=("audio","expired-auth","allocation-expiry","invalid-auth","unreachable","turn-loss","trust-loss","lock","credential-expiry","direct-blocked","force-stop","permission-revoked","device-revoked","storage-failure","unauthorized-redirect"),default="audio")
     args=parser.parse_args()
+    optimized_evidence=inspect_optimized_media() if args.optimized else None
+    PACKAGE="app.umbra.privatechat.medialab" if args.optimized else "app.umbra.privatechat.dev"
+    app_uids={}
     if args.a==args.b: raise ValueError("Two independent AVD serials required")
     adb=str(Path(os.environ["ANDROID_HOME"])/"platform-tools/adb")
+    def command_for(serial,command):
+        if args.optimized and tuple(command[:3])==("shell","run-as",PACKAGE):
+            # This exact synthetic UID only, after checking qemu and PackageManager.
+            # Keep R8 in release mode; do not make the target debuggable for run-as.
+            script="cd /data/user/0/"+PACKAGE+" && "+" ".join(command[3:])
+            command=("shell","su",app_uids[serial],"sh","-c",shlex.quote(script))
+        return [adb,"-s",serial,*command]
     def run(serial,*command,**kwargs):
-        return subprocess.run([adb,"-s",serial,*command],check=True,capture_output=True,timeout=120,**kwargs)
+        return subprocess.run(command_for(serial,command),check=True,capture_output=True,timeout=120,**kwargs)
     def write(serial,name,payload):
         run(serial,"shell","run-as",PACKAGE,"sh","-c",f"'umask 077; cat > files/{name}.tmp && mv files/{name}.tmp files/{name}'",input=json.dumps(payload).encode())
     def read(serial,name,process,deadline):
         while time.monotonic()<deadline:
             if process.poll() is not None: raise RuntimeError("Android voice fixture exited before exchange; inspect sanitized instrumentation report")
-            result=subprocess.run([adb,"-s",serial,"shell","run-as",PACKAGE,"cat","files/"+name],capture_output=True,timeout=15)
+            result=subprocess.run(command_for(serial,("shell","run-as",PACKAGE,"cat","files/"+name)),capture_output=True,timeout=15)
             if result.returncode==0: return json.loads(result.stdout)
             if result.returncode!=1: raise RuntimeError("ADB voice exchange failed")
             time.sleep(0.1)
@@ -67,14 +80,23 @@ def main():
         run(serial,"shell","svc","power","stayon","true")
         run(serial,"shell","input","keyevent","KEYCODE_WAKEUP")
         run(serial,"shell","svc","wifi","enable")
-        for path in ("connected/debug/app-connected-debug.apk","androidTest/connected/debug/app-connected-debug-androidTest.apk"):
+        variant="mediaLab" if args.optimized else "debug"
+        for path in (f"connected/{variant}/app-connected-{variant}.apk",f"androidTest/connected/{variant}/app-connected-{variant}-androidTest.apk"):
             ensure_apk(adb,serial,PACKAGE+(".test" if path.startswith("androidTest/") else ""),ROOT/"android/app/build/outputs/apk"/path)
+        if args.optimized:
+            listed=run(serial,"shell","cmd","package","list","packages","-U",PACKAGE).stdout.decode().splitlines()
+            matches=[re.fullmatch(r"package:"+re.escape(PACKAGE)+r" uid:(\d+)",line) for line in listed]
+            uids=[match[1] for match in matches if match]
+            if len(uids)!=1 or not 10000<=int(uids[0])<=19999: raise RuntimeError("Unknown isolated mediaLab UID")
+            app_uids[serial]=uids[0]
         run(serial,"shell","run-as",PACKAGE,"mkdir","-p","files")
         if args.scenario=="permission-revoked": run(serial,"shell","pm","grant",PACKAGE,"android.permission.RECORD_AUDIO")
         # Explicit names only, confined to this disposable debug UID.
         for suffix in ("public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop"):
             run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
     args.reports.mkdir(parents=True,exist_ok=True)
+    if optimized_evidence:
+        (args.reports/"optimized-apk.json").write_text(json.dumps(optimized_evidence,indent=2)+"\n")
     processes={}; streams=[]
     with voice_relay() as relay, TurnLab(alternate_port=3479 if args.scenario=="unauthorized-redirect" else None, allocation_lifetime=20 if args.scenario=="allocation-expiry" else 180) as turn:
         capture_paths=[]; blocked_routes=[]; allocation_evidence=None

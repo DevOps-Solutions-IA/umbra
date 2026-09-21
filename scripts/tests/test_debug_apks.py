@@ -22,6 +22,8 @@ class ApkGateTests(unittest.TestCase):
             apk = root / "synthetic.apk"
             pin = {"entries": {}}
             with zipfile.ZipFile(apk, "w") as package:
+                if variant == "connected":
+                    package.writestr("classes.dex", b"Lorg/jni_zero/JniZero;\nLorg/jni_zero/CommonApis;")
                 for abi in gate.ABIS - {missing}:
                     machine = {"arm64-v8a": 183, "armeabi-v7a": 40, "x86": 3, "x86_64": 62}[abi]
                     elf_class = 2 if abi in {"arm64-v8a", "x86_64"} else 1

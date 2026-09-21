@@ -83,7 +83,8 @@ public final class VoiceEngineFixtureListener extends RunListener {
     }
     @Override public void testRunStarted(Description ignored) throws Exception {
         var context=InstrumentationRegistry.getInstrumentation().getTargetContext();
-        if(!BuildConfig.DEBUG || !context.getPackageName().endsWith(".dev")) throw new SecurityException("Lab only");
+        if(!(BuildConfig.DEBUG && context.getPackageName().equals("app.umbra.privatechat.dev"))
+                && !context.getPackageName().equals("app.umbra.privatechat.medialab")) throw new SecurityException("Lab only");
         files=context.getFilesDir().toPath(); JSONObject configuration=read("synthetic-voice-engine.json");
         Files.delete(files.resolve("synthetic-voice-engine.json"));
         boolean caller=configuration.getString("role").equals("A");

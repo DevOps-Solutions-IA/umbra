@@ -1,5 +1,18 @@
 # Transferencia técnica a Codex
 
+## Sexta entrega — video — EN CURSO, 2026-09-21
+
+Rama `codex/turn-video-core`, PR #9 borrador dependiente de #8 abierta.
+Base a11b579 reproducida en CI35625489078: cuatro SUCCESS y 15 escenarios de voz.
+[Evidencia nueva](validation/2026-09-21-turn-video-core.md).
+Se reprodujo/corrigió una entrada JNI Zero eliminada por R8; primera voz sintética
+bidireccional con Engine/Signal/HTTPS/TURN sobre clases UMBRA optimizadas pasó en
+dos AVD. Target `.medialab` separado, no APK productivo exacto ni Keystore hardware.
+Pruebas C++ de TURN en CI35625739825 y aceptación R8 ampliada requieren comprobar
+su resultado actual. Video todavía NO IMPLEMENTADO; ADR/protocolo son propuestas.
+Cerrar estas regresiones antes de habilitar video/generaciones nuevas. Conserva
+TURN obligatorio, plazos y permisos offline; no reiniciar trabajo desde main.
+
 ## Quinta entrega — voz — en curso, 2026-09-21
 
 PARTIAL — rama `codex/turn-voice-core`, base #7 abierta `e495793`.

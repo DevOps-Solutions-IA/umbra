@@ -135,3 +135,14 @@ Un reemplazo de dependencia no hereda esa capacidad automáticamente. La entrada
 productiva sigue exigiendo permiso, consentimiento, selección, verificación, lease
 vigente y comprobación DTLS nativa; el hash no autoriza una llamada por sí solo.
 Pruebas de micrófono/hardware, IPv6, TURN TLS y recorrido de voz R8 quedan pendientes.
+
+## Regresión R8 detectada al iniciar video (2026-09-21)
+
+El primer recorrido de voz con código optimizado abortó al cargar WebRTC porque
+R8 eliminaba `org.jni_zero.JniZero`, fuera de la regla org.webrtc. El APK release
+anterior también carecía de esa entrada. Se conserva ahora únicamente la superficie
+anotada CalledByNative de JNI Zero y se exige su presencia en el DEX connected.
+El primer audio sintético R8 pasó con Engine/Signal/HTTPS/TURN en dos AVD; el arnés
+separado conserva las APIs que referencia, con cuerpos/nombres optimizables.
+No equivale al APK productivo exacto, micrófono físico, video o Keystore hardware.
+Consultar [evidencia](validation/2026-09-21-turn-video-core.md) para CI y pendientes.
