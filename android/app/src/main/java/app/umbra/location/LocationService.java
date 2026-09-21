@@ -31,7 +31,7 @@ public final class LocationService {
         public long durationSeconds() { return duration; }
     }
     private static final class Grant {
-        final Runnable lease; final long deadline, began; volatile boolean stopped;
+        final Runnable lease; final long deadline, began; volatile boolean stopped; volatile Runnable capturePolicy;
         Grant(Runnable lease,long now,long duration) { this.lease=lease; began=now; deadline=now+duration*1000; }
     }
     /** Unforgeable one-transaction capability, bound to exact content and this Records instance. */
@@ -81,7 +81,7 @@ public final class LocationService {
     }
     private Grant checkGrant(String id) throws Exception {
         Grant grant=grants.get(id); if(grant==null || grant.stopped) throw new SecurityException("Location session interrupted");
-        grant.lease.run(); long now=elapsed.getAsLong();
+        grant.lease.run(); capturePolicy(grant); long now=elapsed.getAsLong();
         JSONObject row=get("location-out",id);
         if(row==null || !Set.of("ACTIVE","PENDING").contains(row.getString("state")) || now<grant.began || now>=grant.deadline ||
             Bytes.now()>=row.getJSONObject("payload").getLong("ends") || Bytes.now()<row.getJSONObject("payload").getLong("started")-30)
@@ -91,6 +91,19 @@ public final class LocationService {
         JSONObject root=engine.contact(p.getString("recipient"));
         if(root==null || engine.trustState(p.getString("recipient"))!=Engine.TrustState.VERIFIED) throw new SecurityException("Location recipient trust suspended");
         return grant;
+    }
+    private static void capturePolicy(Grant grant) {
+        if(grant.capturePolicy!=null) try { grant.capturePolicy.run(); }
+        catch(SecurityException denied) { grant.stopped=true; throw denied; }
+    }
+    /** The Android provider binds its live permission/foreground check to every pending write. */
+    public void bindCapturePolicy(String session,Runnable policy) throws Exception {
+        if(policy==null) throw new SecurityException("Missing capture policy");
+        db.transaction(() -> {
+            Grant grant=checkGrant(session);
+            if(grant.capturePolicy!=null) throw new SecurityException("Capture policy already bound");
+            grant.capturePolicy=policy; capturePolicy(grant); return null;
+        });
     }
     /** Called before obtaining each measurement, and again before processing its callback. */
     public void authorizeCapture(String session) throws Exception {
@@ -137,6 +150,8 @@ public final class LocationService {
             if(session.equals(row.optString("locationSession")) && (all || row.optString("locationType").equals("LOCATION_LIVE_UPDATE") || row.optString("locationType").equals("LOCATION_POINT"))) db.remove("outbox",id);
         }
     }
+    /** Immediate cancellation on UI thread; persistence and optional STOP run later on the worker. */
+    public void cancelCapture(String session) { Grant grant=grants.get(session); if(grant!=null) grant.stopped=true; }
     public void stop(String session) throws Exception {
         Grant grant=grants.get(session); if(grant!=null) grant.stopped=true; // Fail closed even if disk fails.
         db.transaction(() -> {
@@ -157,7 +172,7 @@ public final class LocationService {
     public void suspendIdentity(String identity) throws Exception {
         for(String session:db.keys("location-out")) {
             JSONObject row=get("location-out",session), p=row.getJSONObject("payload");
-            if(identity.equals(p.getString("recipient")) || identity.equals(p.getString("device"))) {
+            if(identity.equals(p.getString("recipient")) || identity.equals(p.getString("device")) || identity.equals(p.getString("owner"))) {
                 grants.remove(session); drop(session,true);
                 if(Set.of("ACTIVE","PENDING","SENT").contains(row.getString("state"))) {
                     row.put("state","INTERRUPTED"); put("location-out",session,row);
@@ -208,7 +223,7 @@ public final class LocationService {
         if(!queued.has("locationSession")) return;
         String session=queued.getString("locationSession"); JSONObject row=get("location-out",session); Grant grant=grants.get(session);
         if(row==null || grant==null) throw new SecurityException("Location delivery interrupted");
-        grant.lease.run(); long now=elapsed.getAsLong();
+        grant.lease.run(); capturePolicy(grant); long now=elapsed.getAsLong();
         if(now<grant.began || now>=grant.deadline || row.getJSONObject("payload").getLong("ends")<=Bytes.now() ||
             !eligible(row.getJSONObject("payload")).contains(queued.getString("peer"))) throw new SecurityException("Location delivery no longer authorized");
         boolean stop=queued.getString("locationType").equals("LOCATION_LIVE_STOP");

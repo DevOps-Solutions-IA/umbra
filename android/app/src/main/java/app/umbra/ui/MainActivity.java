@@ -507,6 +507,7 @@ public final class MainActivity extends Activity {
         button(page,"Compartir ubicación…",this::locationOptions,false);
         button(page,"Detener ubicación",() -> {
             var capture=locationCapture; String session=capture==null?null:capture.activeSession();
+            if(session!=null) engine.locations().cancelCapture(session);
             if(capture!=null) capture.close();
             if(session!=null) action(() -> { engine.locations().stop(session); return true; },ok -> { locationStatus="Ubicación detenida"; refresh(); syncNow(); });
             else { engine.locations().cancelLocal(); action(() -> { engine.expire(); return true; },ok -> { locationStatus="Entregas de ubicación canceladas"; refresh(); }); }

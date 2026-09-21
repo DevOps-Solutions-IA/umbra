@@ -29,7 +29,10 @@ public final class AndroidLocationCapture implements AutoCloseable {
     }
     private void check(String id,LocationPayload.Mode mode) throws Exception {
         if(!id.equals(session) || !foreground.getAsBoolean()) throw new SecurityException("Location capture interrupted");
-        service.authorizeCapture(id);
+        service.authorizeCapture(id); checkProvider(mode);
+    }
+    private void checkProvider(LocationPayload.Mode mode) {
+        if(!foreground.getAsBoolean()) throw new SecurityException("Location capture interrupted");
         boolean fine=permitted(Manifest.permission.ACCESS_FINE_LOCATION), coarse=permitted(Manifest.permission.ACCESS_COARSE_LOCATION);
         if(!fine && !coarse || mode==LocationPayload.Mode.PRECISE && !fine || LocationManager.GPS_PROVIDER.equals(provider) && !fine)
             throw new SecurityException("Location permission unavailable");
@@ -42,6 +45,7 @@ public final class AndroidLocationCapture implements AutoCloseable {
         try {
             if(mode==LocationPayload.Mode.MANUAL) throw new SecurityException("Manual point does not use provider");
             check(id,mode);
+            service.bindCapturePolicy(id,() -> checkProvider(mode));
             LocationListener callback=new LocationListener() {
                 @Override public void onLocationChanged(Location location) {
                     try {

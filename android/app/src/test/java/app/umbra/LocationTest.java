@@ -183,5 +183,32 @@ public class LocationTest {
         assertThrows(SecurityException.class,() -> p.sender.authorizeEnvelope(delayed));
         assertTrue(p.sender.outbox().isEmpty()); assertEquals("INTERRUPTED",p.a.e.get("location-out",id).getString("state"));
     }
+    @Test public void suspendingOwnAdministratorCannotResumeAnOldSecondaryCaptureAfterUnblock() throws Exception {
+        Pair p=new Pair(); DeviceLinkingTest.Device a2=new DeviceLinkingTest.Device("Synthetic A2");
+        DeviceLinkingTest.link(p.a,a2); DeviceLinkingTest.pair(a2,p.b);
+        DeviceLinkingTest.approveSet(a2,p.b); DeviceLinkingTest.approveSet(p.b,p.a,a2);
+        String id=a2.e.locations().start(a2.e.locations().review(p.b.e.id(),LocationPayload.Mode.ZONE,900,true),true);
+        a2.e.block(p.a.e.id(),true); a2.e.block(p.a.e.id(),false);
+        assertThrows(SecurityException.class,() -> a2.e.locations().authorizeCapture(id));
+        assertTrue(a2.e.outbox().isEmpty());
+    }
+    @Test public void stopClickCancelsQueuedWritesBeforePersistenceWorkerRuns() throws Exception {
+        Pair p=new Pair(); String id=p.live(); p.update(id);
+        var write=p.sender.deliveryAuthorization(p.envelopes().get(1));
+        p.sender.locations().cancelCapture(id);
+        assertThrows(SecurityException.class,write::run);
+        assertThrows(SecurityException.class,() -> p.sender.locations().authorizeCapture(id));
+        p.sender.locations().stop(id);
+        assertEquals(1,p.envelopes().size()); p.sender.authorizeEnvelope(p.envelopes().get(0));
+        p.b.e.receive(p.envelopes().get(0)); assertEquals("STOPPED",p.b.e.locations().received(p.a.e.id()).get(0).getString("state"));
+    }
+    @Test public void permissionPolicyIsRecheckedAtWriteAndCannotRestoreOldGrant() throws Exception {
+        Pair p=new Pair(); String id=p.live(); java.util.concurrent.atomic.AtomicBoolean permission=new java.util.concurrent.atomic.AtomicBoolean(true);
+        p.sender.locations().bindCapturePolicy(id,() -> { if(!permission.get()) throw new SecurityException("Synthetic permission revoked"); });
+        p.update(id); var write=p.sender.deliveryAuthorization(p.envelopes().get(1));
+        permission.set(false); assertThrows(SecurityException.class,write::run);
+        permission.set(true); assertThrows(SecurityException.class,() -> p.sender.locations().authorizeCapture(id));
+        assertTrue(p.sender.outbox().isEmpty());
+    }
     private static String safeId(DeviceLinkingTest.Device d) { try { return d.e.id(); } catch(Exception e) { throw new AssertionError(e); } }
 }
