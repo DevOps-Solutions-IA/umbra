@@ -60,3 +60,34 @@ sin fallback; IPv6; micrófono productivo/permisos/rutas; llamada release/R8.
 BLOCKED por hardware ausente: prueba acústica de teléfonos y headset Bluetooth,
 Keystore hardware. El resto está en desarrollo, no se clasifica como bloqueo físico.
 Sin voz/video terminados, sin nueva recuperación, publicación o despliegue productivo.
+
+## Probe nativo adicional ejecutado
+
+Después de corregir el perfil coturn y la espera de candidatos (COMPLETE puede
+preceder la primera notificación de red Android),
+`python scripts/run_voice_probe.py --serial emulator-5554 --log /tmp/umbra-voice-device/native-probe-6.log`
+terminó con salida0. Exige marcador `nativeVoice=PASS` y3 tests Signal del runner.
+Los logs anteriores conservan sus fallos; ninguno se reclasifica como aprobado.
+
+Dos PeerConnections/factories/ADM independientes en UN AVD API35 x86_64/KVM
+intercambiaron tonos sintéticos distintos1kHz/2kHz. Al menos100 buffers PCM
+decodificados por lado superaron energía media100000 y fracción espectral0,55
+al tono esperado. Entrada inyectada antes del códec, AudioRecord desactivado ANTES
+del factory; salida leída tras decodificación nativa, sin micrófono del equipo.
+Stats nativas: DTLS conectado, candidatos locales/remotos relay y huella del
+certificado remoto coincidente con el certificado generado por el otro extremo.
+NO prueba identidad UMBRA por Engine, HTTPS, dos AVD o conversación humana.
+
+TURN UDP real: coturn4.18.0-r0 por digest
+`sha256:bbefd3e1fdfdc0d58770fe01b581fd8b00d9f3a5580d00acb77cf719a6bc78e3`,
+imagen derivada local no publicada (`scripts/turn-lab/Dockerfile`). Red Docker
+interna sin puertos publicados, listen3478, asignaciones49160–49179, destinos
+restringidos a la dirección del servidor, user-quota4/total8, 1 relay thread,
+duración180s, secreto REST efímero. TURN TLS NO probado: UDP de laboratorio,
+distinto de DTLS-SRTP. Cleanup de contenedor/red/archivos/credenciales y force-stop
+de la app al salir. Se conservan en caché capas públicas de construcción, sin secretos.
+
+113 pruebas de herramientas aprobadas: incluyen rechazo de marcador nativo ausente,
+cleanup Docker tras error y límites del emisor de credenciales. Sus mocks no cuentan
+como TURN real. CI añade el probe nativo sin sustituir suites existentes.
+CI del commit final aún pendiente de verificar.
