@@ -1,0 +1,11 @@
+--- a/sdk/android/api/org/webrtc/WrappedVideoDecoderFactory.java
++++ b/sdk/android/api/org/webrtc/WrappedVideoDecoderFactory.java
+@@ -63,7 +63,7 @@
+
+     @Override
+     public VideoCodecInfo[] getSupportedCodecs() {
+-        LinkedHashSet<VideoCodecInfo> supportedCodecInfos = new LinkedHashSet();
++        LinkedHashSet<VideoCodecInfo> supportedCodecInfos = new LinkedHashSet<>();
+         supportedCodecInfos.addAll(Arrays.asList(this.softwareVideoDecoderFactory.getSupportedCodecs()));
+         supportedCodecInfos.addAll(Arrays.asList(this.hardwareVideoDecoderFactory.getSupportedCodecs()));
+         if (this.platformSoftwareVideoDecoderFactory != null) {

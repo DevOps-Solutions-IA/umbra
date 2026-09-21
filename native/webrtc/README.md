@@ -21,3 +21,7 @@ common Java classes across ABI outputs; normalize packaging; update the exact in
 execute native certificate rejection, bidirectional Engine/HTTPS audio and the real
 unauthorized redirect regression with zero alternate traffic. Repeat APK/R8/JNI checks.
 Never remove `NativeDistributionPolicy` based only on this compilation succeeding.
+
+`java-generics.patch` corrects an upstream raw `LinkedHashSet` construction to
+`LinkedHashSet<>`. The pinned compiler rejects the unchecked conversion; warnings
+remain errors. This does not enable video or change codec selection behavior.
