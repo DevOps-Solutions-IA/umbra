@@ -231,3 +231,127 @@ salida 0, 144 JVM connected /117 offline, debug/release, lint, R8, JNI y políti
 APK. `python scripts/repository_guard.py --git-history`: salida 0, 246 archivos
 actuales y 406 blobs históricos. Un intento con opción inexistente `--history`
 terminó en 2 antes de escanear; se corrigió el comando, no el verificador.
+
+
+## Reconstrucción nativa: intentos y límites (en curso)
+
+La preparación local de fuente `73cb8180f7258ee292878d6edd05177f41883962`
+y depot_tools `ca054941f756b50e1a3d83727270d879bec1f331` no produjo un AAR.
+Una descarga HTTPS acotada a 180 s terminó con código 28 tras 5.53 MB de
+69.64 MB; se detuvieron los procesos propios de preparación y se trasladó la
+compilación a runners estándar aislados. No se contrataron recursos ni se usó RBE.
+
+- Actions `35574931688`: cuatro ABI FAILED antes de compilar por argumentos GN
+  mal pasados a `build_aar.py`. También se corrigió LASTCHANGE: el fork no conserva
+  Change-Id en ese commit; ahora registra el SHA real mediante opciones soportadas.
+- Actions `35575488377`: cuatro ABI FAILED al arrancar Siso (`-j2` no admitido).
+  GN sí generó 7.603 objetivos. La ayuda de la versión instalada indica
+  `-local_jobs=2`, que se utiliza en la siguiente ejecución.
+- Actions `35575890767`, fuente de construcción UMBRA `92d7a10962f87165e56cb43c6cae962458ec7742`:
+  EN CURSO al registrar esta sección. No atribuirle todavía binarios ni garantías.
+
+La receta y el parche están en `native/webrtc/`. Rechaza todos los 300 antes de
+modificar el destino, sin cambiar DTLS ni cifrado. Sus pruebas C++ de rechazo aún
+no se han ejecutado: generar el parche no equivale a validarlo. Los artefactos de
+compilación no actualizan automáticamente el pin Android ni habilitan producción.
+
+Las ejecuciones normales `35574248065`, `35574855102`, `35574934765`,
+`35575492326` y `35575894499` fueron sustituidas por commits posteriores y la
+concurrencia existente. No se cuentan como CI final. `35576050479` corresponde a
+`ba5a813cecbd6833bee3a3c430e4703841baf078` y está EN CURSO al registrar.
+
+Repetición local de `test_local.sh`: el primer intento usó el JDK predeterminado
+incorrecto; backend (144) y utilidades (105) pasaron, pero el verificador de sintaxis
+rechazó release 21. Se repitió con JAVA_HOME/PATH de JDK21 y terminó en 0, incluidos
+los 12 controles de política estática (no sumados como pruebas de comportamiento).
+Después del ajuste de cierre/watchdog y hash por streaming: 121 pruebas de herramientas
+pasaron y `:app:testConnectedDebugUnitTest` terminó en 0. No son audio físico ni CI final.
+
+
+## Caducidad TURN y corrección de preparación de red
+
+Ejecutados localmente con dos AVD, Engine/HTTPS/libsignal y la distribución Maven
+original (no atribuir al AAR nativo nuevo):
+- `expired-auth`: salida 0. Usuario/HMAC TURN correctamente formado pero caducado;
+  metadato local deliberadamente inconsistente solo en el fixture negativo para
+  comprobar el rechazo del servidor. Cero captura/decodificación, tráfico TURN observado.
+- `allocation-expiry`: salida 0. Dos asignaciones observadas en el namespace privado
+  del servidor antes de matar los procesos y todavía dos tras reabrir SQLite. Con
+  máximo de asignación de 20 s, desaparecieron tras esperar otros 12,314 s. No se
+  deduce borrado instantáneo por vencimiento de credencial; son mecanismos distintos.
+
+CI `35577087307` falló al exigir ping entre AVD, después de compilación, JVM/HTTPS,
+instrumentación, reinicio de ubicación, smoke release y probe nativo. Ambos AVD
+arrancaron en emulator37.1.11 y compartían netsim; no es el fallo histórico del AVD.
+La preparación se cambia a desafío UDP aleatorio recibido en un socket cuya escucha
+se comprueba; ICMP no se toma como sustituto de alcance UDP. El motivo específico
+de la diferencia ICMP del host CI no se ha demostrado. La nueva preparación exige
+entrega real y no omite el control si falla.
+
+Sondas directas antes/después fuera de la ventana de observación de media. La sonda
+negativa con firewall debe encontrar receptor válido y no recibir el desafío; un
+receptor fallido produce error, nunca prueba de bloqueo. Repeticiones `direct-blocked`
+y `turn-loss` con esta preparación: salida 0 ambas. No se excluyen paquetes multimedia
+del verificador. Herramientas: 123 pruebas, salida 0, incluidos rechazos del verificador.
+
+
+## Artefacto nativo corregido y validación local (2026-09-21)
+
+Actions de construcción `35577083313`, commit de receta
+`eb58cf72815a96da7f215be79bbf05d920cc72bd`: las cuatro ABI SUCCESS.
+Fuente `73cb8180f7258ee292878d6edd05177f41883962`, depot_tools
+`ca054941f756b50e1a3d83727270d879bec1f331`; parche compuesto SHA-256
+`947a426dafef2ba7590a3712abf342157b3a2582fd0049bbdbdc5a9a6d5058c4`.
+Los logs del compilador registran ejecución local, remote/cache/cache-write=0.
+El intento `35575890767` falló por LinkedHashSet sin parámetros genéricos;
+se corrigió la fuente, conservando warnings-as-errors. Las pruebas C++ del parche
+NO EJECUTADAS; sí se ejecutó la regresión de red sobre el binario Android resultante.
+
+`python native/webrtc/package.py /tmp/umbra-native-artifacts-35577083313 /tmp/umbra-native-repeat.aar`
+combina cuatro ABI con Java/manifest idénticos, licencias de componentes y
+normalización ZIP. No se afirma todavía reproducibilidad del compilador completo
+por repetir solamente el empaquetado. Procedencia y hashes por entrada se conservan
+en `android/webrtc-artifact.json`. AAR final de 23.728.073 bytes:
+`bbc5675f91b31f901e1a482b00991a36ac2b3d912d2782b80e1cc1b756b1c413`.
+La guarda permite exclusivamente esa ruta/tamaño/hash; su límite general permanece.
+
+Con ese AAR, dos AVD Android35/emulator37.1.11/KVM y coturn aislado:
+- `python scripts/run_voice_integration.py --a emulator-5554 --b emulator-5556 --scenario unauthorized-redirect --reports /tmp/umbra-voice-integrated-device/patched-redirect`: salida 0.
+  9 paquetes TURN al destino autorizado; 0 al alternativo no autorizado, 0 UDP/STUN
+  no autorizado. Cero audio. El segundo extremo no recibió descripción: su intento
+  de media figura NO EJECUTADO, no como prueba positiva de red. Antes del parche se
+  observaron 8 paquetes al puerto alternativo: la evidencia histórica se conserva.
+- Mismo comando con `--scenario audio` y reportes `patched-audio`: salida 0;
+  dos Engine/SQLite/libsignal/HTTPS, Opus bidireccional, mute/unmute, auditoría SDP,
+  estadísticas relay/relay y vinculación del certificado nativo.
+- `python scripts/run_voice_probe.py --serial emulator-5554 --log /tmp/umbra-voice-patched-certificate.log`: salida 0, pipeline PCM/Opus y rechazo de certificado
+  incompatible con cero audio en el caso negativo, más tres pruebas JNI.
+
+Después se habilitó la entrada productiva exclusivamente para el hash revisado,
+con regresión de artefacto desconocido y lease revocado. Esto no sustituye permisos,
+consentimiento, selección de dispositivo, autorización Engine ni comprobaciones DTLS.
+
+`. .venv/bin/activate; JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64`, PATH de JDK21,
+ANDROID_HOME/ANDROID_SDK_ROOT=/mnt/c/Android/sdk-linux:
+`python scripts/build_android.py --release`: salida 0, 144 JVM connected y 117
+JVM offline sin errores/omisiones, debug/release, lint, R8, políticas APK/DEX/JNI.
+Python3.13.12, JDK21.0.11, Gradle8.13, AGP8.13.2, compile/target36, min31,
+build-tools35.0.0, libsignal0.102.3. El compilador hermético de WebRTC se fija
+por DEPS/CIPD; no se confunde con el JDK21 usado por Gradle.
+
+SHA-256 APK locales de esta compilación (release sin firma productiva):
+- connected debug: `c2f28521f5bdb1d4cb539d57e1d856e4f4c1f6fee7b9f159530be475ded1dde3`
+- connected release: `874dd0e0168f42aa65441c09114032c456ca92d06eee703783604c297c80ebea`
+- offline debug: `e572f38b78e7da653c147cb7fc30a28f75e2c5f489789705bdedbf80d3e43df9`
+- offline release: `f688a41d94a534dfd139b86b387dc85d95a3a5a695c590eb21b850d3997c9738`
+Offline carece de red, micrófono, WebRTC JNI/DEX/assets. Sin permisos de cámara.
+
+CI `35578892651` sobre HEAD `d1a192f59723425a5f120b88831f9634192540fc`:
+cuatro trabajos SUCCESS. Corresponde todavía al artefacto Maven y entrada cerrada;
+NO valida la nueva sustitución nativa. La CI del nuevo commit se registrará aparte.
+Persisten NO EJECUTADOS: audio acústico/hardware, headset físico, IPv6, TURN/TLS,
+llamada con código ofuscado R8, muerte durante commit SQLite y auditoría independiente.
+No hay reconexión automática: fallo de ICE exige nueva sesión y consentimiento.
+
+Repetición del empaquetado y `cmp`: salida 0, AAR idéntico byte a byte.
+`python -m unittest discover -s scripts/tests -p 'test_*.py' -v`: 125 pruebas, salida 0; incluye licencia alterada y assets WebRTC prohibidos en offline.

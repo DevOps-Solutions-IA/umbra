@@ -52,17 +52,18 @@ energía media >100000; no igualdad byte a byte ni prueba acústica física. Los
 solo complementan el análisis de PCM decodificado. No hay video, transferencia, TURN
 productivo ni interfaz definitiva.
 
-## Bloqueo de autorización de destinos TURN (2026-09-21)
+## Autorización de destinos TURN (2026-09-21)
 
-**BLOCKED para voz productiva.** La distribución fijada sigue `300 ALTERNATE-SERVER`
-hacia un destino que no figura en la configuración local. `IceTransportsType.RELAY`
-no impide esa redirección. Se reprodujo con coturn aislado y captura de los AVD:
-ocho paquetes hacia el puerto alternativo no autorizado, sin audio. La entrada pública
-`NativeVoiceSession.open` y el control de voz rechazan antes de inicializar WebRTC o
-solicitar micrófono. El laboratorio mantiene una entrada interna con AudioRecord
-desactivado para investigar y verificar; no existe un interruptor de éxito productivo.
+La distribución Maven inicial seguía TURN `300 ALTERNATE-SERVER` a un destino no
+autorizado (ocho paquetes reproducidos). Se sustituyó por una compilación fijada con
+rechazo nativo antes de modificar el destino. Las cuatro ABI compilaron en Actions
+35577083313. En dos AVD x86_64: nueve peticiones al TURN autorizado, cero al destino
+alternativo; el mismo AAR conservó Opus bidireccional, mute y rechazo DTLS adulterado.
+No extrapolar esta observación IPv4/UDP a otras familias o hardware.
 
-Se prepara una compilación de la revisión fijada que rechace redirecciones antes de
-cualquier I/O. Hasta construirla y repetir la prueba real, el parche no acredita una
-corrección. No filtrar después de recibir candidatos: el contacto ya habría ocurrido.
-Las pruebas positivas de audio anteriores no demuestran esta garantía pendiente.
+El SHA del AAR revisado es `bbc5675f91b31f901e1a482b00991a36ac2b3d912d2782b80e1cc1b756b1c413`.
+Gradle, la guarda de repositorio y `NativeDistributionPolicy` fijan su integridad.
+Un reemplazo de dependencia no hereda esa capacidad automáticamente. La entrada
+productiva sigue exigiendo permiso, consentimiento, selección, verificación, lease
+vigente y comprobación DTLS nativa; el hash no autoriza una llamada por sí solo.
+Pruebas de micrófono/hardware, IPv6, TURN TLS y recorrido de voz R8 quedan pendientes.

@@ -6,6 +6,7 @@ The Git-history option also checks reachable blobs, not just the current tree.
 """
 from __future__ import annotations
 import argparse
+import hashlib
 from dataclasses import dataclass
 import os
 from pathlib import Path
@@ -17,6 +18,15 @@ ROOT = Path(__file__).resolve().parents[1]
 SKIP_DIRS = {'.git', '.venv', 'venv', '__pycache__', '.pytest_cache', '.gradle',
              '.umbra-tools', 'build', 'node_modules', '.idea', '.vscode', '.run', '.codex-log'}
 MAX_BYTES = 8_000_000
+# One reviewed source-built dependency, not a global size-limit increase. All
+# current/history instances must match BOTH exact size and SHA-256; no wildcard.
+APPROVED_NATIVE = {
+    'android/vendor/webrtc-150.7871.01-umbra.1.aar':
+        (23728073, 'bbc5675f91b31f901e1a482b00991a36ac2b3d912d2782b80e1cc1b756b1c413'),
+}
+
+def permitted_size(name: str, size: int) -> bool:
+    return size <= MAX_BYTES or (name in APPROVED_NATIVE and size == APPROVED_NATIVE[name][0])
 PATTERNS = (
     ('private key', re.compile(rb'-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----')),
     ('GitHub credential', re.compile(rb'\bgh[pousr]_[A-Za-z0-9]{20,}\b')),
@@ -50,8 +60,10 @@ def check_bytes(name: str, data: bytes) -> list[Finding]:
     results = []
     if prohibited_name(name):
         results.append(Finding(name, 'sensitive/operational filename is not allowed'))
-    if len(data) > MAX_BYTES:
+    if not permitted_size(name,len(data)):
         results.append(Finding(name, 'file exceeds source delivery size limit'))
+    if name in APPROVED_NATIVE and (len(data),hashlib.sha256(data).hexdigest()) != APPROVED_NATIVE[name]:
+        results.append(Finding(name, 'reviewed native artifact integrity mismatch'))
     for reason, pattern in PATTERNS:
         if pattern.search(data):
             results.append(Finding(name, reason + ' pattern found; value withheld'))
@@ -77,7 +89,7 @@ def scan(root: Path) -> tuple[int, list[Finding]]:
             if p.is_symlink():
                 findings.append(Finding(name, 'symbolic file link not allowed'))
                 continue
-            if p.stat().st_size > MAX_BYTES:
+            if not permitted_size(name,p.stat().st_size):
                 findings.append(Finding(name, 'file exceeds source delivery size limit'))
                 continue
             findings.extend(check_bytes(name, p.read_bytes()))
@@ -102,7 +114,7 @@ def scan_history(root: Path) -> tuple[int, list[Finding]]:
             continue
         count += 1
         label = 'history:' + sha[:12] + ':' + name
-        if int(git('cat-file', '-s', sha)) > MAX_BYTES:
+        if not permitted_size(name,int(git('cat-file', '-s', sha))):
             findings.append(Finding(label, 'historical blob exceeds size limit'))
             continue
         for issue in check_bytes(name, git('cat-file', 'blob', sha)):

@@ -5,8 +5,9 @@ The current Maven allocator follows TURN 300 ALTERNATE-SERVER without local appr
 The patch rejects all such redirects before changing the endpoint; redundancy must
 use separately configured local TURN servers. Existing native redirect tests are
 changed to assert rejection, unchanged destination and zero allocated candidates.
-The native patch and its tests remain UNVERIFIED until the build and real AVD network
-regression execute. No cryptographic primitive or DTLS validation is changed.
+Four ABI builds passed in run 35577083313. The actual x86_64 AVD network
+regression observed zero alternate traffic and bidirectional Opus. Modified C++ unit
+tests themselves remain NOT EXECUTED. No cryptographic primitive or DTLS validation is changed.
 
 `bash native/webrtc/build.sh x86_64` uses a fresh `$RUNNER_TEMP` directory, Python 3.12+
 and the exact source/depot revisions in the script. Upstream DEPS pins toolchain/SDK
@@ -25,3 +26,7 @@ Never remove `NativeDistributionPolicy` based only on this compilation succeedin
 `java-generics.patch` corrects an upstream raw `LinkedHashSet` construction to
 `LinkedHashSet<>`. The pinned compiler rejects the unchecked conversion; warnings
 remain errors. This does not enable video or change codec selection behavior.
+
+`package.py` verifies the reviewed per-ABI receipts, identical Java API and manifest,
+ELF architecture and exact source patch, then normalizes ZIP metadata and includes
+component license assets. It never grants consent or enables a native adapter.

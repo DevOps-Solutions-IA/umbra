@@ -13,6 +13,13 @@ import repository_guard as guard
 import publish_github as pub
 
 class GuardTests(unittest.TestCase):
+    def test_only_exact_reviewed_native_dependency_can_exceed_source_limit(self):
+        name='android/vendor/webrtc-150.7871.01-umbra.1.aar'
+        data=(SCRIPTS.parent/name).read_bytes()
+        self.assertEqual([],guard.check_bytes(name,data))
+        self.assertTrue(guard.check_bytes(name,data[:-1]+bytes([data[-1]^1])))
+        self.assertTrue(guard.check_bytes('other.aar',data))
+        self.assertTrue(guard.check_bytes(name,data[:-1]))
     def test_source_is_allowed(self):
         self.assertEqual(guard.check_bytes('Main.java', b'class Main {}'),[])
     def test_env_example_allowed(self):

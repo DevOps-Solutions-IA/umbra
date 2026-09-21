@@ -5,29 +5,35 @@ Base: PR #7, `e495793ba191cce0523db243ab7baac55389ef64`. No sustituir Signal ni
 crear otra política de identidad. CALL_SIGNALING conserva consentimiento, selección,
 versiones de roster, invitación de 60 s y sesión de 180 s. Video queda fuera.
 
-## Distribución examinada
+## Distribución y reconstrucción verificadas
 
-Se fija `io.github.webrtc-sdk:android:150.7871.01` de Maven Central, únicamente en
-connected. [Distribuidor](https://github.com/webrtc-sdk/android/tree/7b6390fb098303b31af76906bf15f7decaa4ef95),
-[fuente declarada por su changelog](https://github.com/webrtc-sdk/webrtc/tree/73cb8180f7258ee292878d6edd05177f41883962).
-Es una distribución de un fork de upstream WebRTC, no un artefacto oficial Google.
-El proceso del distribuidor importa artefactos de `webrtc-sdk/webrtc-build` y
-publica el AAR; su script ajusta la versión del bytecode Java antes de Maven.
-No se presume que el AAR de GitHub sea idéntico al de Maven ni que un hash pruebe
-una compilación reproducible. No hemos reconstruido Chromium/WebRTC desde fuente.
+Se utiliza `android/vendor/webrtc-150.7871.01-umbra.1.aar`, construido desde el fork
+[webrtc-sdk/webrtc, revisión 73cb818](https://github.com/webrtc-sdk/webrtc/tree/73cb8180f7258ee292878d6edd05177f41883962).
+No es un binario oficial de Google ni se sigue utilizando el Maven inicialmente probado.
+[Receta y parches](../../native/webrtc/README.md), [inventario completo](../../android/webrtc-artifact.json).
+La construcción [35577083313](https://github.com/DevOps-Solutions-IA/umbra/actions/runs/35577083313)
+compiló arm64-v8a, armeabi-v7a, x86 y x86_64 con la misma fuente/patch. Se conservan
+revisiones gclient/CIPD, opciones y hashes de cada entrada. Sin RBE ni caché remota de
+compilación. El empaquetado normaliza ZIP/JAR, comprueba igualdad de clases Java entre
+ABI y conserva licencias BSD-3-Clause/PATENTS y licencias transitivas como assets del
+APK connected. Esto no acredita por sí solo un SBOM completo o reproducibilidad de
+fuente a binario en cualquier máquina.
 
-[Inventario fijado](../../android/webrtc-artifact.json): SHA-256 del AAR, POM,
-classes.jar, manifest y JNI arm64-v8a/armeabi-v7a/x86/x86_64. El POM no declara
-dependencias transitivas Maven. El binario incorpora dependencias nativas upstream;
-esto NO equivale a un SBOM completo. Licencia BSD-3-Clause, licencias de dependencias
-y PATENTS upstream requieren inventario de distribución antes de publicar.
+Parches: rechazo de redirecciones TURN antes de I/O y corrección de un constructor
+Java genérico; no cambian DTLS-SRTP ni primitivas criptográficas. Se mantienen warnings
+como errores. Las pruebas C++ modificadas no se ejecutaron; el rechazo nativo sí se
+observó con coturn real y captura de dos AVD. La auditoría independiente sigue pendiente.
 
-No cambiar JDK21, Gradle8.13, AGP8.13.2, min31 ni compile/target36 por esta integración.
-Gradle verifica el digest antes de construir connected; la guarda comprueba el
-inventario y los hashes JNI del APK final, además de ausencia Java/JNI en offline.
-Compatibilidad de compilación/R8 y ejecución se registra en evidencia, no se infiere
-solo de estas versiones. Actualización requiere revisión del changelog/fuente,
-nuevo inventario, repetir pruebas de rechazo, audio, red, JNI y release; no `latest`.
+Android utiliza Python3.12+, JDK21, Gradle8.13, AGP8.13.2, min31, compile/target36 y
+build-tools35.0.0. La construcción upstream usa además su toolchain hermético fijado
+por DEPS/CIPD (incluido javac con salida Java21); no confundir ese toolchain con el
+JDK21 de Gradle. El inventario registra las referencias efectivas, no solo README upstream.
+Offline no incluye Java/JNI/assets WebRTC ni permisos de micrófono/red.
+
+El binario exige un hash explícito en Gradle y en el control de capacidad del adaptador.
+La guarda de repositorio acepta exclusivamente su ruta, tamaño y hash, manteniendo el
+límite general de 8 MB. Actualizar exige nuevos recibos/procedencia, comparar APIs,
+repetir rechazos, media, red y R8/JNI, y revisar licencias. No actualizar a latest.
 
 ## Motor y laboratorio
 
@@ -130,17 +136,18 @@ mDNS, LLMNR). Los dos AVD deben responder ping entre sí antes del escenario par
 comprobar disponibilidad de una ruta directa IPv4. Esto no acredita IPv6 ni TCP media.
 PCAPs de ejecución anteriores y fallos nunca se suben como artefactos públicos.
 
-## Bloqueo de autorización de destinos TURN (2026-09-21)
+## Autorización de destinos TURN (2026-09-21)
 
-**BLOCKED para voz productiva.** La distribución fijada sigue `300 ALTERNATE-SERVER`
-hacia un destino que no figura en la configuración local. `IceTransportsType.RELAY`
-no impide esa redirección. Se reprodujo con coturn aislado y captura de los AVD:
-ocho paquetes hacia el puerto alternativo no autorizado, sin audio. La entrada pública
-`NativeVoiceSession.open` y el control de voz rechazan antes de inicializar WebRTC o
-solicitar micrófono. El laboratorio mantiene una entrada interna con AudioRecord
-desactivado para investigar y verificar; no existe un interruptor de éxito productivo.
+La distribución Maven inicial seguía TURN `300 ALTERNATE-SERVER` a un destino no
+autorizado (ocho paquetes reproducidos). Se sustituyó por una compilación fijada con
+rechazo nativo antes de modificar el destino. Las cuatro ABI compilaron en Actions
+35577083313. En dos AVD x86_64: nueve peticiones al TURN autorizado, cero al destino
+alternativo; el mismo AAR conservó Opus bidireccional, mute y rechazo DTLS adulterado.
+No extrapolar esta observación IPv4/UDP a otras familias o hardware.
 
-Se prepara una compilación de la revisión fijada que rechace redirecciones antes de
-cualquier I/O. Hasta construirla y repetir la prueba real, el parche no acredita una
-corrección. No filtrar después de recibir candidatos: el contacto ya habría ocurrido.
-Las pruebas positivas de audio anteriores no demuestran esta garantía pendiente.
+El SHA del AAR revisado es `bbc5675f91b31f901e1a482b00991a36ac2b3d912d2782b80e1cc1b756b1c413`.
+Gradle, la guarda de repositorio y `NativeDistributionPolicy` fijan su integridad.
+Un reemplazo de dependencia no hereda esa capacidad automáticamente. La entrada
+productiva sigue exigiendo permiso, consentimiento, selección, verificación, lease
+vigente y comprobación DTLS nativa; el hash no autoriza una llamada por sí solo.
+Pruebas de micrófono/hardware, IPv6, TURN TLS y recorrido de voz R8 quedan pendientes.

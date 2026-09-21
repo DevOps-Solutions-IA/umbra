@@ -199,14 +199,14 @@ def main():
                     shutil.copyfile(path,snapshot)
                     if args.scenario=="unauthorized-redirect":
                         redirected=count(snapshot,f"ip and src net 10.0.2.0/24 and udp and dst host {turn.address} and dst port 3479",capture_since,capture_until)
-                        if index==0 and redirected==0: raise RuntimeError("Native unauthorized TURN redirection was not reproduced")
-                        network.append({"nativePolicy":"BLOCKED: unapproved TURN redirect", "unapprovedTurnPackets":redirected,
-                                        "productionEntry":"FAIL_CLOSED", "ipv6":"NOT_EXECUTED"})
+                        if redirected!=0: raise RuntimeError("Native allocator contacted an unauthorized TURN redirect")
+                        checked=summarize(snapshot,turn.address,since=capture_since,until=capture_until,require_turn=index==0)
+                        network.append({**checked,"unapprovedTurnPackets":redirected,"redirectPolicy":"REJECTED_BEFORE_IO"})
                     else:
                         network.append(summarize(snapshot,turn.address,turn_port=3479 if args.scenario=="unreachable" else 3478,
                                                  since=capture_since,until=capture_until,require_turn=(index==0 or args.scenario not in ("expired-auth","invalid-auth","unreachable"))))
             (args.reports/"voice-evidence.json").write_text(json.dumps({"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn UDP","scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":args.scenario not in ("expired-auth","invalid-auth","unreachable","unauthorized-redirect"),"network":network,"audio":evidence,"allocationExpiry":allocation_evidence},indent=2)+"\n")
-            print(("CONFIRMED native policy BLOCKED; production entry disabled: " if args.scenario=="unauthorized-redirect" else "PASS two AVD native voice scenario: ")+args.scenario)
+            print("PASS two AVD native voice scenario: "+args.scenario)
         finally:
             errors=[]
             for serial,peer in blocked_routes:

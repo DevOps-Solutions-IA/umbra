@@ -33,11 +33,16 @@ def verify_apk(archive: zipfile.ZipFile, variant: str, pin: dict) -> None:
     if actual != expected:
         raise RuntimeError("Native library inventory mismatch for " + variant)
     if variant == "connected":
+        for name,digest in pin["entries"].items():
+            if name.startswith("assets/umbra-webrtc/") and (name not in names or hashlib.sha256(archive.read(name)).hexdigest()!=digest):
+                raise RuntimeError("WebRTC license asset digest mismatch")
         for name in voice:
             digest = hashlib.sha256(archive.read(name)).hexdigest()
             if digest != pin["entries"]["jni/" + name.removeprefix("lib/")]:
                 raise RuntimeError("WebRTC JNI digest mismatch: " + name)
     else:
+        if any(name.startswith("assets/umbra-webrtc/") for name in names):
+            raise RuntimeError("WebRTC assets leaked into offline")
         for name in names:
             if name.startswith("classes") and name.endswith(".dex"):
                 if b"Lorg/webrtc/" in archive.read(name):
