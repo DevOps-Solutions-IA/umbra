@@ -16,10 +16,14 @@ import java.util.function.Consumer;
 /** Minimal foreground consent controls. No remote configuration, credential persistence or auto-resume. */
 public final class VoiceControls implements AutoCloseable {
     private NativeVoiceSession current;
-    private long epoch;
+    private volatile long epoch;
     public String status() { return current==null?"Sin audio":current.state().name(); }
     public boolean hasSession() { return current!=null; }
     public void show(Activity activity,Engine engine,String id,Executor worker,Consumer<Dialog> track,Runnable changed) {
+        try { NativeDistributionPolicy.requireAuthorizedTurnDestinations(); }
+        catch(SecurityException blocked) {
+            Toast.makeText(activity,"Voz todavía no habilitada en esta versión. La señalización sigue disponible.",Toast.LENGTH_LONG).show();return;
+        }
         if(current!=null) {
             NativeVoiceSession voice=current;
             display(activity,track,new AlertDialog.Builder(activity).setTitle("Voz: "+voice.state())
@@ -59,11 +63,11 @@ public final class VoiceControls implements AutoCloseable {
                         String revision=Bytes.sha256(Bytes.utf8(endpoint+"\n"+username));
                         turn=new TurnConfiguration(List.of(endpoint),revision,username,secret,180000,SystemClock::elapsedRealtime);
                         lease=engine.calls().prepareMedia(engine.calls().reviewMedia(id,revision),true);
-                        final var approved=lease; final var configuration=turn;
+                        if(reviewed!=epoch) throw new SecurityException("Media consent cancelled while queued");
+                        final NativeVoiceSession opened=NativeVoiceSession.open(activity,lease,turn);
                         activity.runOnUiThread(()->{
-                            if(reviewed!=epoch || activity.isFinishing() || activity.isDestroyed()) { approved.close();configuration.close();return; }
-                            try { current=NativeVoiceSession.open(activity,approved,configuration);changed.run(); }
-                            catch(Exception invalid) { approved.close(); configuration.close(); failure(activity); }
+                            if(reviewed!=epoch || activity.isFinishing() || activity.isDestroyed()) { opened.close();return; }
+                            current=opened;changed.run();
                         });
                     } catch(Exception invalid) {
                         if(lease!=null) lease.close(); if(turn!=null) turn.close();
@@ -76,6 +80,8 @@ public final class VoiceControls implements AutoCloseable {
         EditText field=new EditText(activity);field.setHint(hint);field.setSingleLine(true);
         field.setInputType(InputType.TYPE_CLASS_TEXT|(secret?InputType.TYPE_TEXT_VARIATION_PASSWORD:InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD));
         field.setImportantForAutofill(android.view.View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+        field.setSaveEnabled(false);field.setSaveFromParentEnabled(false);
+        field.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING|android.view.inputmethod.EditorInfo.IME_FLAG_NO_EXTRACT_UI);
         parent.addView(field);return field;
     }
     private static void display(Activity activity,Consumer<Dialog> track,AlertDialog.Builder builder) {

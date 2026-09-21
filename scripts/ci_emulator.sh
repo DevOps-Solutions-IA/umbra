@@ -7,6 +7,9 @@ UMBRA_EMULATOR_SERIALS=()
 : "${ANDROID_HOME:?ANDROID_HOME required}"
 export ANDROID_AVD_HOME="$RUNNER_TEMP/umbra-avds"
 mkdir -p "$ANDROID_AVD_HOME"
+export ANDROID_TMP="$RUNNER_TEMP/umbra-netsim-private"
+mkdir -p "$ANDROID_TMP"
+chmod 700 "$ANDROID_TMP"
 UMBRA_DEVICE_REPORTS="${UMBRA_DEVICE_REPORTS:-android/app/build/reports/device}"
 mkdir -p "$UMBRA_DEVICE_REPORTS"
 umbra_cleanup() {
@@ -31,6 +34,8 @@ umbra_cleanup() {
       cleanup_status=1
     fi
   done
+  # Raw synthetic captures can contain temporary capabilities; never upload them.
+  if ! rm -rf -- "$ANDROID_TMP"; then cleanup_status=1; fi
   if (( original != 0 )); then exit "$original"; fi
   exit "$cleanup_status"
 }
@@ -59,7 +64,7 @@ umbra_start_avd() {
     -e 's/^hw.lcd.height[[:space:]]*=.*/hw.lcd.height=800/' \
     -e 's/^hw.lcd.density[[:space:]]*=.*/hw.lcd.density=160/' "$avd/config.ini"
   "$ANDROID_HOME/emulator/emulator" -avd "$name" -port "$port" -no-window -no-audio \
-    -no-boot-anim -no-snapshot -gpu swiftshader -feature -Vulkan -accel on -memory 1536 -cores 2 > "$log" 2>&1 &
+    -netsim-args "--pcap" -no-boot-anim -no-snapshot -gpu swiftshader -feature -Vulkan -accel on -memory 1536 -cores 2 > "$log" 2>&1 &
   local pid=$!
   UMBRA_EMULATOR_PIDS+=("$pid"); UMBRA_EMULATOR_SERIALS+=("emulator-$port")
   python scripts/wait_emulator.py --pid "$pid" --serial "emulator-$port" --log "$log" --timeout 180

@@ -7,13 +7,14 @@ from pathlib import Path
 import re
 import subprocess
 from turn_lab import TurnLab
+from android_apk_install import ensure_apk
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = "app.umbra.privatechat.dev"
 
 
 def verified_report(report: str, returncode: int) -> bool:
-    return (returncode == 0 and "nativeVoice=PASS" in report
+    return (returncode == 0 and "nativeVoice=PASS" in report and "nativeCertificateRejection=PASS" in report
             and bool(re.search(r"^OK \(3 tests\)$", report, re.M))
             and "INSTRUMENTATION_CODE: -1" in report
             and not re.search(r"INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b", report)
@@ -31,7 +32,7 @@ def main():
     if run("shell", "getprop", "ro.kernel.qemu").stdout.strip() != b"1":
         raise RuntimeError("Synthetic audio probe requires an AVD")
     for path in ("connected/debug/app-connected-debug.apk", "androidTest/connected/debug/app-connected-debug-androidTest.apk"):
-        run("install", "-r", str(ROOT / "android/app/build/outputs/apk" / path))
+        ensure_apk(adb[0],args.serial,PACKAGE+(".test" if path.startswith("androidTest/") else ""),ROOT/"android/app/build/outputs/apk"/path)
     args.log.parent.mkdir(parents=True, exist_ok=True)
     with TurnLab() as turn:
         try:

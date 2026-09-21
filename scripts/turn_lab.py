@@ -25,7 +25,9 @@ def docker(*args: str) -> str:
 
 
 class TurnLab:
-    def __init__(self):
+    def __init__(self, *, alternate_port: int | None = None):
+        if alternate_port not in (None,3479): raise ValueError("Only the isolated synthetic redirect endpoint is permitted")
+        self.alternate_port=alternate_port
         self.name = "umbra-turn-" + uuid.uuid4().hex[:12]
         self.container = False
         self.network = False
@@ -60,6 +62,8 @@ class TurnLab:
                 "denied-peer-ip=0.0.0.0-255.255.255.255", "denied-peer-ip=::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
                 "allowed-peer-ip=" + self.address, "log-file=/dev/null", "pidfile=/tmp/turn.pid", ""
             ])
+            if self.alternate_port is not None:
+                config += f"alternate-server={self.address}:{self.alternate_port}\n"
             path = Path(self.directory.name) / "turnserver.conf"
             path.write_text(config)
             path.chmod(0o644)  # parent directory is 0700; container runs as nobody.

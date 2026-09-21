@@ -129,3 +129,18 @@ UDP fuera de TURN ni otro UDP ajeno al tráfico de sistema explícito (DNS, DHCP
 mDNS, LLMNR). Los dos AVD deben responder ping entre sí antes del escenario para
 comprobar disponibilidad de una ruta directa IPv4. Esto no acredita IPv6 ni TCP media.
 PCAPs de ejecución anteriores y fallos nunca se suben como artefactos públicos.
+
+## Bloqueo de autorización de destinos TURN (2026-09-21)
+
+**BLOCKED para voz productiva.** La distribución fijada sigue `300 ALTERNATE-SERVER`
+hacia un destino que no figura en la configuración local. `IceTransportsType.RELAY`
+no impide esa redirección. Se reprodujo con coturn aislado y captura de los AVD:
+ocho paquetes hacia el puerto alternativo no autorizado, sin audio. La entrada pública
+`NativeVoiceSession.open` y el control de voz rechazan antes de inicializar WebRTC o
+solicitar micrófono. El laboratorio mantiene una entrada interna con AudioRecord
+desactivado para investigar y verificar; no existe un interruptor de éxito productivo.
+
+Se prepara una compilación de la revisión fijada que rechace redirecciones antes de
+cualquier I/O. Hasta construirla y repetir la prueba real, el parche no acredita una
+corrección. No filtrar después de recibir candidatos: el contacto ya habría ocurrido.
+Las pruebas positivas de audio anteriores no demuestran esta garantía pendiente.

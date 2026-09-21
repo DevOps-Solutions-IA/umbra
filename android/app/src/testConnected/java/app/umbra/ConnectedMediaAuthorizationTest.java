@@ -7,6 +7,17 @@ import static org.junit.Assert.*;
 /** Real Engine/Signal authorization; not a native media transport test. */
 public final class ConnectedMediaAuthorizationTest {
     private static final String REVISION="a".repeat(64);
+    @Test public void productionRequiresNativeProtectionAgainstUnapprovedTurnRedirects() throws Exception {
+        var p=new ConnectedCallTest.Pair();String id=p.selected();
+        var media=p.ae.calls().prepareMedia(p.ae.calls().reviewMedia(id,REVISION),true);
+        var turn=new app.umbra.media.TurnConfiguration(java.util.List.of("turn:192.0.2.10:3478?transport=udp"),
+            REVISION,"synthetic","synthetic",180000,()->0L);
+        // Null Android Context proves this policy check precedes native/platform initialization.
+        var failure=assertThrows(SecurityException.class,()->app.umbra.media.NativeVoiceSession.open(null,media,turn));
+        assertEquals(app.umbra.calls.RelayOnlyContract.FAILURE,failure.getMessage());
+        assertThrows(SecurityException.class,media::snapshot);
+        assertThrows(SecurityException.class,turn::check);
+    }
     @Test public void requiresSelectionFreshLocalConsentAndSingleAttachment() throws Exception {
         var p=new ConnectedCallTest.Pair(); String id=p.invite();
         assertThrows(SecurityException.class,()->p.ae.calls().reviewMedia(id,REVISION));

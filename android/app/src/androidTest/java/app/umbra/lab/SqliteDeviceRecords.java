@@ -18,7 +18,7 @@ public final class SqliteDeviceRecords implements Records, AutoCloseable {
     public String failBucket;
     public SqliteDeviceRecords() { this(null,false); }
     public SqliteDeviceRecords(String fixture, boolean existing) {
-        if(fixture!=null && !fixture.equals("location-restart")) throw new SecurityException("Unknown synthetic fixture");
+        if(fixture!=null && !Set.of("location-restart","voice-restart").contains(fixture)) throw new SecurityException("Unknown synthetic fixture");
         var context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         if (!BuildConfig.DEBUG || !context.getPackageName().endsWith(".dev")) throw new SecurityException("Test-only storage");
         File directory = new File(context.getCacheDir(), "synthetic-device-membership-lab");

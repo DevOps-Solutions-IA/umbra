@@ -18,6 +18,11 @@ import org.webrtc.audio.JavaAudioDeviceModule;
 /** Native subsystem probe ONLY, not Engine/HTTPS acceptance. Synthetic PCM and no AudioRecord. */
 public final class VoiceNativeFixtureListener extends RunListener {
     private static final String REVISION = "a".repeat(64);
+    private static void pace(long[] next,int bytes,int channels,int rate) {
+        long now=System.nanoTime(); if(next[0]==0 || now-next[0]>30_000_000L) next[0]=now;
+        long wait=next[0]-now; if(wait>0) java.util.concurrent.locks.LockSupport.parkNanos(wait);
+        next[0]+=1_000_000_000L*bytes/(2L*channels*rate);
+    }
     @Override public void testRunStarted(Description ignored) throws Exception {
         var context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         if (!BuildConfig.DEBUG || !context.getPackageName().endsWith(".dev")) throw new SecurityException("Lab only");
@@ -42,6 +47,32 @@ public final class VoiceNativeFixtureListener extends RunListener {
             status.putString("nativeVoice", "PASS two native PeerConnections; bidirectional decoded synthetic tones; relay pairs; DTLS fingerprints. Subsystem probe, no Engine/HTTPS acceptance.");
             InstrumentationRegistry.getInstrumentation().sendStatus(0, status);
         }
+        // Deliberate adversarial input ONLY in tests; production never rewrites SDP.
+        // Keep native-generated ICE/SDP intact except the authenticated DTLS fingerprint.
+        try (Endpoint a = new Endpoint(credentials.getJSONObject("a"),1000,2000);
+             Endpoint b = new Endpoint(credentials.getJSONObject("b"),2000,1000)) {
+            SessionDescription offer=a.local(true);
+            String expected="a=fingerprint:sha-256 "+colonFingerprint(a.fingerprint);
+            var impostor=RtcCertificatePem.generateCertificate();
+            var certificate=java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(
+                new java.io.ByteArrayInputStream(impostor.certificate.getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
+            String substituted="a=fingerprint:sha-256 "+colonFingerprint(app.umbra.core.Bytes.sha256(certificate.getEncoded()));
+            if(offer.description.indexOf(expected)<0 || offer.description.indexOf(expected)!=offer.description.lastIndexOf(expected))
+                throw new AssertionError("Expected exactly one generated fingerprint for mutation");
+            b.remote(new SessionDescription(offer.type,offer.description.replace(expected,substituted)));
+            a.remote(b.local(false));
+            long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(15);
+            while(b.pc.connectionState()!=PeerConnection.PeerConnectionState.FAILED && System.nanoTime()<deadline) Thread.sleep(50);
+            if(b.pc.connectionState()!=PeerConnection.PeerConnectionState.FAILED || a.detected.get()!=0 || b.detected.get()!=0)
+                throw new AssertionError("Native DTLS failed to reject substituted certificate before decoded audio");
+            Bundle status=new Bundle();status.putString("nativeCertificateRejection","PASS native DTLS rejected a certificate inconsistent with remote SDP; zero decoded tones");
+            InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
+        }
+    }
+    private static String colonFingerprint(String hex) {
+        StringJoiner joined=new StringJoiner(":");
+        for(int i=0;i<hex.length();i+=2) joined.add(hex.substring(i,i+2).toUpperCase(Locale.ROOT));
+        return joined.toString();
     }
 
     private static final class Endpoint implements AutoCloseable, PeerConnection.Observer {
@@ -55,12 +86,13 @@ public final class VoiceNativeFixtureListener extends RunListener {
         final String fingerprint;
         final List<Integer> iceErrors = new java.util.concurrent.CopyOnWriteArrayList<>();
         final CountDownLatch gathered = new CountDownLatch(1);
-        long sample;
+        long sample; long[] nextFrame={0};
         Endpoint(JSONObject credentials, int sendTone, int receiveTone) throws Exception {
             var context = InstrumentationRegistry.getInstrumentation().getTargetContext();
             adm = JavaAudioDeviceModule.builder(context).setSampleRate(48000)
                     .setUseHardwareAcousticEchoCanceler(false).setUseHardwareNoiseSuppressor(false)
                     .setAudioBufferCallback((buffer, format, channels, rate, length, time) -> {
+                        pace(nextFrame,buffer.capacity(),channels,rate);
                         buffer.clear(); buffer.order(ByteOrder.LITTLE_ENDIAN);
                         while (buffer.remaining() >= 2 * channels) {
                             short value = (short)(12000 * Math.sin(2 * Math.PI * sendTone * sample++ / rate));

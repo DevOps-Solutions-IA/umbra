@@ -54,6 +54,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     public static NativeVoiceSession open(Context context,CallService.MediaLease authorization,TurnConfiguration turn) throws Exception {
         try {
             authorization.snapshot(); turn.check();
+            NativeDistributionPolicy.requireAuthorizedTurnDestinations();
             if(context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
                 throw new SecurityException("Microphone permission required; obtain fresh consent after the permission dialog");
             initialize(context);
@@ -220,8 +221,14 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
                 check();
                 synchronized(audioGate) {
                     if(cancelled.get()) throw new SecurityException("Media cancelled during activation");
-                    mediaAuthorized=true; adm.setMicrophoneMute(muted); track.setEnabled(!muted);
-                    pc.setAudioRecording(true); pc.setAudioPlayout(true);
+                    mediaAuthorized=true; adm.setMicrophoneMute(muted);
+                }
+                // JNI can synchronously call error callbacks on another thread. Never hold
+                // audioGate across it. Cancellation permanently disables ADM recording and
+                // mutes playback, so a late native enable cannot reacquire the microphone.
+                track.setEnabled(!muted); pc.setAudioRecording(true); pc.setAudioPlayout(true);
+                synchronized(audioGate) {
+                    if(cancelled.get()) throw new SecurityException("Media cancelled during native activation");
                     state=State.ACTIVE;
                 } // Authenticated native transport, not evidence of human audible conversation.
             }

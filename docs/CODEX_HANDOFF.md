@@ -7,7 +7,11 @@ PARTIAL — rama `codex/turn-voice-core`, base #7 abierta `e495793`.
 Distribución WebRTC/guardas/configuración RELAY verificadas. Dos AVD han ejecutado
 Engine/SQLite/libsignal/HTTPS y Opus sintético bidireccional por coturn real. Adaptador
 connected y controles mínimos integrados; no conversación humana ni hardware validado.
-CI final, rechazo multimedia completo, red, IPv6 y recorrido release siguen pendientes.
+BLOCKED: la distribución nativa sigue redirecciones TURN no autorizadas, reproducido
+con 8 paquetes al puerto alternativo. Entrada productiva deshabilitada antes de WebRTC.
+Compilación desde fuente fijada en preparación; no considerar el parche validado.
+Audio/mute, caída TURN, red IPv4 UDP y ciclo de vida ejecutados en laboratorio.
+CI final, IPv6, hardware y recorrido release siguen pendientes.
 No se modifica señalización anterior ni se reducen Keystore/permisos offline.
 
 
