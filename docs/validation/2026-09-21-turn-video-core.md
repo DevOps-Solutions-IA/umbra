@@ -186,3 +186,92 @@ An additional native SDP section constraint and focused C++ tests are being adde
 before completing video acceptance. It uses the upstream parsed model to reject
 DataChannel/unsupported sections and excess tracks, rather than a text/regex parser.
 It needs a new four-ABI build and its own test results before adoption.
+
+## Local video execution, working tree (not final published validation)
+
+The first integrated debug attempts failed: repeated relay uploads ignored
+`nextRelay` and hit the unchanged quota; the fixture now follows production retry
+scheduling. Subsequent attempts showed native decoded frames but only one sink
+callback. In the pinned Java API, `getTransceivers()` disposes previous wrappers,
+including receiver tracks/sinks. Retaining wrappers between actual SDP changes
+fixed the observed loss. Neither quotas nor decoded-frame assertions were reduced.
+
+`video-positive-5` and `video-r8-positive-1` exited 0 with two independent AVDs,
+real Engine/SQLite/Signal/HTTPS, coturn and native WebRTC. Distinct changing I420
+patterns entered before encoding; opposite-end decoded frames were checked after
+decoding. Both sides passed voice → video → video off with continuing audio →
+freshly consented video generation 3. Sanitized receipts are
+`2026-09-21-video-debug-working-tree.json` and
+`2026-09-21-video-r8-working-tree.json`. R8 is the isolated non-debuggable mediaLab
+variant, not the exact production APK. Physical cameras/audio are NOT EXECUTED.
+
+These executions used candidate AAR `.2` (SHA-256
+`26cdb1dc1e711f80081520c2a0f00684a41142898e8e421ee7ced2de2cf01b41`)
+and uncommitted video code atop published `d4cb521…`. They do not validate subsequent
+TLS/camera changes or the pending native SDP constraint build.
+
+TURN/TLS remains IN PROGRESS. Attempt 1 timed out with an IP SAN; the pinned native
+name verifier uses `X509_check_host`, so the laboratory now explicitly supplies its
+synthetic DNS name using IceServer.setHostname, preserving SECURE certificate mode.
+Attempts 2/3 decoded bidirectional audio/video but failed packet policy: first the
+checker included inbound HTTPS responses, then OS private-DNS traffic. The checker
+now selects the actual AVD source address and still rejects unexpected TCP/UDP.
+Disposable AVD setup disables OS connectivity probes/private DNS; APK trust and ICE
+policy are unchanged. Attempt 4 failed at native relay-pair validation before audio.
+This is a retained failure, not a successful TLS acceptance result.
+
+Two owned AVDs have IPv6 routes, but an isolated Docker IPv6 bridge probe returned
+100% packet loss from both (`ping6`, exit 1). The earlier `ping -6` command was invalid
+on this image (exit 2). IPv6 multimedia is NOT EXECUTED; route presence or IPv4
+success does not prove it. Further topology diagnosis remains pending.
+
+Latest local Python tools run: 134 tests passed, exit 0, activated `.venv`.
+Connected/offline JVM and debug/test APK build passed after the camera listener and
+sanitized native candidate-type diagnostics (Gradle exit 0). These are intermediate
+working-tree results, not a final CI claim.
+
+## Native `.3` and additional intermediate execution
+
+Build `35634570646` finished all four ABI jobs SUCCESS. Downloaded inventories,
+hashes and XML were checked: 83 TURN tests and 12 parsed SDP model/policy tests
+passed, including the six new media-policy cases. Combined AAR `.3` SHA-256:
+`5743b0e47574a7d8bad047b00fdef8f49e56e41c944a12542282e2b91ccf9433`.
+See `2026-09-21-video-native-media-receipt.json`; this is not the full upstream suite.
+
+On `.3`, the Camera2 provider test executed permission denial, front/back synthetic
+AVD capture, camera switching, source closure under 2 seconds and a positive
+1-second post-close observation. This provider test is separate from Engine/codec
+acceptance and does not validate a physical camera.
+
+Two-AVD debug video/audio passed over IPv4 UDP and over an IPv6 client-to-TURN leg.
+Native counters report VP8; opposite-end synthetic patterns were decoded along
+with Opus audio, including off-with-audio and a newly consented reactivation.
+Receipts: `2026-09-21-video-native3-ipv4-udp.json` and
+`2026-09-21-video-native3-ipv6-udp.json`, with exact APK hashes. These precede the
+new malicious-fingerprint fixture and final CI.
+
+IPv6 diagnosis supersedes an inference from ICMP failure: an owned IPv6 TCP listener
+was reachable from both AVDs. The first TCP probe command timed out because its
+listener did not service the connection; a serviced challenge/response succeeded.
+The media test then needed to include AVD site-scope temporary/stable IPv6 addresses
+instead of querying only scope global. The pinned allocator requests an IPv4 relay
+allocation: successful IPv6 TURN client traffic is NOT an all-IPv6 media allocation.
+
+Intermediate `.2` TLS IPv4 eventually passed decoded video/audio and network policy
+with the isolated AVD system probes disabled. Wrong name, expired leaf and unrelated
+CA also rejected before capture. These do not automatically validate `.3` TLS.
+The expired-certificate generator originally used unsupported `openssl x509 -days -1`;
+it now uses an explicitly past CA issuance interval, tested with real OpenSSL verification.
+
+The current `.3` negative matrix retains failures in direct-blocked, allocation-expiry
+and TURN-loss cases. Invalid/expired credentials, unreachable TURN, trust loss and
+lock have passed in that matrix so far. Do not declare the matrix or final CI green.
+Publishing a complete SDP fixes an actual omission of later candidates, but has not
+by itself resolved every native negotiation failure. Candidate diagnostics remain
+sanitized and a peer-reflexive classification never authorizes media.
+
+Local baseline command first failed with an inherited mismatched Java toolchain
+(`release version 21 not supported`). Re-running with explicit JDK21 and activated
+`.venv` passed `test_local.sh`; 136 Python tool tests passed, and history guard
+checked 281 current source files / 541 reachable historical blobs without a supported
+credential pattern. Android preflight passed; it is not a compilation result.

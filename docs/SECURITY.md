@@ -146,3 +146,17 @@ El primer audio sintético R8 pasó con Engine/Signal/HTTPS/TURN en dos AVD; el 
 separado conserva las APIs que referencia, con cuerpos/nombres optimizables.
 No equivale al APK productivo exacto, micrófono físico, video o Keystore hardware.
 Consultar [evidencia](validation/2026-09-21-turn-video-core.md) para CI y pendientes.
+
+## Extensión de video en validación (2026-09-21)
+
+La propuesta remota no autoriza captura local. Las direcciones enviar/recibir se
+consienten por separado y quedan ligadas al cambio/generación/dispositivo confirmado.
+Apagar invalida captura antes de persistir STOP; un fallo de disco no debe mantener
+la cámara activa. Reactivación exige consentimiento nuevo; bloqueo/caducidad no se
+renuevan. No se añaden permisos ni WebRTC a offline.
+
+Una superficie remota puede estar atrasada: se distingue último frame del estado de
+transporte. No hay grabación ni persistencia de imágenes; esto no impide copias por
+el receptor. TURN/ISP siguen viendo metadatos. Las pruebas locales sintéticas no
+validan cámaras físicas, Keystore hardware ni todas las familias/transporte de red.
+Ver evidencia de fallos, límites y resultados parciales en la sexta entrega.

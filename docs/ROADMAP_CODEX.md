@@ -5,9 +5,11 @@
 PR #9 / `codex/turn-video-core`, dependiente de #8. Primero regresiones C++ y voz R8.
 Voz sintética optimizada comprobada localmente; corregida eliminación de JNI Zero
 que abortaba inicialización nativa. [Evidencia](validation/2026-09-21-turn-video-core.md).
-Video, consentimiento direccional/renegociación, cámara AVD, frames remotos, TURN/TLS,
-IPv6 y cancelación desde evento explícito siguen pendientes. No cerrar estas filas
-por un ADR o por CI de la base. UI definitiva, hardware y auditoría continúan fuera.
+Video PARTIAL: consentimiento direccional y renegociación implementados; patrones
+sintéticos remotos + audio comprobados en dos AVD debug/R8 sobre un árbol intermedio.
+Pendientes: aceptación final, negativas completas, Camera2 AVD, TURN/TLS, IPv6,
+cancelación/red, pin nativo nuevo y CI de video. No cerrar por CI de voz anterior.
+UI definitiva, hardware y auditoría continúan fuera.
 
 ## Quinta entrega — voz — en curso, 2026-09-21
 

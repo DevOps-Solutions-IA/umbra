@@ -8,10 +8,16 @@ Base a11b579 reproducida en CI35625489078: cuatro SUCCESS y 15 escenarios de voz
 Se reprodujo/corrigió una entrada JNI Zero eliminada por R8; primera voz sintética
 bidireccional con Engine/Signal/HTTPS/TURN sobre clases UMBRA optimizadas pasó en
 dos AVD. Target `.medialab` separado, no APK productivo exacto ni Keystore hardware.
-Pruebas C++ de TURN en CI35625739825 y aceptación R8 ampliada requieren comprobar
-su resultado actual. Video todavía NO IMPLEMENTADO; ADR/protocolo son propuestas.
-Cerrar estas regresiones antes de habilitar video/generaciones nuevas. Conserva
-TURN obligatorio, plazos y permisos offline; no reiniciar trabajo desde main.
+C++ TURN: el fallo inicial CI35625739825 se corrigió sin omitir el test upstream
+previamente deshabilitado; CI35630454176 ejecutó 83 casos, incluidos 18 de redirección.
+La restricción nativa de secciones SDP requiere su propio build CI35634570646.
+Video: implementación local de consentimiento direccional, generaciones acotadas,
+captura/render y recorrido de patrones remotos + audio ejecutado en debug y R8.
+Recibos de árbol de trabajo disponibles; NO es aceptación final ni CI del video.
+Quedan negativas completas, proveedor Camera2, red TLS/IPv6, revisión final y nuevo
+pin nativo. Se diagnosticó publicación prematura del SDP al primer candidato;
+la corrección espera ICE gathering COMPLETE sin autorizar un par remoto prflx.
+Conservar TURN obligatorio, plazos, offline y evidencia de fallos. No empezar desde main.
 
 ## Quinta entrega — voz — en curso, 2026-09-21
 

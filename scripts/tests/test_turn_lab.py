@@ -6,12 +6,24 @@ import json
 from pathlib import Path
 import sys
 import unittest
+import tempfile
+import subprocess
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import turn_lab
 
 
 class TurnLabTests(unittest.TestCase):
+    def test_generated_tls_cases_keep_certificate_validation_meaningful(self):
+        # Real OpenSSL certificate verification, not native WebRTC transport proof.
+        for mode in ("valid","wrong-name","expired","untrusted"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                lab=turn_lab.TurnLab(tls_mode=mode)
+                root=Path(directory);lab._create_tls(root)
+                trust=root/"fixture-trust.pem";trust.write_text(lab.ca)
+                result=subprocess.run(["openssl","verify","-CAfile",str(trust),"-verify_hostname","umbra-turn.invalid",str(root/"server.crt")],capture_output=True,timeout=10)
+                self.assertEqual(mode=="valid",result.returncode==0)
+
     def test_rest_credentials_are_short_lived_unique_and_do_not_export_master(self):
         lab = turn_lab.TurnLab()
         lab.container = True
