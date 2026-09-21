@@ -55,7 +55,7 @@ mkdir -p "$repo/native-output/$abi"
 python tools_webrtc/android/build_aar.py --arch "$abi" \
   --output "$repo/native-output/$abi/webrtc-$abi.aar" \
   --extra-gn-args 'use_remoteexec=false' 'use_reclient=false' 'symbol_level=0' \
-  --extra-ninja-switches='-j2'
+  --extra-ninja-switches='-local_jobs=2'
 # Keep the resolved dependency revisions and the patch alongside the binary.
 python ../depot_tools/gclient.py revinfo > "$repo/native-output/$abi/dependencies.txt"
 git diff --binary > "$repo/native-output/$abi/source.patch"
