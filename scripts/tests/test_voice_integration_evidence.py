@@ -4,7 +4,7 @@ import sys
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from run_voice_integration import valid_audio, valid_report
+from run_voice_integration import valid_audio, valid_report, valid_stop
 import voice_network_evidence as network
 
 class VoiceEvidenceTest(unittest.TestCase):
@@ -35,3 +35,13 @@ class VoiceEvidenceTest(unittest.TestCase):
             self.assertTrue(report["mediaAttempt"].startswith("NOT_EXECUTED"))
         with patch.object(network,"count",side_effect=[0,0,1,1]):
             with self.assertRaises(RuntimeError): network.summarize(Path("synthetic.pcap"),"172.20.0.2",require_turn=False)
+
+    def test_state_flag_does_not_prove_native_capture_stopped(self):
+        good={"failedClosed":True,"nativeCaptureQuietAfterMillis":1000,
+              "nativeCaptureObservedMillis":500,"lateCaptureCallbacks":0}
+        self.assertTrue(valid_stop(good))
+        self.assertFalse(valid_stop({"failedClosed":True}))
+        for field,value in (("lateCaptureCallbacks",1),("nativeCaptureObservedMillis",0),
+                            ("nativeCaptureQuietAfterMillis",30000),("failedClosed",False)):
+            bad={**good,field:value}
+            self.assertFalse(valid_stop(bad))

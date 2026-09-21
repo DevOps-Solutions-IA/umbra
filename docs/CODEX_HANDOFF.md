@@ -14,6 +14,9 @@ la autorización Engine. Código c325788: CI35580903584, cuatro SUCCESS; checkou
 b9d5256b47ffeb3ce4c6aa9bbc8342d4f611085c. Recibo JSON/Markdown en docs/validation.
 La entrega documental posterior debe comprobar su propia CI y conservar esta distinción.
 Caducidad de credenciales/asignaciones y rutas UDP reales ejecutadas en laboratorio.
+Regresión adicional: el fixture mide con monotónico el cese de callbacks ADM
+sintéticos tras cancelación; 126 herramientas y lock/disco en dos AVD pasaron.
+Consultar la CI del nuevo HEAD antes de atribuirle la batería completa.
 Hardware, IPv6, TURN TLS y recorrido de voz R8 siguen pendientes.
 No se modifica señalización anterior ni se reducen Keystore/permisos offline.
 

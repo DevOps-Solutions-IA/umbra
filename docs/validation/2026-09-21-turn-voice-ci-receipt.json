@@ -742,5 +742,45 @@
       "jni/x86_64/libjingle_peerconnection_so.so": "0278242f552f58588d9c2824370a58abf9f283e5b9e2e4ace5a61d2cc91892e3"
     },
     "comparison": "byte-identical JNI to build 35577083313; not a claim about arbitrary toolchains or raw ZIP timestamps"
+  },
+  "localCaptureClosureRegression": {
+    "baseHead": "365607f7cf6916c9c30ce288501075d23f68349f",
+    "context": "same production code; strengthened test working tree",
+    "results": [
+      {
+        "scenario": "lock",
+        "nativeCaptureClosure": [
+          {
+            "failedClosed": true,
+            "nativeCaptureQuietAfterMillis": 1000,
+            "nativeCaptureObservedMillis": 500,
+            "lateCaptureCallbacks": 0
+          },
+          {
+            "failedClosed": true,
+            "nativeCaptureQuietAfterMillis": 1000,
+            "nativeCaptureObservedMillis": 500,
+            "lateCaptureCallbacks": 0
+          }
+        ]
+      },
+      {
+        "scenario": "storage-failure",
+        "nativeCaptureClosure": [
+          {
+            "failedClosed": true,
+            "nativeCaptureQuietAfterMillis": 1000,
+            "nativeCaptureObservedMillis": 501,
+            "lateCaptureCallbacks": 0
+          },
+          {
+            "failedClosed": true,
+            "nativeCaptureQuietAfterMillis": 1000,
+            "nativeCaptureObservedMillis": 500,
+            "lateCaptureCallbacks": 0
+          }
+        ]
+      }
+    ]
   }
 }

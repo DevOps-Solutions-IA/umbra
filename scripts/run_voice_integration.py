@@ -26,6 +26,15 @@ def valid_audio(value):
             and value.get("codec")=="audio/opus" and value.get("sdpAddressAudit") is True)
 
 
+def valid_stop(report):
+    return (set(report)=={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks"}
+            and report["failedClosed"] is True
+            and all(type(report[key]) is int for key in ("nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks"))
+            and 1000<=report["nativeCaptureQuietAfterMillis"]<=2000
+            and 500<=report["nativeCaptureObservedMillis"]<=1500
+            and report["lateCaptureCallbacks"]==0)
+
+
 def valid_report(report):
     return ("engineVoice=PASS" in report and re.search(r"^OK \(3 tests\)$",report,re.M)
             and "INSTRUMENTATION_CODE: -1" in report
@@ -124,6 +133,7 @@ def main():
                 if read(serial,"synthetic-voice-ready.json",processes[serial],deadline)!={"ready":True}: raise RuntimeError("Identity preparation failed")
             for serial in (args.a,args.b): write(serial,"synthetic-voice-start.json",{"consent":True})
             evidence=[]
+            stop_evidence=[]
             for serial in (args.a,args.b):
                 value=read(serial,"synthetic-voice-audio.json",processes[serial],deadline)
                 if not (value=={"rejectedBeforeCapture":True} if args.scenario in ("expired-auth","invalid-auth","unreachable","unauthorized-redirect") else valid_audio(value)):
@@ -143,8 +153,10 @@ def main():
                 if args.scenario=="turn-loss":
                     docker("stop","--time","0",turn.name)
                 for serial in (args.a,args.b):
-                    if read(serial,"synthetic-voice-lost.json",processes[serial],deadline)!={"failedClosed":True}:
+                    stopped=read(serial,"synthetic-voice-lost.json",processes[serial],deadline)
+                    if not valid_stop(stopped):
                         raise RuntimeError("Native media did not stop for scenario: "+args.scenario)
+                    stop_evidence.append(stopped)
             if args.scenario in ("allocation-expiry","force-stop","permission-revoked"):
                 if args.scenario=="allocation-expiry":
                     allocated=turn.allocation_count()
@@ -205,7 +217,7 @@ def main():
                     else:
                         network.append(summarize(snapshot,turn.address,turn_port=3479 if args.scenario=="unreachable" else 3478,
                                                  since=capture_since,until=capture_until,require_turn=(index==0 or args.scenario not in ("expired-auth","invalid-auth","unreachable"))))
-            (args.reports/"voice-evidence.json").write_text(json.dumps({"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn UDP","scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":args.scenario not in ("expired-auth","invalid-auth","unreachable","unauthorized-redirect"),"network":network,"audio":evidence,"allocationExpiry":allocation_evidence},indent=2)+"\n")
+            (args.reports/"voice-evidence.json").write_text(json.dumps({"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn UDP","scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":args.scenario not in ("expired-auth","invalid-auth","unreachable","unauthorized-redirect"),"network":network,"audio":evidence,"allocationExpiry":allocation_evidence,"nativeCaptureClosure":stop_evidence},indent=2)+"\n")
             print("PASS two AVD native voice scenario: "+args.scenario)
         finally:
             errors=[]

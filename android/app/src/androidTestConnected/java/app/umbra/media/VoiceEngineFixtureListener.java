@@ -173,15 +173,29 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     terminationApplied=true;
                 }
                 if(evidence && terminationApplied && (voice.state()==NativeVoiceSession.State.FAILED || voice.state()==NativeVoiceSession.State.ENDED)) {
+                    long terminalObserved=SystemClock.elapsedRealtime();
                     Thread.sleep(1000);
                     if(voice.transmitVoiceAllowed()) throw new AssertionError("Voice revived after termination");
+                    // Check the real native ADM callback, not only the adapter state flag.
+                    // Wait nominally one second for disposal, then observe for 500 ms.
+                    // Measure both intervals and reject excessive scheduling delays. This is synthetic pipeline closure, not a
+                    // hardware microphone cancellation-latency measurement.
+                    long quietStart=SystemClock.elapsedRealtime();
+                    int capturedAtClosure=captured.get();
+                    Thread.sleep(500);
+                    long quietAfter=quietStart-terminalObserved;
+                    long observedFor=SystemClock.elapsedRealtime()-quietStart;
+                    if(quietAfter<1000 || quietAfter>2000 || observedFor<500 || observedFor>1500)
+                        throw new AssertionError("Native capture closure observation missed its timing bounds");
+                    int lateCaptureCallbacks=captured.get()-capturedAtClosure;
+                    if(lateCaptureCallbacks!=0) throw new AssertionError("Native audio capture callbacks survived cancellation");
                     if("calls".equals(db.failBucket)) {
                         if(!voice.endDeliveryFailed()) throw new AssertionError("Synthetic storage failure was not exercised");
                         db.failBucket=null;db.reopen();
                         for(JSONObject row:new Engine(db,SystemClock::elapsedRealtime).calls().sessions())
                             if(!app.umbra.calls.CallPayload.TERMINAL.contains(row.getString("state"))) throw new AssertionError("SQLite rollback revived voice");
                     }
-                    write("synthetic-voice-lost.json",new JSONObject().put("failedClosed",true));waitFor("synthetic-voice-stop.json",deadline);break;
+                    write("synthetic-voice-lost.json",new JSONObject().put("failedClosed",true).put("nativeCaptureQuietAfterMillis",quietAfter).put("nativeCaptureObservedMillis",observedFor).put("lateCaptureCallbacks",lateCaptureCallbacks));waitFor("synthetic-voice-stop.json",deadline);break;
                 }
                 if(!evidence && decoded.get()>=100 && captured.get()>=100 && voice.receivedAudioPackets()>=50 && voice.state()==NativeVoiceSession.State.ACTIVE) {
                     auditNativeDescriptions(engine.calls().session(id),credential.getJSONArray("urls").getString(0));

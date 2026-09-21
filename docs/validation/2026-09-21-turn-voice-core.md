@@ -440,3 +440,37 @@ los hashes fijados a partir de `35577083313`; recibo JSON actualizado. Esto comp
 reproducción del JNI con esa receta/toolchain, no con cualquier compilador, ni igualdad
 de timestamps de los ZIP crudos. El AAR normalizado local también se reprodujo.
 Tras añadir el recibo: guarda de 256 archivos y 125 pruebas de herramientas, salida 0.
+
+
+## Regresión final de cierre del pipeline nativo
+
+La revisión del fixture encontró una limitación de cobertura: el marcador
+failedClosed acreditaba estado/autorización, pero no medía el cese del callback ADM.
+No se reprodujo un fallo productivo. Se reforzó el fixture sin cambiar producción:
+después de observar estado terminal se espera nominalmente 1.000 ms y se observa
+nominalmente durante 500 ms, midiendo ambos intervalos con reloj monotónico. Se exige
+inicio de observación entre 1.000 y 2.000 ms y duración entre 500 y 1.500 ms; los
+márgenes acotan jitter del runner y un retraso superior falla. Se exigen cero callbacks
+de captura sintética durante esa ventana. El controlador
+rechaza el marcador antiguo o una ventana vacía, más larga o con callbacks tardíos.
+No es una medición de micrófono físico ni del tiempo desde una revocación remota aún
+no recibida; es cierre del pipeline nativo local durante una ventana acotada.
+
+Sobre 365607f + esta regresión: assembleConnectedDebugAndroidTest, salida 0;
+126 pruebas de herramientas, salida 0. Dos AVD nuevos y el AAR fijado:
+`python scripts/run_voice_integration.py --a emulator-5554 --b emulator-5556 --scenario lock --reports /tmp/umbra-voice-integrated-device/closure-timed-lock`
+y el mismo comando con `--scenario storage-failure --reports /tmp/umbra-voice-integrated-device/closure-timed-storage`: salida 0 ambos, cero callbacks
+tardíos en ambos extremos, PCM/Opus, Signal/HTTPS y mute/unmute previos. Los reportes
+locales se guardaron en /tmp/umbra-voice-integrated-device/closure-timed-{lock,storage};
+los contadores sanitizados están en el recibo JSON. La CI vuelve a ejecutar estos
+controles también para TURN caído, pérdida de confianza, credencial vencida y dispositivo
+revocado. No se cuenta como ejecutada esa repetición hasta consultar el resultado del
+commit que incorpora la regresión.
+
+
+Resultado de la repetición documental previa: CI35583363861, cuatro SUCCESS sobre
+HEAD365607f7cf6916c9c30ce288501075d23f68349f; commit.txt confirma checkout
+f1a393612a76c182d1fd2436ef6f7802c9a2b849. Esa ejecución precede la nueva comprobación
+ADM, por lo que no se usa para darla por aprobada. La repetición local con intervalos
+monotónicos midió inicio a 1.000 ms y ventanas de 500/500 ms (lock), 501/500 ms
+(error de almacenamiento), cero callbacks en los cuatro extremos observados.
