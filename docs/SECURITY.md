@@ -90,3 +90,18 @@ Reabrir exige consentimiento nuevo. Solo COARSE/FINE añadidos, no BACKGROUND_LO
 servicios de captura, micrófono o cámara. Offline sigue sin permisos de red; el SO
 puede usar sus servicios de posicionamiento independientemente. Pruebas sintéticas
 Android/JVM no acreditan GPS ni Keystore hardware; revisión independiente pendiente.
+
+
+## Señalización 1:1 v1 — cuarta entrega
+
+[ADR](adr/ADR-call-signaling.md), [protocolo](protocol/CALL_SIGNALING.md),
+[evidencia](validation/2026-09-21-authenticated-call-signaling.md).
+El iniciador selecciona un receptor del conjunto consentido mediante Signal y
+persistencia transaccional. Aceptar no activa media ni eleva confianza. Versiones
+de membresía, identidad y lease se revalidan; reinicio/bloqueo no reanudan llamadas.
+RELAY_ONLY único modo habilitado, sin downgrade por control remoto o error TURN.
+El contrato no demuestra tráfico exclusivamente TURN: adaptador/WebRTC real queda
+pendiente. Sin SDP/ICE/callId en claro en relay, pero persisten metadatos de buzones,
+IP, tiempos y tamaños. TURN no ofrece anonimato frente al operador. Sin secretos
+TURN en APK ni claves multimedia derivadas/exportadas del ratchet. Offline rechaza
+llamadas y conserva chat/ubicación/RFCOMM. No nuevos permisos micrófono/cámara/red.
