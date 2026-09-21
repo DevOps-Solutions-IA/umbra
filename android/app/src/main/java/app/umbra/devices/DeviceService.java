@@ -229,6 +229,7 @@ public final class DeviceService {
             approved.put(id, enabled && (approve || approved.optBoolean(id) || (id.equals(next.root) && engine.contact(id) != null && engine.trustState(id) == Engine.TrustState.VERIFIED)));
             if (!enabled) {
                 if(id.equals(engine.id())) engine.locations().suspendIdentity(id);
+                engine.calls().suspendIdentity(id);
                 if (engine.contact(id) != null) engine.block(id, true);
                 signal.deleteAllSessions(id);
                 JSONObject grant = get("device-relay", id);
