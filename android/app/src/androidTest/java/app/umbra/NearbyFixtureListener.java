@@ -60,6 +60,7 @@ public final class NearbyFixtureListener extends RunListener {
                     synchronized (recordsLock) { engine.verifyNearby(d, peer, a, b, proof, enrolling); }
                 }
                 public void authorizeSend(String peer) throws Exception { synchronized (recordsLock) { engine.authorizeTransport(peer); } }
+                public void authorizeEnvelope(String peer, JSONObject envelope) throws Exception { synchronized(recordsLock) { engine.authorizeEnvelope(envelope); } }
                 public void receive(String peer, JSONObject envelope) throws Exception {
                     synchronized (recordsLock) {
                         try { engine.receive(envelope); }
@@ -89,18 +90,24 @@ public final class NearbyFixtureListener extends RunListener {
                 engine.sendText(peer, "Synthetic " + role + " text", 3600);
                 engine.sendFile(peer, "synthetic.bin", Bytes.utf8("Synthetic " + role + " attachment"), 3600);
             }
-            Set<String> sent = new HashSet<>();
+            Set<String> sent = new HashSet<>(); boolean locationSent=false;
             long deadline = SystemClock.elapsedRealtime() + 45000;
             while (SystemClock.elapsedRealtime() < deadline) {
                 if (receiveFailure != null) throw new AssertionError("Incoming processing failed", receiveFailure);
                 List<JSONObject> queue;
-                synchronized (recordsLock) { queue = engine.outbox(); }
+                synchronized (recordsLock) {
+                    if(!locationSent && engine.get("device-roster",peer)!=null) {
+                        var consent=engine.locations().review(peer,app.umbra.location.LocationPayload.Mode.MANUAL,120,false);
+                        engine.locations().manual(consent,true,12.345678,45.678912); locationSent=true;
+                    }
+                    queue = engine.outbox();
+                }
                 for (JSONObject queued : queue) {
                     JSONObject envelope = queued.getJSONObject("envelope");
                     String id = envelope.getString("id");
                     if (!sent.add(id)) continue;
                     link.sendAsync(peer, envelope).get(15, TimeUnit.SECONDS);
-                    if (!queued.optBoolean("receipt")) {
+                    if (!queued.optBoolean("receipt") && !queued.has("locationSession")) {
                         Thread.sleep(100); // Let the bounded write queue retire its completed entry.
                         link.sendAsync(peer, new JSONObject(envelope.toString())).get(15, TimeUnit.SECONDS);
                     }
@@ -112,7 +119,9 @@ public final class NearbyFixtureListener extends RunListener {
                     long incoming = messages.stream().filter(m -> !m.optBoolean("outgoing")).count();
                     long delivered = messages.stream().filter(m -> m.optBoolean("outgoing") && "Entregado".equals(m.optString("status"))).count();
                     require(incoming <= 2, "Duplicate displayed more than once");
-                    complete = incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null;
+                    complete = incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null && locationSent &&
+                        engine.locations().received(peer).size()==1 && engine.outbox().stream().noneMatch(q -> q.has("locationSession"));
+                    if(complete) require(engine.locations().received(peer).get(0).getJSONObject("lastPoint").getLong("latE7")==123456780,"Location content mismatch");
                     if (complete) {
                         String other = dialer ? "listener" : "dialer";
                         for (JSONObject m : messages) if (!m.optBoolean("outgoing")) {
@@ -125,7 +134,7 @@ public final class NearbyFixtureListener extends RunListener {
                 }
                 if (complete) {
                     Thread.sleep(1500); // Keep the reader available for the peer's final receipt checks.
-                    status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, duplicate, receipts");
+                    status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, encrypted location, duplicate, receipts");
                     return;
                 }
                 Thread.sleep(100);

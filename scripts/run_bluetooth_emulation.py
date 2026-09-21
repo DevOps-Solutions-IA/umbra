@@ -94,12 +94,12 @@ def main() -> None:
             if process.wait(timeout=90) != 0:
                 raise RuntimeError('adb instrumentation failed')
         for text in texts():
-            if ('nearbyResult=PASS:' not in text or 'authenticated device roster' not in text or not re.search(r'^OK \(3 tests\)$', text, re.MULTILINE)
+            if ('nearbyResult=PASS:' not in text or 'authenticated device roster' not in text or 'encrypted location' not in text or not re.search(r'^OK \(3 tests\)$', text, re.MULTILINE)
                 or 'INSTRUMENTATION_CODE: -1' not in text or 'nearbyResult=FAIL:' in text
                 or re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)):
                 raise RuntimeError('Bluetooth fixture or subsequent JNI tests failed; inspect device logs')
         successful = True
-        print(f'PASS: actual emulated Bluetooth RFCOMM on {devices}; both directions, host code comparison, authenticated device roster, text, attachment, duplicates and receipts. Not physical Bluetooth or Vault persistence.')
+        print(f'PASS: actual emulated Bluetooth RFCOMM on {devices}; both directions, host code comparison, authenticated device roster, encrypted location, text, attachment, duplicates and receipts. Not physical Bluetooth or Vault persistence.')
     finally:
         for process in processes:
             if process.poll() is None:
