@@ -96,6 +96,28 @@ final class DeviceRelayIntegration {
             location.publish(live,12.345678,45.678912,5,Bytes.now(),"ANDROID_FINE"); upload(relay,b1); download(relay,a1); upload(relay,a1); download(relay,b1);
             location.stop(live); upload(relay,b1); download(relay,a1); download(relay,a2); upload(relay,a1); upload(relay,a2); download(relay,b1);
             check(a1.e.locations().received(b1.e.id()).stream().anyMatch(r -> r.optString("state").equals("STOPPED")),"encrypted live START UPDATE STOP persisted through real relay");
+            var calls=b1.e.calls();
+            String call=calls.invite(calls.reviewInvite(a1.e.id(),app.umbra.calls.CallPayload.NetworkPolicy.RELAY_ONLY),true);
+            upload(relay,b1); download(relay,a1); download(relay,a2);
+            a1.e.calls().accept(a1.e.calls().reviewAccept(call,app.umbra.calls.CallPayload.NetworkPolicy.RELAY_ONLY),true);
+            a2.e.calls().accept(a2.e.calls().reviewAccept(call,app.umbra.calls.CallPayload.NetworkPolicy.RELAY_ONLY),true);
+            upload(relay,a1); upload(relay,a2); download(relay,b1); upload(relay,b1); download(relay,a1); download(relay,a2);
+            check(calls.session(call).getString("selected").equals(a1.e.id()),"call first authenticated acceptance selected exactly one device");
+            check(a1.e.calls().session(call).getString("state").equals("SELECTED") && a2.e.calls().session(call).getString("state").equals("NOT_SELECTED"),"callee needs SELECT and losing device has no media authority");
+            String offer="v=0\r\ns=synthetic signaling offer; no media executed\r\nt=0 0\r\n";
+            String answer="v=0\r\ns=synthetic signaling answer; no media executed\r\nt=0 0\r\n";
+            calls.description(call,1,"offer",offer,Bytes.sha256(Bytes.utf8("synthetic caller certificate")));
+            upload(relay,b1); download(relay,a1);
+            a1.e.calls().description(call,1,"answer",answer,Bytes.sha256(Bytes.utf8("synthetic callee certificate")));
+            upload(relay,a1); download(relay,b1);
+            calls.ice(call,1,Bytes.sha256(Bytes.utf8(offer)),"0","synthetic opaque ICE control; no ICE agent");
+            for(JSONObject q:b1.e.outbox()) if(q.has("callSession")) {
+                String wire=q.getJSONObject("envelope").toString(); check(!wire.contains(call)&&!wire.contains("CALL_")&&!wire.contains("synthetic"),"call identifiers and negotiation absent from relay plaintext");
+            }
+            upload(relay,b1); download(relay,a1);
+            check(a1.e.calls().session(call).getString("state").equals("NEGOTIATING"),"authenticated signaling negotiation, not ACTIVE media");
+            calls.end(call); upload(relay,b1); download(relay,a1); upload(relay,a1); download(relay,b1);
+            check(a1.e.calls().session(call).getString("state").equals("ENDED"),"encrypted END persisted through HTTPS");
             String old=a1.d.roster(a1.e.id()); b1.e.sendIdentityText(a1.e.id(),"synthetic in transit",600); upload(relay,b1);
             String revoked=a1.d.revoke(a2.e.id());
             a1.e.sendDeviceRoster(b1.e.id()); upload(relay,a1); download(relay,b1); a2.d.apply(revoked);

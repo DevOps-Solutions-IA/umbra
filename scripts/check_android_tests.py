@@ -26,7 +26,8 @@ def main():
     source = ROOT / "android/app/src/test/java/app/umbra"
     expected = {"app.umbra." + path.stem for path in source.glob("*Test.java")}
     for variant in ("Connected", "Offline"):
-        count = validate(ROOT / f"android/app/build/test-results/test{variant}DebugUnitTest", expected)
+        variant_expected = expected | {"app.umbra." + path.stem for path in (ROOT / f"android/app/src/test{variant}/java/app/umbra").glob("*Test.java")}
+        count = validate(ROOT / f"android/app/build/test-results/test{variant}DebugUnitTest", variant_expected)
         print(f"PASS {variant}: {count} JVM tests, no failures/errors/skips")
 
 

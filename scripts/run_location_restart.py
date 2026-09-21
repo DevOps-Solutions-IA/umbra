@@ -8,8 +8,8 @@ import subprocess
 import time
 
 
-def verified_report(report: str, returncode: int) -> bool:
-    return (returncode == 0 and 'locationRestart=PASS' in report
+def verified_report(report: str, returncode: int, require_call: bool = False) -> bool:
+    return (returncode == 0 and (not require_call or 'callRestart=PASS' in report) and 'locationRestart=PASS' in report
             and bool(re.search(r'^OK \(3 tests\)$', report, re.M))
             and 'INSTRUMENTATION_CODE: -1' in report
             and not re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', report)
@@ -59,7 +59,7 @@ def main():
     with after.open('w') as stream:
         result = subprocess.run([*command, 'verify', runner], stdout=stream, stderr=subprocess.STDOUT, timeout=60)
     report = after.read_text()
-    if not verified_report(report, result.returncode):
+    if not verified_report(report, result.returncode, require_call=args.flavor == "connected"):
         raise RuntimeError('Location restart verification failed: ' + str(after))
     print(f'{args.flavor}: actual process force-stop then SQLite restart rejected old capture and backlog; not death during commit')
 

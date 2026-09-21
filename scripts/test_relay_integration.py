@@ -72,6 +72,8 @@ def main() -> int:
     java_sources = sorted((sources / "core").glob("*.java")) + sorted((sources / "crypto").glob("*.java"))
     java_sources += sorted((sources / "pairing").glob("*.java"))
     java_sources += sorted((sources / "devices").glob("*.java"))
+    java_sources += sorted((sources / "calls").glob("*.java"))
+    java_sources += [ROOT / "android/app/src/connected/java/app/umbra/calls/CallPlatform.java"]
     java_sources += [p for p in sorted((sources / "location").glob("*.java")) if not p.name.startswith("Android")]
     java_sources += sorted((sources / "verification").glob("*.java"))
     java_sources += [sources / "protocol/Wire.java", sources / "data/Records.java",
