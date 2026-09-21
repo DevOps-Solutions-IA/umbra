@@ -3,7 +3,7 @@
 set -euo pipefail
 free -m | tee "$UMBRA_DEVICE_REPORTS/memory-before-bluetooth.txt"
 umbra_start_avd umbra-ci-b 5556
-for scenario in audio direct-blocked invalid-auth unreachable turn-loss trust-loss lock credential-expiry device-revoked storage-failure force-stop permission-revoked unauthorized-redirect; do
+for scenario in audio direct-blocked expired-auth allocation-expiry invalid-auth unreachable turn-loss trust-loss lock credential-expiry device-revoked storage-failure force-stop permission-revoked unauthorized-redirect; do
   python scripts/run_voice_integration.py --a emulator-5554 --b emulator-5556 --scenario "$scenario" \
     --reports "$UMBRA_DEVICE_REPORTS/voice-integration/$scenario"
 done

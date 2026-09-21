@@ -25,8 +25,10 @@ def docker(*args: str) -> str:
 
 
 class TurnLab:
-    def __init__(self, *, alternate_port: int | None = None):
+    def __init__(self, *, alternate_port: int | None = None, allocation_lifetime: int = 180):
         if alternate_port not in (None,3479): raise ValueError("Only the isolated synthetic redirect endpoint is permitted")
+        if allocation_lifetime not in (20,180): raise ValueError("Unsupported bounded laboratory allocation lifetime")
+        self.allocation_lifetime=allocation_lifetime
         self.alternate_port=alternate_port
         self.name = "umbra-turn-" + uuid.uuid4().hex[:12]
         self.container = False
@@ -56,7 +58,7 @@ class TurnLab:
                 "listening-ip=" + self.address, "relay-ip=" + self.address,
                 "min-port=49160", "max-port=49179", "use-auth-secret",
                 "static-auth-secret=" + self.secret.hex(), "user-quota=4", "total-quota=8",
-                "max-bps=128000", "bps-capacity=1024000", "max-allocate-lifetime=180",
+                "max-bps=128000", "bps-capacity=1024000", "max-allocate-lifetime=" + str(self.allocation_lifetime),
                 "stale-nonce=60", "no-cli", "no-tls", "no-dtls", "no-tcp-relay",
                 "no-multicast-peers", "no-stun", "no-rfc5780", "no-software-attribute",
                 "denied-peer-ip=0.0.0.0-255.255.255.255", "denied-peer-ip=::-ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
@@ -84,6 +86,12 @@ class TurnLab:
         except BaseException:
             self.close()
             raise
+
+    def allocation_count(self) -> int:
+        # Only this isolated network namespace, no process credentials or traffic bodies.
+        table=docker("exec",self.name,"cat","/proc/net/udp")
+        return sum(49160 <= int(row.split()[1].split(":")[1],16) <= 49179
+                   for row in table.splitlines()[1:] if row.strip())
 
     def credentials(self, lifetime: int = 180) -> dict:
         if not self.container or not 1 <= lifetime <= 180:

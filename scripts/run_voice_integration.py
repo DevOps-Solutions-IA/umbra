@@ -14,6 +14,7 @@ from voice_network_evidence import summarize, count
 from turn_lab import TurnLab, docker
 from voice_relay_lab import voice_relay
 from android_apk_install import ensure_apk
+from voice_direct_route import probe_udp
 
 ROOT=Path(__file__).resolve().parents[1]
 PACKAGE="app.umbra.privatechat.dev"
@@ -36,7 +37,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--a",required=True); parser.add_argument("--b",required=True)
     parser.add_argument("--reports",type=Path,required=True)
-    parser.add_argument("--scenario",choices=("audio","invalid-auth","unreachable","turn-loss","trust-loss","lock","credential-expiry","direct-blocked","force-stop","permission-revoked","device-revoked","storage-failure","unauthorized-redirect"),default="audio")
+    parser.add_argument("--scenario",choices=("audio","expired-auth","allocation-expiry","invalid-auth","unreachable","turn-loss","trust-loss","lock","credential-expiry","direct-blocked","force-stop","permission-revoked","device-revoked","storage-failure","unauthorized-redirect"),default="audio")
     args=parser.parse_args()
     if args.a==args.b: raise ValueError("Two independent AVD serials required")
     adb=str(Path(os.environ["ANDROID_HOME"])/"platform-tools/adb")
@@ -66,8 +67,8 @@ def main():
             run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
     args.reports.mkdir(parents=True,exist_ok=True)
     processes={}; streams=[]
-    with voice_relay() as relay, TurnLab(alternate_port=3479 if args.scenario=="unauthorized-redirect" else None) as turn:
-        capture_paths=[]; blocked_routes=[]
+    with voice_relay() as relay, TurnLab(alternate_port=3479 if args.scenario=="unauthorized-redirect" else None, allocation_lifetime=20 if args.scenario=="allocation-expiry" else 180) as turn:
+        capture_paths=[]; blocked_routes=[]; allocation_evidence=None
         try:
             addresses=[]
             for serial in (args.a,args.b):
@@ -88,25 +89,27 @@ def main():
                 addresses.append(str(ipaddress.ip_address(address[1])))
             if addresses[0]==addresses[1]: raise RuntimeError("Expected independent AVD Wi-Fi addresses")
             for index,serial in enumerate((args.a,args.b)):
-                reachable=time.monotonic()+15
-                while True:
-                    probe=subprocess.run([adb,"-s",serial,"shell","ping","-c","1","-W","2",addresses[1-index]],capture_output=True,timeout=5)
-                    if probe.returncode==0: break
-                    if time.monotonic()>=reachable: raise RuntimeError("Direct IPv4 route between owned AVDs unavailable")
-                    time.sleep(0.2)
+                if not probe_udp(adb,serial,(args.a,args.b)[1-index],addresses[1-index]):
+                    raise RuntimeError("Direct IPv4 UDP route between owned AVDs unavailable")
             capture_since=time.time()
             if args.scenario=="direct-blocked":
                 for index,serial in enumerate((args.a,args.b)):
                     peer=addresses[1-index]
                     run(serial,"shell","su","0","iptables","-I","OUTPUT","-d",peer,"-m","comment","--comment","umbra-private-voice-test","-j","REJECT")
                     blocked_routes.append((serial,peer))
-                    probe=subprocess.run([adb,"-s",serial,"shell","ping","-c","1","-W","2",peer],capture_output=True,timeout=5)
-                    if probe.returncode!=1: raise RuntimeError("Direct route blocking was not demonstrated")
+                    if probe_udp(adb,serial,(args.a,args.b)[1-index],peer):
+                        raise RuntimeError("Direct UDP route blocking was not demonstrated")
             for index,serial in enumerate((args.a,args.b)):
                 credentials=turn.credentials(30 if args.scenario=="credential-expiry" else 180)
+                if args.scenario=="expired-auth":
+                    credentials=turn.credentials(1)
+                    while time.time()<=credentials["expires"]: time.sleep(0.1)
+                    # Deliberately inconsistent local metadata tests SERVER rejection,
+                    # not a bypass in the productive credential/configuration provider.
+                    credentials["expires"]=int(time.time())+180
                 if args.scenario=="invalid-auth": credentials["password"]="synthetic-invalid-credential"
                 if args.scenario=="unreachable": credentials["urls"]=[value.replace(":3478",":3479") for value in credentials["urls"]]
-                write(serial,"synthetic-voice-engine.json",{"expectedRejection":args.scenario in ("invalid-auth","unreachable","unauthorized-redirect"),"role":"A" if index==0 else "B","base":relay["base"],
+                write(serial,"synthetic-voice-engine.json",{"expectedRejection":args.scenario in ("expired-auth","invalid-auth","unreachable","unauthorized-redirect"),"role":"A" if index==0 else "B","base":relay["base"],
                     "certificate":relay["certificate"],"invitation":relay["invitations"][index],"turn":credentials})
                 stream=(args.reports/("engine-voice-a.log" if index==0 else "engine-voice-b.log")).open("w")
                 streams.append(stream)
@@ -123,10 +126,10 @@ def main():
             evidence=[]
             for serial in (args.a,args.b):
                 value=read(serial,"synthetic-voice-audio.json",processes[serial],deadline)
-                if not (value=={"rejectedBeforeCapture":True} if args.scenario in ("invalid-auth","unreachable","unauthorized-redirect") else valid_audio(value)):
+                if not (value=={"rejectedBeforeCapture":True} if args.scenario in ("expired-auth","invalid-auth","unreachable","unauthorized-redirect") else valid_audio(value)):
                     raise RuntimeError("Missing native decoded audio evidence")
                 evidence.append(value)
-            if args.scenario not in ("invalid-auth","unreachable","unauthorized-redirect"):
+            if args.scenario not in ("expired-auth","invalid-auth","unreachable","unauthorized-redirect"):
                 for serial in (args.a,args.b): write(serial,"synthetic-voice-mute.json",{"mute":True})
                 for serial in (args.a,args.b):
                     if read(serial,"synthetic-voice-muted.json",processes[serial],deadline)!={"quiet":True}:
@@ -139,16 +142,18 @@ def main():
                 for serial in (args.a,args.b): write(serial,"synthetic-voice-loss.json",{"action":args.scenario})
                 if args.scenario=="turn-loss":
                     docker("stop","--time","0",turn.name)
-                    for index,serial in enumerate((args.a,args.b)):
-                        run(serial,"shell","ping","-c","1","-W","3",addresses[1-index])
                 for serial in (args.a,args.b):
                     if read(serial,"synthetic-voice-lost.json",processes[serial],deadline)!={"failedClosed":True}:
                         raise RuntimeError("Native media did not stop for scenario: "+args.scenario)
-            if args.scenario in ("force-stop","permission-revoked"):
+            if args.scenario in ("allocation-expiry","force-stop","permission-revoked"):
+                if args.scenario=="allocation-expiry":
+                    allocated=turn.allocation_count()
+                    if allocated<2: raise RuntimeError("Two real TURN allocations were not observed before process death")
+                    allocation_evidence={"maxLifetimeSeconds":20,"allocationsBeforeDeath":allocated}
                 for index,serial in enumerate((args.a,args.b)):
                     pid=run(serial,"shell","pidof",PACKAGE).stdout.decode().strip()
                     if not re.fullmatch(r"[0-9]+",pid): raise RuntimeError("Native audio process missing before planned termination")
-                    if args.scenario=="force-stop": run(serial,"shell","am","force-stop",PACKAGE)
+                    if args.scenario in ("force-stop","allocation-expiry"): run(serial,"shell","am","force-stop",PACKAGE)
                     else: run(serial,"shell","pm","revoke",PACKAGE,"android.permission.RECORD_AUDIO")
                     gone=time.monotonic()+10
                     while True:
@@ -175,7 +180,18 @@ def main():
                     report=(args.reports/name).read_text()
                     if not valid_report(report):
                         raise RuntimeError("Missing/failed authenticated voice evidence: "+name)
+            if allocation_evidence is not None:
+                remaining=turn.allocation_count(); began=time.monotonic()
+                allocation_evidence["allocationsAfterProcessRecovery"]=remaining
+                while turn.allocation_count()!=0:
+                    if time.monotonic()-began>=35: raise RuntimeError("TURN allocations survived their bounded lifetime without clients")
+                    time.sleep(0.5)
+                allocation_evidence.update({"allocationsAfterExpiry":0,"observedWaitSeconds":round(time.monotonic()-began,3)})
             capture_until=time.time()
+            if args.scenario=="turn-loss":
+                for index,serial in enumerate((args.a,args.b)):
+                    if not probe_udp(adb,serial,(args.a,args.b)[1-index],addresses[1-index]):
+                        raise RuntimeError("Direct UDP route unavailable after TURN loss")
             network=[]
             with tempfile.TemporaryDirectory(prefix="umbra-owned-wifi-snapshot-") as snapshot_dir:
                 for index,path in enumerate(capture_paths):
@@ -188,8 +204,8 @@ def main():
                                         "productionEntry":"FAIL_CLOSED", "ipv6":"NOT_EXECUTED"})
                     else:
                         network.append(summarize(snapshot,turn.address,turn_port=3479 if args.scenario=="unreachable" else 3478,
-                                                 since=capture_since,until=capture_until,require_turn=(index==0 or args.scenario not in ("invalid-auth","unreachable"))))
-            (args.reports/"voice-evidence.json").write_text(json.dumps({"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn UDP","scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":args.scenario not in ("invalid-auth","unreachable","unauthorized-redirect"),"network":network,"audio":evidence},indent=2)+"\n")
+                                                 since=capture_since,until=capture_until,require_turn=(index==0 or args.scenario not in ("expired-auth","invalid-auth","unreachable"))))
+            (args.reports/"voice-evidence.json").write_text(json.dumps({"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn UDP","scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":args.scenario not in ("expired-auth","invalid-auth","unreachable","unauthorized-redirect"),"network":network,"audio":evidence,"allocationExpiry":allocation_evidence},indent=2)+"\n")
             print(("CONFIRMED native policy BLOCKED; production entry disabled: " if args.scenario=="unauthorized-redirect" else "PASS two AVD native voice scenario: ")+args.scenario)
         finally:
             errors=[]
