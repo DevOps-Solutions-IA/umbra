@@ -64,7 +64,12 @@ public class PairingTest {
         reject(() -> b.pairing.request(invite.replace(":1:", ":2:")));
         reject(() -> a.pairing.request(invite));
         String request = b.pairing.request(invite), ack = a.pairing.accept(request);
-        reject(() -> c.pairing.complete(ack)); reject(() -> b.pairing.complete(ack.substring(0, ack.length()-2) + "AA"));
+        reject(() -> c.pairing.complete(ack));
+        int separator = ack.lastIndexOf('.');
+        byte[] signature = java.util.Base64.getUrlDecoder().decode(ack.substring(separator + 1));
+        signature[0] ^= 1; // Always change a decoded byte; a literal suffix may already equal the original.
+        String altered = ack.substring(0, separator + 1) + java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(signature);
+        assertNotEquals(ack, altered); reject(() -> b.pairing.complete(altered));
         reject(() -> c.pairing.accept(request)); assertEquals(0, c.engine.contacts().size());
     }
     @Test public void compactQrAndBoundedInvitationCapacity() throws Exception {
