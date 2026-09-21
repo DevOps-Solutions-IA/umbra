@@ -39,7 +39,8 @@ cd src
 git apply --check "$repo/native/webrtc/reject-turn-redirect.patch"
 git apply "$repo/native/webrtc/reject-turn-redirect.patch"
 python build/linux/sysroot_scripts/install-sysroot.py --arch=amd64
-python build/util/lastchange.py -o build/util/LASTCHANGE
+python build/util/lastchange.py --source-dir . --filter= --revision-id-only -o build/util/LASTCHANGE
+grep -F "$source_revision" build/util/LASTCHANGE
 # Siso loads a backend descriptor even when every action is local. Supply no
 # remote endpoint, credentials, cache or execution properties.
 python - <<'LOCAL_SISO'
@@ -53,7 +54,7 @@ LOCAL_SISO
 mkdir -p "$repo/native-output/$abi"
 python tools_webrtc/android/build_aar.py --arch "$abi" \
   --output "$repo/native-output/$abi/webrtc-$abi.aar" \
-  --extra-gn-args='use_remoteexec=false' 'use_reclient=false' 'symbol_level=0' \
+  --extra-gn-args 'use_remoteexec=false' 'use_reclient=false' 'symbol_level=0' \
   --extra-ninja-switches='-j2'
 # Keep the resolved dependency revisions and the patch alongside the binary.
 python ../depot_tools/gclient.py revinfo > "$repo/native-output/$abi/dependencies.txt"
