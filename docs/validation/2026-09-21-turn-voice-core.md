@@ -1,6 +1,6 @@
 # Quinta entrega — voz nativa — 2026-09-21 UTC
 
-**PARTIAL / EN CURSO. Audio sintético integrado ejecutado; aceptación completa pendiente.**
+**Núcleo de voz comprobado en laboratorio Android debug. Matriz completa PARTIAL:** hardware, IPv6, TURN/TLS y recorrido de voz R8 no ejecutados. Los bloques siguientes conservan la historia; el recibo actual está al final.
 Base PR #7 OPEN comprobada: `e495793ba191cce0523db243ab7baac55389ef64`.
 Rama nueva `codex/turn-voice-core`, dependiente de `codex/authenticated-call-signaling`.
 No cambios en main ni ramas anteriores. La CI histórica no valida este trabajo.
@@ -355,3 +355,88 @@ No hay reconexión automática: fallo de ICE exige nueva sesión y consentimient
 
 Repetición del empaquetado y `cmp`: salida 0, AAR idéntico byte a byte.
 `python -m unittest discover -s scripts/tests -p 'test_*.py' -v`: 125 pruebas, salida 0; incluye licencia alterada y assets WebRTC prohibidos en offline.
+
+
+## CI del núcleo corregido y cierre de evidencia — 2026-09-21
+
+PR #8 OPEN/DRAFT hacia `codex/authenticated-call-signaling`; base #7 permanece abierta.
+HEAD de código **c325788f2ecbf97f5ea0b2c0da7b47d3d60e669a**.
+Actions **35580903584**: repository-guard SUCCESS, relay-and-core SUCCESS,
+relay-container SUCCESS, android SUCCESS. Checkout de integración realmente probado:
+**b9d5256b47ffeb3ce4c6aa9bbc8342d4f611085c**; no se confunde con el HEAD de la PR.
+[Resultado y artefactos](https://github.com/DevOps-Solutions-IA/umbra/actions/runs/35580903584).
+
+Se conserva el recibo sanitizado, con 15 resultados, hashes APK y metadatos de
+artefactos, en [2026-09-21-turn-voice-ci-receipt.json](2026-09-21-turn-voice-ci-receipt.json).
+No contiene PCM, SDP, credenciales, direcciones de endpoints ni capturas crudas.
+
+Controles y comandos de `.github/workflows/verify.yml`, todos con salida 0:
+- repository_guard --git-history y 125 pruebas de herramientas.
+- test_local.sh: 144 backend, 105 escenarios Java; 12 guardas estáticas separadas.
+- testConnectedDebugUnitTest / testOfflineDebugUnitTest: 144 /117, sin fallos ni skips.
+- assemble/lint connected/offline debug/release, guardas manifest/APK/JNI/DEX,
+  cliente JVM contra relay HTTPS aislado y contenedor no root.
+- run_android_instrumentation.py: 25 pruebas connected y 25 offline.
+- run_location_restart.py en ambas variantes; smoke_release_launch.py (solo arranque).
+- run_voice_probe.py: dos PeerConnections nativos, PCM/Opus y certificado incompatible
+  rechazado; no se presenta este probe como el escenario integrado de dos AVD.
+- run_voice_integration.py con audio, direct-blocked, expired-auth, allocation-expiry,
+  invalid-auth, unreachable, turn-loss, trust-loss, lock, credential-expiry,
+  device-revoked, storage-failure, force-stop, permission-revoked y unauthorized-redirect:
+  15 escenarios PASS con Engine/SQLite/libsignal/HTTPS y dos AVD reales.
+- run_bluetooth_emulation.py mediante ci_bluetooth.sh: RFCOMM del stack emulado en connected
+  y offline, incluidas ubicación cifrada, texto, adjuntos, duplicados y recibos.
+
+Audio normal: 113/111 buffers decodificados; pares nativos relay/relay, certificado
+ligado a la señalización y codec Opus. Captura IPv4 UDP: 183/200 paquetes TURN y cero
+STUN/no-sistema UDP fuera del destino autorizado en esa ventana. Con ruta directa
+bloqueada y con TURN caído se mantuvo el contrato; no inferir cobertura IPv6/TCP.
+Redirección: 9 peticiones al TURN autorizado, 0 al destino alternativo, 0 audio.
+Casos rechazados sin descripción en el receptor indican media NOT_EXECUTED para ese
+extremo: sus ceros no se cuentan como prueba positiva de transporte.
+Caducidad: dos asignaciones antes y después de recuperar procesos, cero tras esperar
+11,595 s adicionales con vida máxima de 20 s. No equivale a revocación instantánea
+por fecha del usuario TURN. Force-stop prueba muerte entre operaciones y reapertura;
+la ejecución JUnit interrumpida no se cuenta como aprobada ni como muerte durante commit.
+
+Hashes CI (no reutilizar los debug locales, cuya firma efímera difiere):
+- connected debug: `9c02ff1255aea3787e4dfab4fcd5af74de5aed1202ff60bdc238adbec18e6431`
+- offline debug: `9952f74d0f7dd81276d1f3ab65a2f5492c85c62541004a37396d2d44122323a1`
+- connected release sin firma: `874dd0e0168f42aa65441c09114032c456ca92d06eee703783604c297c80ebea`
+- offline release sin firma: `f688a41d94a534dfd139b86b387dc85d95a3a5a695c590eb21b850d3997c9738`
+Artefacto debug ID10631520171, ZIP SHA `9f25e1bcf5da1cf8149f3a56a4129a90cc28a026e3b0a7a211dc301df5f6ba5d`;
+informes ID10630594607, ZIP SHA `b38b411a4ea0c56b78c327711d04e8dbe70cd3d531b699fb7bf0816c1c497e6d`.
+Retención Actions: 7 días. Los release se compilaron/inspeccionaron y se registraron
+sus hashes; el workflow publica como artefactos de CI solamente los APK debug y
+los informes. No se publicaron releases ni se usó firma de producción.
+
+Advertencias visibles: Starlette depreca su adaptador httpx de TestClient en favor de
+httpx2; las pruebas actuales pasan con el lock existente. La migración requiere
+revalidar la suite/backend y no se hace indiscriminadamente dentro de la dependencia
+nativa de voz. Pip avisa de instalación como root al construir la imagen; el runtime
+es no root y su smoke se ejecutó. No se añadieron supresiones ni continue-on-error.
+
+La guarda local posterior al commit revisó 255 archivos y 468 blobs históricos,
+salida 0. Se cerraron ambos AVD propios, se eliminaron sus discos sintéticos y los
+pcap privados; contenedores, redes, secretos y asignaciones efímeros se limpiaron.
+Los informes sanitizados y APK locales se mantienen para revisión.
+
+NO EJECUTADOS/BLOQUEADOS: micrófono/altavoz acústico y headset físicos, Keystore de
+hardware real, IPv6, TURN/TLS, llamada con código R8 ofuscado, muerte SQLite durante
+commit y pruebas C++ upstream. Las cuatro ABI se construyeron; runtime de voz
+comprobado en x86_64 AVD. Auditoría independiente pendiente. No hay video ni llamada
+en segundo plano, ni reconexión automática: una pérdida ICE exige consentimiento y
+sesión nuevos. La política no promete anonimato frente al operador TURN/ISP/relay.
+
+Este recibo fija el commit de código ejecutado. El commit posterior que incorpora
+el recibo solo cambia documentación y se somete nuevamente a los cuatro jobs; su
+HEAD/checkout final se publica en la PR y en commit.txt de sus artefactos, sin atribuir
+anticipadamente a ese commit los resultados de esta ejecución.
+
+
+Reconstrucción independiente `35580899208` sobre c325788: cuatro ABI SUCCESS.
+Los cuatro `libjingle_peerconnection_so.so` descargados coinciden exactamente con
+los hashes fijados a partir de `35577083313`; recibo JSON actualizado. Esto comprueba
+reproducción del JNI con esa receta/toolchain, no con cualquier compilador, ni igualdad
+de timestamps de los ZIP crudos. El AAR normalizado local también se reprodujo.
+Tras añadir el recibo: guarda de 256 archivos y 125 pruebas de herramientas, salida 0.

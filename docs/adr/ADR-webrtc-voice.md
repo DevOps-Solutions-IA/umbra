@@ -119,8 +119,9 @@ la factoría, se inyectan tonos PCM de 1/2 kHz a ritmo real y se detecta energí
 en PCM decodificado Opus. Generadores, CA y configuración se encuentran en androidTest,
 fuera de release. No equiparar SQLite de laboratorio con Keystore hardware.
 
-Pendiente: batería adversarial de media completa, observación de red y ausencia de
-fallback bajo fallos, IPv6, ruta acústica física, recorrido R8 de voz y revisión independiente.
+Ejecutados en laboratorio: batería de rechazo/ciclo de vida y observación IPv4 UDP
+con TURN caído sin fallback. Pendientes: IPv6, ruta acústica física, TURN TLS,
+recorrido R8 de voz y revisión independiente.
 Consultar evidencia fechada; no declarar terminada la quinta entrega por este ADR.
 
 ## Observación de red del laboratorio
@@ -132,7 +133,7 @@ propietario. [Documentación oficial de captura por radio](https://developer.and
 `tcpdump`/libpcap analiza el pcap Wi-Fi de cada AVD durante la ventana de la prueba;
 solo se guardan contadores sanitizados. Se exige tráfico TURN positivo, ningún STUN
 UDP fuera de TURN ni otro UDP ajeno al tráfico de sistema explícito (DNS, DHCP, NTP,
-mDNS, LLMNR). Los dos AVD deben responder ping entre sí antes del escenario para
+mDNS, LLMNR). Los dos AVD deben intercambiar un desafío UDP comprobado antes del escenario para
 comprobar disponibilidad de una ruta directa IPv4. Esto no acredita IPv6 ni TCP media.
 PCAPs de ejecución anteriores y fallos nunca se suben como artefactos públicos.
 

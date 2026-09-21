@@ -10,7 +10,9 @@ connected y controles mínimos integrados; no conversación humana ni hardware v
 Corregida la redirección TURN nativa mediante fuente fijada: cuatro ABI compiladas
 (run35577083313), cero paquetes al destino alternativo en dos AVD x86_64; Opus y rechazo
 DTLS repetidos con ese AAR. La capacidad productiva se liga al hash revisado y conserva
-la autorización Engine. CI final del nuevo pin aún pendiente de su recibo.
+la autorización Engine. Código c325788: CI35580903584, cuatro SUCCESS; checkout
+b9d5256b47ffeb3ce4c6aa9bbc8342d4f611085c. Recibo JSON/Markdown en docs/validation.
+La entrega documental posterior debe comprobar su propia CI y conservar esta distinción.
 Caducidad de credenciales/asignaciones y rutas UDP reales ejecutadas en laboratorio.
 Hardware, IPv6, TURN TLS y recorrido de voz R8 siguen pendientes.
 No se modifica señalización anterior ni se reducen Keystore/permisos offline.
