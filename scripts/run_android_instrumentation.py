@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install synthetic debug fixtures and require all eighteen real single-device checks."""
+"""Install synthetic debug fixtures and require all twenty-three real single-device checks."""
 from __future__ import annotations
 
 import argparse
@@ -36,13 +36,13 @@ def main() -> None:
             package + '.test/androidx.test.runner.AndroidJUnitRunner'], stdout=stream,
             stderr=subprocess.STDOUT, timeout=180)
     output = args.log.read_text(encoding='utf-8')
-    failed = result.returncode != 0 or not re.search(r'^OK \(18 tests\)$', output, re.MULTILINE)
+    failed = result.returncode != 0 or not re.search(r'^OK \(23 tests\)$', output, re.MULTILINE)
     failed |= 'INSTRUMENTATION_CODE: -1' not in output
     failed |= bool(re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', output))
     failed |= any(marker in output for marker in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'Process crashed'))
     if failed:
-        raise SystemExit(f'Instrumentation failed, skipped checks, or did not run exactly 18 tests: {args.log}')
-    print(f'{args.flavor}: 18 Android instrumentation tests passed on {args.serial}; log: {args.log}')
+        raise SystemExit(f'Instrumentation failed, skipped checks, or did not run exactly 23 tests: {args.log}')
+    print(f'{args.flavor}: 23 Android instrumentation tests passed on {args.serial}; log: {args.log}')
 
 
 if __name__ == '__main__':

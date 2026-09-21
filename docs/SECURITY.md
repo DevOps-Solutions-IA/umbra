@@ -71,3 +71,22 @@ forks/retención ni defensa contra rollback privilegiado de toda la bóveda.
 Los harnesses usan identidades sintéticas. SQLite de androidTest se ejecuta en UID
 debug `.dev`, distinto de release y en directorio sintético exclusivo y está ausente de release; no rebaja Keystore. Véase el [informe](validation/2026-09-20-device-linking-core.md)
 para distinguir integración ejecutada de hardware y auditoría pendientes.
+
+
+## Ubicación v1 — tercera entrega
+
+[ADR](adr/ADR-location.md), [protocolo](protocol/LOCATION.md) y
+[evidencia](validation/2026-09-21-encrypted-location-core.md).
+Ubicación es contenido sensible Signal, con VERIFIED_ONLY, consentimiento local,
+leases y dispositivos destinatarios fijos. Firma/autenticación no prueba dónde
+está una persona. El receptor y un OS comprometido pueden conservar/copiar puntos.
+Las celdas reducen detalle; trayectorias repetidas pueden seguir siendo identificables.
+No hay mapas ni coordenadas/tipo en claro en el relay; IP, tiempos, tamaños y patrones
+de conexión siguen visibles. No se promete anonimato ni borrado de copias remotas.
+
+Captura visible solo mientras la bóveda está desbloqueada y Activity en primer plano;
+pausa, expiración, permiso/proveedor perdido, revocación o confianza suspendida detienen.
+Reabrir exige consentimiento nuevo. Solo COARSE/FINE añadidos, no BACKGROUND_LOCATION,
+servicios de captura, micrófono o cámara. Offline sigue sin permisos de red; el SO
+puede usar sus servicios de posicionamiento independientemente. Pruebas sintéticas
+Android/JVM no acreditan GPS ni Keystore hardware; revisión independiente pendiente.

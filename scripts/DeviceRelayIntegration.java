@@ -79,6 +79,23 @@ final class DeviceRelayIntegration {
             check(a2.e.messages(b1.e.id()).get(0).getString("logicalId").equals(logical),"same encrypted logical ID, independent A1/A2 envelopes");
             a2.e.sendIdentityText(b1.e.id(),"synthetic A2 reply",600); upload(relay,a2); download(relay,b1); upload(relay,b1); download(relay,a2);
             check(b1.e.messages(a2.e.id()).stream().filter(m -> !m.optBoolean("outgoing")).count()==1,"A2/B1 independent real Signal session");
+            var location=b1.e.locations();
+            String point=location.manual(location.review(a1.e.id(),app.umbra.location.LocationPayload.Mode.MANUAL,120,false),true,12.345678,45.678912);
+            for(JSONObject queued:b1.e.outbox()) {
+                String wire=queued.getJSONObject("envelope").toString();
+                check(!wire.contains("LOCATION_") && !wire.contains("123456780") && !wire.contains("location"),"location and type absent from relay plaintext");
+            }
+            upload(relay,b1); download(relay,a1); download(relay,a2); upload(relay,a1); upload(relay,a2); download(relay,b1);
+            for(Device target:List.of(a1,a2)) {
+                JSONObject incoming=target.e.locations().received(b1.e.id()).get(0);
+                check(incoming.getJSONObject("payload").getString("session").equals(point) && incoming.getJSONObject("lastPoint").getLong("latE7")==123456780,
+                    "manual point without Android permission via verified HTTPS and independent Signal session");
+            }
+            check(b1.e.outbox().isEmpty(),"location per-device receipts clear delivery queue");
+            String live=location.start(location.review(a1.e.id(),app.umbra.location.LocationPayload.Mode.ZONE,900,true),true);
+            location.publish(live,12.345678,45.678912,5,Bytes.now(),"ANDROID_FINE"); upload(relay,b1); download(relay,a1); upload(relay,a1); download(relay,b1);
+            location.stop(live); upload(relay,b1); download(relay,a1); download(relay,a2); upload(relay,a1); upload(relay,a2); download(relay,b1);
+            check(a1.e.locations().received(b1.e.id()).stream().anyMatch(r -> r.optString("state").equals("STOPPED")),"encrypted live START UPDATE STOP persisted through real relay");
             String old=a1.d.roster(a1.e.id()); b1.e.sendIdentityText(a1.e.id(),"synthetic in transit",600); upload(relay,b1);
             String revoked=a1.d.revoke(a2.e.id());
             a1.e.sendDeviceRoster(b1.e.id()); upload(relay,a1); download(relay,b1); a2.d.apply(revoked);

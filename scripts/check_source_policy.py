@@ -34,9 +34,9 @@ def main() -> None:
     permissions = manifest_permissions(manifest)
     validate_permissions(permissions, 'connected')
     forbidden = {'android.permission.READ_CONTACTS', 'android.permission.READ_SMS',
-                 'android.permission.READ_PHONE_STATE', 'android.permission.ACCESS_FINE_LOCATION',
+                 'android.permission.READ_PHONE_STATE', 'android.permission.ACCESS_BACKGROUND_LOCATION',
                  'android.permission.QUERY_ALL_PACKAGES', 'android.permission.MANAGE_EXTERNAL_STORAGE'}
-    require(not (permissions & forbidden), 'no contact/SMS/phone/location/broad-storage permissions')
+    require(not (permissions & forbidden), 'no contact/SMS/phone/background-location/broad-storage permissions')
     extraction = ET.parse(base / 'main/res/xml/data_extraction_rules.xml').getroot()
     for section in ('cloud-backup', 'device-transfer'):
         excludes = {(x.get('domain'), x.get('path')) for x in extraction.find(section).findall('exclude')}

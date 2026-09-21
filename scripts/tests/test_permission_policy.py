@@ -13,8 +13,14 @@ class PermissionPolicyTests(unittest.TestCase):
         validate_permissions(COMMON | NETWORK, "connected")
         validate_permissions(COMMON, "offline")
 
+    def test_only_foreground_location_is_explicitly_allowed(self):
+        expected = {"android.permission.ACCESS_COARSE_LOCATION", "android.permission.ACCESS_FINE_LOCATION"}
+        self.assertEqual({p for p in COMMON if "LOCATION" in p}, expected)
+        for variant in ("connected", "offline"):
+            validate_permissions(COMMON | (NETWORK if variant == "connected" else set()), variant)
+
     def test_added_sensitive_permission_is_rejected(self):
-        for permission in ("READ_CONTACTS", "ACCESS_COARSE_LOCATION", "READ_SMS", "CAMERA", "RECORD_AUDIO"):
+        for permission in ("READ_CONTACTS", "ACCESS_BACKGROUND_LOCATION", "FOREGROUND_SERVICE_LOCATION", "READ_SMS", "CAMERA", "RECORD_AUDIO"):
             with self.subTest(permission=permission), self.assertRaises(RuntimeError):
                 validate_permissions(COMMON | {"android.permission." + permission}, "offline")
 

@@ -16,14 +16,18 @@ public final class SqliteDeviceRecords implements Records, AutoCloseable {
     private final File path;
     private SQLiteDatabase database;
     public String failBucket;
-    public SqliteDeviceRecords() {
+    public SqliteDeviceRecords() { this(null,false); }
+    public SqliteDeviceRecords(String fixture, boolean existing) {
+        if(fixture!=null && !fixture.equals("location-restart")) throw new SecurityException("Unknown synthetic fixture");
         var context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         if (!BuildConfig.DEBUG || !context.getPackageName().endsWith(".dev")) throw new SecurityException("Test-only storage");
         File directory = new File(context.getCacheDir(), "synthetic-device-membership-lab");
         if (!directory.isDirectory() && !directory.mkdirs()) throw new IllegalStateException("Cannot create isolated test database directory");
-        path = new File(directory, "synthetic-device-" + UUID.randomUUID() + ".db");
+        path = new File(directory, "synthetic-device-" + (fixture==null?UUID.randomUUID():fixture) + ".db");
+        if(existing && !path.isFile()) throw new IllegalStateException("Synthetic restart database missing");
+        if(!existing && path.exists()) throw new IllegalStateException("Refuse overwriting synthetic fixture");
         gate.unlock(); reopen();
-        database.execSQL("CREATE TABLE records(bucket TEXT NOT NULL,k TEXT NOT NULL,value BLOB NOT NULL,PRIMARY KEY(bucket,k))");
+        if(!existing) database.execSQL("CREATE TABLE records(bucket TEXT NOT NULL,k TEXT NOT NULL,value BLOB NOT NULL,PRIMARY KEY(bucket,k))");
     }
     public synchronized void reopen() {
         if (database != null) database.close();
