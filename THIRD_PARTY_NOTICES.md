@@ -21,3 +21,13 @@ Upstream advierte que el uso fuera de Signal no cuenta con soporte y que las API
 El proyecto referencia ZXing Core para generar el QR del código de seguridad, JUnit y org.json para pruebas, FastAPI/Pydantic/Uvicorn para el servidor y herramientas de construcción y test. Las versiones están en los archivos Gradle y `requirements*.txt`/`requirements.lock`. Los archivos de bloqueo y este aviso **no son un inventario completo ni una auditoría de licencias de todas las dependencias transitivas**.
 
 Antes de distribuir: resolver las versiones exactas, generar un SBOM, recoger las licencias completas de esas versiones, comprobar los requisitos de cada componente y revisar las vulnerabilidades actuales. Las imágenes de Python y Caddy y las acciones de CI no se fijaron por digest/commit inmutable en esta entrega; es una tarea pendiente de publicación.
+
+## WebRTC SDK Android (connected únicamente; quinta entrega en curso)
+
+`io.github.webrtc-sdk:android:150.7871.01`, distribución del fork WebRTC SDK.
+Fuente declarada `73cb8180f7258ee292878d6edd05177f41883962`, licencia BSD-3-Clause:
+https://github.com/webrtc-sdk/webrtc/blob/73cb8180f7258ee292878d6edd05177f41883962/LICENSE
+Concesión PATENTS y dependencias nativas tienen avisos propios. El inventario de
+hashes está en `android/webrtc-artifact.json`; no es un inventario completo de
+licencias transitivas ni certifica reproducibilidad desde fuente. Ver
+`docs/adr/ADR-webrtc-voice.md`. No publicar binarios sin completar esos avisos.

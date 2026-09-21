@@ -1,5 +1,15 @@
 # Backlog de finalización verificable
 
+## Quinta entrega — voz — en curso, 2026-09-21
+
+PARTIAL — rama `codex/turn-voice-core`, base #7 abierta `e495793`.
+[Estado y comandos ejecutados](validation/2026-09-21-turn-voice-core.md).
+Distribución WebRTC/guardas/configuración RELAY verificadas; no declarar una llamada
+ni habilitar media hasta completar integración Engine y prueba audiovisual requerida.
+TURN y audio de laboratorio, CI final, red y release requieren evidencia propia.
+No se modifica señalización anterior ni se reducen Keystore/permisos offline.
+
+
 ## Cuarta entrega — señalización — 2026-09-21 UTC
 
 Protocolo de invitación/aceptación/selección/negociación/fin integrado con Engine,

@@ -1,0 +1,15 @@
+{
+  "coordinate": "io.github.webrtc-sdk:android:150.7871.01",
+  "distributionRevision": "7b6390fb098303b31af76906bf15f7decaa4ef95",
+  "sourceRevision": "73cb8180f7258ee292878d6edd05177f41883962",
+  "aarSha256": "0a1627b1a48c2bc17d9a40d62fc47bd45166f44a311e95917f147c402de379b0",
+  "pomSha256": "b740a6bec98f078892a70ee502404eb7b437feb0ef4a7fa74b4561ae25db553c",
+  "entries": {
+    "AndroidManifest.xml": "940cc91a97635746cff2dd05bdeadab7a3f96a1860c5a46bb5c8f4fd37c220a3",
+    "classes.jar": "2789e444c63f5b9b5f9f1ba227d12fbc03dfe617d6b83c0192b426730b3d8989",
+    "jni/armeabi-v7a/libjingle_peerconnection_so.so": "762f3d5e1c4c69c3f02f2383540f40e1142cb631e9d99e86bdb1602f4c277559",
+    "jni/arm64-v8a/libjingle_peerconnection_so.so": "7b299113fcd743de7dc5559686b21fc2681b2c8598347d8dc0743d2e004995ca",
+    "jni/x86_64/libjingle_peerconnection_so.so": "0717afcc43da0c1aabd904f9ef0653efc8f3d37b5750f39a123697e7910b623a",
+    "jni/x86/libjingle_peerconnection_so.so": "80e7b1b7e07bb5a53841a8cacabf942a6f3eb8ee9759a1731741dd912f367f19"
+  }
+}
