@@ -90,7 +90,7 @@ public final class NearbyFixtureListener extends RunListener {
                 engine.sendText(peer, "Synthetic " + role + " text", 3600);
                 engine.sendFile(peer, "synthetic.bin", Bytes.utf8("Synthetic " + role + " attachment"), 3600);
             }
-            Set<String> sent = new HashSet<>(); boolean locationSent=false;
+            Set<String> sent = new HashSet<>(); boolean locationSent=false, drainedAnnounced=false;
             long deadline = SystemClock.elapsedRealtime() + 45000;
             while (SystemClock.elapsedRealtime() < deadline) {
                 if (receiveFailure != null) throw new AssertionError("Incoming processing failed", receiveFailure);
@@ -105,7 +105,9 @@ public final class NearbyFixtureListener extends RunListener {
                 for (JSONObject queued : queue) {
                     JSONObject envelope = queued.getJSONObject("envelope");
                     String id = envelope.getString("id");
-                    if (!sent.add(id)) continue;
+                    // A duplicate may regenerate an already transported receipt with the same ID.
+                    // Send it again; a historical sent set is not the current outbox.
+                    if (!sent.add(id) && !queued.optBoolean("receipt")) continue;
                     link.sendAsync(peer, envelope).get(15, TimeUnit.SECONDS);
                     if (!queued.optBoolean("receipt") && !queued.has("locationSession")) {
                         Thread.sleep(100); // Let the bounded write queue retire its completed entry.
@@ -120,7 +122,7 @@ public final class NearbyFixtureListener extends RunListener {
                     long delivered = messages.stream().filter(m -> m.optBoolean("outgoing") && "Entregado".equals(m.optString("status"))).count();
                     require(incoming <= 2, "Duplicate displayed more than once");
                     complete = incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null && locationSent &&
-                        engine.locations().received(peer).size()==1 && engine.outbox().stream().noneMatch(q -> q.has("locationSession"));
+                        engine.locations().received(peer).size()==1 && engine.outbox().isEmpty();
                     if(complete) require(engine.locations().received(peer).get(0).getJSONObject("lastPoint").getLong("latE7")==123456780,"Location content mismatch");
                     if (complete) {
                         String other = dialer ? "listener" : "dialer";
@@ -132,8 +134,13 @@ public final class NearbyFixtureListener extends RunListener {
                         }
                     }
                 }
-                if (complete) {
-                    Thread.sleep(1500); // Keep the reader available for the peer's final receipt checks.
+                if (complete && !drainedAnnounced) {
+                    status("nearbyStage", "drained"); drainedAnnounced=true;
+                }
+                // Continue pumping receipts until BOTH endpoints report a drained queue.
+                // A fixed sleep cannot flush a receipt queued after the previous snapshot.
+                if (complete && approval.exists() && "finish".equals(new String(Files.readAllBytes(approval.toPath()),java.nio.charset.StandardCharsets.UTF_8))) {
+                    Files.delete(approval.toPath());
                     status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, encrypted location, duplicate, receipts");
                     return;
                 }

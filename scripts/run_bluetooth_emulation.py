@@ -13,6 +13,11 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def both_drained(reports: list[str]) -> bool:
+    return (len(reports) == 2 and all("nearbyStage=drained" in text for text in reports)
+            and not any("nearbyResult=FAIL:" in text for text in reports))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial-a', required=True)
@@ -90,6 +95,9 @@ def main() -> None:
         wait_for(lambda content: all('nearbyStage=verified' in text for text in content), 15, 'Verification barrier failed')
         for serial in devices:
             adb(serial, 'shell', f"run-as {package} sh -c 'printf go > files/nearby-synthetic-approval'")
+        wait_for(both_drained, 60, 'Both RFCOMM endpoints must flush all receipts before shutdown')
+        for serial in devices:
+            adb(serial, 'shell', f"run-as {package} sh -c 'printf finish > files/nearby-synthetic-approval'")
         for process in processes:
             if process.wait(timeout=90) != 0:
                 raise RuntimeError('adb instrumentation failed')
