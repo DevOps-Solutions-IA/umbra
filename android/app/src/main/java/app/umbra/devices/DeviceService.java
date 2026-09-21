@@ -228,6 +228,7 @@ public final class DeviceService {
             put("device-index", id, new JSONObject().put("root", next.root)); active.put(id, enabled);
             approved.put(id, enabled && (approve || approved.optBoolean(id) || (id.equals(next.root) && engine.contact(id) != null && engine.trustState(id) == Engine.TrustState.VERIFIED)));
             if (!enabled) {
+                if(id.equals(engine.id())) engine.locations().suspendIdentity(id);
                 if (engine.contact(id) != null) engine.block(id, true);
                 signal.deleteAllSessions(id);
                 JSONObject grant = get("device-relay", id);

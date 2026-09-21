@@ -6,6 +6,8 @@ COMMON = {
     "android.permission.USE_BIOMETRIC", "android.permission.HIDE_OVERLAY_WINDOWS",
     "android.permission.BLUETOOTH_CONNECT", "android.permission.BLUETOOTH_SCAN",
     "android.permission.BLUETOOTH_ADVERTISE",
+    # Visible, opt-in foreground location; no background/foreground-service permission.
+    "android.permission.ACCESS_COARSE_LOCATION", "android.permission.ACCESS_FINE_LOCATION",
 }
 NAME = "{http://schemas.android.com/apk/res/android}name"
 

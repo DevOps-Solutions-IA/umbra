@@ -56,6 +56,8 @@ public final class MainActivity extends Activity {
     private record PendingResult(int request, Uri uri) {}
     private Vault vault;
     private Engine engine;
+    private volatile app.umbra.location.AndroidLocationCapture locationCapture;
+    private String locationStatus="Sin captura de ubicación";
     private volatile BluetoothLink bluetooth;
     private volatile boolean unlocked;
     private volatile boolean networkPaused = true;
@@ -66,7 +68,7 @@ public final class MainActivity extends Activity {
     private int tab;
     private String chat, peerDetails, transportStatus = "Sin conexión activa";
     private JSONObject profile;
-    private List<JSONObject> contacts = List.of(), messages = List.of();
+    private List<JSONObject> contacts = List.of(), messages = List.of(), locations = List.of();
     private LinearLayout root, page;
     private long ttl = 86400;
     private String pendingAttachmentPeer;
@@ -94,7 +96,7 @@ public final class MainActivity extends Activity {
         if (!authenticating || unlocked) lock();
     }
     @Override public void onDestroy() {
-        destroyed = true; unlocked = false; generation++; gate.lock(); cancelRelay(); main.removeCallbacksAndMessages(null);
+        stopLocationLocally(); destroyed = true; unlocked = false; generation++; gate.lock(); cancelRelay(); main.removeCallbacksAndMessages(null);
         if (authCancellation != null) authCancellation.cancel();
         BluetoothLink link = bluetooth; if (link != null) link.close();
         // Close after the running transaction; stale queued actions reject the locked gate.
@@ -107,14 +109,14 @@ public final class MainActivity extends Activity {
         authenticationGranted = false; externalUi = false; gate.unlock(); unlocked = true; authAt = SystemClock.elapsedRealtime();
         action(() -> {
             if (vault == null) vault = new Vault(getApplicationContext(), gate);
-            engine = new Engine(vault); initialised = engine.initialized();
+            engine = new Engine(vault, SystemClock::elapsedRealtime); initialised = engine.initialized();
             if (initialised) { vault.get("meta", "identity"); engine.expire(); }
             return initialised;
         }, ready -> { if (ready) { refresh(); resumeExternalResult(); } else onboarding(); });
     }
     private void lock() {
-        authenticationGranted = false; gate.lock(); unlocked = false; networkPaused = true; networkStateLoaded = false; generation++; cancelRelay();
-        for (Dialog dialog : new ArrayList<>(dialogs)) dialog.dismiss(); dialogs.clear(); chat = null; peerDetails = null; drafts.clear(); messages = List.of(); contacts = List.of(); profile = null;
+        stopLocationLocally(); authenticationGranted = false; gate.lock(); unlocked = false; networkPaused = true; networkStateLoaded = false; generation++; cancelRelay();
+        for (Dialog dialog : new ArrayList<>(dialogs)) dialog.dismiss(); dialogs.clear(); chat = null; peerDetails = null; drafts.clear(); messages = List.of(); locations = List.of(); contacts = List.of(); profile = null;
         BluetoothLink link = bluetooth; bluetooth = null; if (link != null) link.close();
         transportStatus = "Bloqueado · conexiones pausadas"; showLocked();
     }
@@ -331,6 +333,9 @@ public final class MainActivity extends Activity {
             @Override public void authorizeSend(String peer) throws Exception {
                 nearbyOperation(ticket, () -> { engine.authorizeTransport(peer); return null; });
             }
+            @Override public void authorizeEnvelope(String peer, JSONObject envelope) throws Exception {
+                nearbyOperation(ticket, () -> { engine.authorizeEnvelope(envelope); return null; });
+            }
             @Override public void receive(String peer, JSONObject envelope) throws Exception {
                 nearbyOperation(ticket, () -> { engine.receive(envelope); return null; });
                 main.post(() -> { if (unlocked && ticket == generation) { refresh(); syncNow(); } });
@@ -350,19 +355,19 @@ public final class MainActivity extends Activity {
     }
     @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(request, permissions, results); externalUi = false;
-        if (unlocked) { render(); notice("Vuelve a pulsar la acción Bluetooth para continuar."); }
+        if (unlocked) { render(); notice("Vuelve a pulsar la acción y confirma para continuar."); }
     }
     private void refresh() {
         if (!unlocked || engine == null) return;
         String selected = chat;
-        action(() -> new Snapshot(engine.profile(), engine.contacts(), selected == null ? List.of() : engine.messages(selected)), s -> {
+        action(() -> new Snapshot(engine.profile(), engine.contacts(), selected == null ? List.of() : engine.messages(selected), selected == null ? List.of() : engine.locations().received(selected)), s -> {
             profile = s.profile;
             if (!networkStateLoaded) { networkPaused = !BuildConfig.ALLOW_RELAY || !profile.optBoolean("online"); networkStateLoaded = true; }
-            contacts = s.contacts; if (Objects.equals(chat, selected)) messages = s.messages;
+            contacts = s.contacts; if (Objects.equals(chat, selected)) { messages = s.messages; locations = s.locations; }
             render();
         });
     }
-    private record Snapshot(JSONObject profile, List<JSONObject> contacts, List<JSONObject> messages) {}
+    private record Snapshot(JSONObject profile, List<JSONObject> contacts, List<JSONObject> messages, List<JSONObject> locations) {}
     private void base() {
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(BG);
         root.setPadding(dp(20), dp(14), dp(20), dp(10)); root.setFilterTouchesWhenObscured(true);
@@ -491,6 +496,21 @@ public final class MainActivity extends Activity {
             String time = android.text.format.DateFormat.format("HH:mm", new Date(message.optLong("created") * 1000)).toString();
             label(bubble, time + (outgoing ? " · " + message.optString("status") : ""), 10, MUTED);
         }
+        for(JSONObject location:locations) {
+            JSONObject payload=location.optJSONObject("payload"), point=location.optJSONObject("lastPoint");
+            label(page,"Ubicación · "+location.optString("display")+" · "+payload.optString("mode"),13,MUTED);
+            if(point!=null) label(page,point.optLong("latE7")/10000000.0+", "+point.optLong("lonE7")/10000000.0+
+                " · medición "+android.text.format.DateFormat.format("HH:mm:ss",new Date(point.optLong("measured")*1000))+
+                " · incertidumbre sensor mm: "+point.optLong("sensorAccuracyMm")+" · celda E7: "+point.optLong("cellE7"),13,TEXT);
+        }
+        label(page,locationStatus,12,MUTED);
+        button(page,"Compartir ubicación…",this::locationOptions,false);
+        button(page,"Detener ubicación",() -> {
+            var capture=locationCapture; String session=capture==null?null:capture.activeSession();
+            if(capture!=null) capture.close();
+            if(session!=null) action(() -> { engine.locations().stop(session); return true; },ok -> { locationStatus="Ubicación detenida"; refresh(); syncNow(); });
+            else { engine.locations().cancelLocal(); action(() -> { engine.expire(); return true; },ok -> { locationStatus="Entregas de ubicación canceladas"; refresh(); }); }
+        },false);
         // The composer remains below the scrollable history, without fake send or call buttons.
         LinearLayout composer = row(); composer.setGravity(Gravity.CENTER_VERTICAL); root.addView(composer);
         TextView attach = text("+", 29, MINT); attach.setPadding(dp(5), dp(8), dp(12), dp(8)); composer.addView(attach);
@@ -721,6 +741,54 @@ public final class MainActivity extends Activity {
     @android.annotation.SuppressLint("GestureBackNavigation")
     @Override public void onBackPressed() { back(); }
     private void back() { if (peerDetails != null) { peerDetails = null; render(); } else if (chat != null) { chat = null; refresh(); } else { lock(); moveTaskToBack(true); } }
+    private void stopLocationLocally() {
+        var capture=locationCapture; locationCapture=null; if(capture!=null) capture.close();
+        if(engine!=null) engine.locations().cancelLocal();
+        locationStatus="Ubicación interrumpida; requiere nueva autorización";
+    }
+    private void locationOptions() {
+        new SecureDialogBuilder().setTitle("Ubicación: solo mientras UMBRA esté desbloqueada")
+            .setItems(new String[]{"Punto manual (sin GPS)","Punto del proveedor", "Temporal 15 minutos", "Temporal 1 hora", "Temporal 8 horas"},(d,index) -> {
+                if(index==0) {
+                    LinearLayout fields=column(); EditText lat=input(fields,"Latitud manual",false),lon=input(fields,"Longitud manual",false);
+                    new SecureDialogBuilder().setTitle("Posición manual declarada").setView(fields).setNegativeButton("Cancelar",null)
+                        .setPositiveButton("Revisar destinatarios",(dialog,w) -> {
+                            try { reviewLocation(app.umbra.location.LocationPayload.Mode.MANUAL,120,false,Double.parseDouble(lat.getText().toString()),Double.parseDouble(lon.getText().toString())); }
+                            catch(NumberFormatException invalid) { notice("Coordenadas inválidas"); }
+                        }).show();
+                } else {
+                    boolean live=index>1; long duration=index==2?900:index==3?3600:index==4?28800:120;
+                    new SecureDialogBuilder().setTitle("Detalle compartido")
+                        .setItems(new String[]{"Estimación precisa","Aproximada (celda 0,01°)","Zona (celda 0,1°)"},(dialog,choice) -> {
+                            var mode=choice==0?app.umbra.location.LocationPayload.Mode.PRECISE:choice==1?app.umbra.location.LocationPayload.Mode.APPROXIMATE:app.umbra.location.LocationPayload.Mode.ZONE;
+                            boolean fine=checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+                            boolean coarse=checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION)==PackageManager.PERMISSION_GRANTED;
+                            if(!fine && (!coarse || mode==app.umbra.location.LocationPayload.Mode.PRECISE)) {
+                                requestPermissions(mode==app.umbra.location.LocationPayload.Mode.PRECISE?new String[]{Manifest.permission.ACCESS_FINE_LOCATION,Manifest.permission.ACCESS_COARSE_LOCATION}:new String[]{Manifest.permission.ACCESS_COARSE_LOCATION},302);
+                                return; // Permission result never starts capture. Require a new action/consent.
+                            }
+                            reviewLocation(mode,duration,live,0,0);
+                        }).show();
+                }
+            }).show();
+    }
+    private void reviewLocation(app.umbra.location.LocationPayload.Mode mode,long duration,boolean live,double lat,double lon) {
+        String peer=chat;
+        action(() -> {
+            JSONObject index=engine.get("device-index",peer);
+            if(index==null) throw new SecurityException("Primero aprueba la lista autenticada de dispositivos del contacto");
+            return engine.locations().review(index.getString("root"),mode,duration,live);
+        },consent -> confirm("Consentimiento de ubicación", "Contacto: "+consent.recipient()+"\nDispositivos: "+String.join("\n",consent.devices())+
+            "\nPrecisión: "+mode+" · máximo "+duration+" s. Captura solo este dispositivo. Bloquear o salir detiene; no se reanuda automáticamente.",() -> {
+                action(() -> {
+                    if(mode==app.umbra.location.LocationPayload.Mode.MANUAL) return engine.locations().manual(consent,true,lat,lon);
+                    if(locationCapture!=null && locationCapture.activeSession()!=null) throw new SecurityException("Detén primero la captura actual");
+                    String session=engine.locations().start(consent,true);
+                    locationCapture=new app.umbra.location.AndroidLocationCapture(this,worker,() -> resumed && unlocked && !destroyed,engine.locations(),status -> main.post(() -> { if(unlocked) { locationStatus=status; refresh(); syncNow(); } }));
+                    locationCapture.start(session,mode,live); return session;
+                },session -> { refresh(); syncNow(); });
+            }));
+    }
     private String ttlName() { return ttl == 3600 ? "1 hora" : ttl == 604800 ? "7 días" : "24 horas"; }
     private String group(String code) { return code.replaceAll("(.{4})(?!$)", "$1 "); }
     private void notice(String text) { if (!destroyed) Toast.makeText(this, text, Toast.LENGTH_LONG).show(); }

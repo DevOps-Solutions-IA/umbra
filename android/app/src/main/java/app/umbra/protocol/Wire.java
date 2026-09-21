@@ -48,6 +48,7 @@ public final class Wire {
         List<String> names = new ArrayList<>(List.of("v", "id", "from", "to", "created", "createdMs", "expires", "kind"));
         switch (kind) {
             case "text" -> names.add("text");
+            case "location" -> names.add("location");
             case "file" -> { names.add("name"); names.add("data"); }
             case "receipt" -> names.add("ackFor");
             case "device-roster" -> names.add("roster");
@@ -55,6 +56,7 @@ public final class Wire {
             default -> throw new SecurityException("Unsupported content");
         }
         long version = integer(c, "v");
+        if(kind.equals("location") && version!=2) throw new SecurityException("Location requires authenticated logical context");
         if (version == 2) {
             if (kind.equals("receipt") || kind.startsWith("device-")) throw new SecurityException("Receipt version unsupported");
             names.addAll(List.of("logicalId", "logicalFrom", "logicalTo"));
@@ -67,7 +69,11 @@ public final class Wire {
         if ((version != 1 && version != 2) || expiry != integer(envelope, "expires") || created < now - maxTtl || created > now + 300 ||
             expiry <= created || expiry - created > maxTtl || ms < 0 || Math.abs(ms / 1000 - created) > 1)
             throw new SecurityException("Authenticated timestamp mismatch");
-        if (kind.equals("text")) {
+        if (kind.equals("location")) {
+            if(!(c.get("location") instanceof JSONObject p)) throw new SecurityException("Invalid location object");
+            app.umbra.location.LocationPayload.validate(p,now);
+            if(expiry>p.getLong("ends") || expiry-created>120) throw new SecurityException("Location expiry mismatch");
+        } else if (kind.equals("text")) {
             String text = string(c, "text", 16_000);
             if (text.trim().isEmpty() || Bytes.utf8(text).length > 16_000) throw new SecurityException("Invalid text");
         } else if (kind.equals("file")) {
