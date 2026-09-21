@@ -39,6 +39,17 @@ cd src
 git apply --check "$repo/native/webrtc/reject-turn-redirect.patch"
 git apply "$repo/native/webrtc/reject-turn-redirect.patch"
 python build/linux/sysroot_scripts/install-sysroot.py --arch=amd64
+python build/util/lastchange.py -o build/util/LASTCHANGE
+# Siso loads a backend descriptor even when every action is local. Supply no
+# remote endpoint, credentials, cache or execution properties.
+python - <<'LOCAL_SISO'
+from pathlib import Path
+Path('build/config/siso/backend_config/backend.star').write_text(
+    'load("@builtin//struct.star", "module")\n'
+    'def platforms(ctx):\n    return {"default": {}, "large": {}}\n'
+    'def configs(ctx):\n    return []\n'
+    'backend = module("backend", platform_properties=platforms, configs=configs)\n')
+LOCAL_SISO
 mkdir -p "$repo/native-output/$abi"
 python tools_webrtc/android/build_aar.py --arch "$abi" \
   --output "$repo/native-output/$abi/webrtc-$abi.aar" \
