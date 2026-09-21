@@ -21,3 +21,7 @@ class LocationRestartReports(unittest.TestCase):
             with self.subTest(report=report):
                 self.assertFalse(verified_report(report, 0))
         self.assertFalse(verified_report(self.good, 1))
+
+    def test_connected_requires_call_restart_receipt(self):
+        self.assertFalse(verified_report(self.good, 0, require_call=True))
+        self.assertTrue(verified_report(self.good + 'callRestart=PASS no signaling backlog\n', 0, require_call=True))

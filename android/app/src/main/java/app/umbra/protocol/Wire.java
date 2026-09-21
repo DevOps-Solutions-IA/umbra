@@ -48,6 +48,7 @@ public final class Wire {
         List<String> names = new ArrayList<>(List.of("v", "id", "from", "to", "created", "createdMs", "expires", "kind"));
         switch (kind) {
             case "text" -> names.add("text");
+            case "call" -> names.add("call");
             case "location" -> names.add("location");
             case "file" -> { names.add("name"); names.add("data"); }
             case "receipt" -> names.add("ackFor");
@@ -56,7 +57,7 @@ public final class Wire {
             default -> throw new SecurityException("Unsupported content");
         }
         long version = integer(c, "v");
-        if(kind.equals("location") && version!=2) throw new SecurityException("Location requires authenticated logical context");
+        if((kind.equals("location") || kind.equals("call")) && version!=2) throw new SecurityException("Location requires authenticated logical context");
         if (version == 2) {
             if (kind.equals("receipt") || kind.startsWith("device-")) throw new SecurityException("Receipt version unsupported");
             names.addAll(List.of("logicalId", "logicalFrom", "logicalTo"));
@@ -69,7 +70,13 @@ public final class Wire {
         if ((version != 1 && version != 2) || expiry != integer(envelope, "expires") || created < now - maxTtl || created > now + 300 ||
             expiry <= created || expiry - created > maxTtl || ms < 0 || Math.abs(ms / 1000 - created) > 1)
             throw new SecurityException("Authenticated timestamp mismatch");
-        if (kind.equals("location")) {
+        if (kind.equals("call")) {
+            if(!(c.get("call") instanceof JSONObject p)) throw new SecurityException("Invalid call object");
+            app.umbra.calls.CallPayload.validate(p,now);
+            JSONObject context=p.getJSONObject("context");
+            if(expiry>context.getLong("ends") || expiry-created>app.umbra.calls.CallPayload.DELIVERY_SECONDS ||
+                (Set.of("INVITE","ACCEPT","SELECT").contains(p.getString("type")) && expiry>context.getLong("inviteUntil"))) throw new SecurityException("Call expiry mismatch");
+        } else if (kind.equals("location")) {
             if(!(c.get("location") instanceof JSONObject p)) throw new SecurityException("Invalid location object");
             app.umbra.location.LocationPayload.validate(p,now);
             if(expiry>p.getLong("ends") || expiry-created>120) throw new SecurityException("Location expiry mismatch");

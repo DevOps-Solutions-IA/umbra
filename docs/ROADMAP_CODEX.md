@@ -1,5 +1,13 @@
 # Backlog de finalización verificable
 
+## Cuarta entrega — señalización — 2026-09-21 UTC
+
+Protocolo de invitación/aceptación/selección/negociación/fin integrado con Engine,
+Signal y relay; [evidencia](validation/2026-09-21-authenticated-call-signaling.md).
+No cerrar WebRTC/audio/video por intercambiar controles. TURN obligatorio y sin
+fallback: pendiente adaptar motor nativo, probar red/estadísticas y audio real.
+Interfaz definitiva posterior. Hardware y auditoría siguen abiertos.
+
 ## Tercera entrega — ubicación — 2026-09-21 UTC
 
 Ubicación manual/proveedor, reducción local, sesiones temporales con consentimiento

@@ -1,5 +1,14 @@
 # Transferencia técnica a Codex
 
+## Cuarta entrega — señalización — 2026-09-21 UTC
+
+USER_DECISION — rama `codex/authenticated-call-signaling`, dependiente de #6.
+Base verificada `78af23b`; no modificar ramas previas. Señalización Signal, selección
+única y consentimiento; RELAY_ONLY obligatorio, DIRECT_ALLOWED inactivo.
+Evidencia y resultados: [informe](validation/2026-09-21-authenticated-call-signaling.md).
+Recibo final de PR distingue HEAD/checkout/CI. Siguiente bloque: WebRTC voz 1:1
+con TURN de laboratorio y pruebas reales; después video. No multimedia ejecutada.
+
 ## Tercera entrega — ubicación cifrada — 2026-09-21 UTC
 
 USER_DECISION — Rama `codex/encrypted-location-core`, dependiente de #5 hacia
