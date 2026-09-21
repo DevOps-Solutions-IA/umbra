@@ -1,6 +1,6 @@
-# ADR — extensión de video 1:1 (propuesta, 2026-09-21)
+# ADR — extensión de video 1:1 (2026-09-21)
 
-Estado: PROPUESTA; no habilita video ni elimina las guardas de voz v1.
+Estado: IMPLEMENTACIÓN EN VALIDACIÓN; aceptación final y CI del código de video pendientes.
 Ver [trabajo y resultados](../validation/2026-09-21-turn-video-core.md).
 
 ## Base que se conserva
@@ -15,7 +15,7 @@ Video requiere otra autorización explícita: aceptar audio o ver video no autor
 capturar ni enviar cámara. Un mensaje remoto puede proponer un cambio, nunca arrancar
 captura, elevar confianza, cambiar TURN o ampliar destinatarios de ubicación.
 
-## Decisión propuesta
+## Decisión
 
 Extensión versionada y negociada sobre los controles cifrados existentes. Mantener
 la llamada inicial de voz y agregar como máximo un transceiver video. El iniciador
@@ -40,7 +40,9 @@ otro consentimiento y cambio confirmado; si se agotaron generaciones, rechazar.
 
 Cliente de voz anterior conserva el flujo v1. Una extensión desconocida se rechaza
 explícitamente por versión/tipo; nunca se interpreta como DESCRIPTION v1 o texto.
-No retirar la guarda de una sección audio hasta que existan pruebas de la extensión.
+La sección audio sigue siendo única. La extensión permite una sección video
+autorizada; el parche del parser nativo rechaza DATA, secciones repetidas y varias
+pistas por sección antes de aplicar la descripción. Su reconstrucción está pendiente.
 
 ## Adaptador y superficie
 
@@ -48,9 +50,10 @@ APIs inspeccionadas en la fuente WebRTC fijada 73cb818: Camera2Enumerator,
 CameraVideoCapturer.startCapture/stopCapture/switchCamera, VideoSource,
 VideoTrack.addSink/removeSink y factorías de codec de PeerConnectionFactory.
 Inspección de API NO demuestra codecs presentes ni frames ejecutados.
-Perfil inicial propuesto 320×240 a 15 fps; selección del codec pendiente de ejecución
-del binario fijado. Una captura sintética deberá entrar antes del encoder nativo,
-y el analizador remoto consumir frames decodificados con patrones distintos por lado.
+Perfil inicial 320×240 a 15 fps, máximo 400 kbit/s de video; factorías software de la
+revisión fijada. La captura sintética entra antes del encoder nativo y el analizador
+remoto consume frames decodificados con patrones distintos por lado. Las ejecuciones
+locales debug y R8 están registradas por separado y no validan el futuro commit final.
 
 Captura, consentimiento y transporte separados de Activity. Un sink visible mínimo
 debe reflejar antigüedad del frame; limpiar superficie al apagar/bloquear/terminar.

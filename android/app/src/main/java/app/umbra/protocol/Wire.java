@@ -76,6 +76,8 @@ public final class Wire {
             JSONObject context=p.getJSONObject("context");
             if(expiry>context.getLong("ends") || expiry-created>app.umbra.calls.CallPayload.DELIVERY_SECONDS ||
                 (Set.of("INVITE","ACCEPT","SELECT").contains(p.getString("type")) && expiry>context.getLong("inviteUntil"))) throw new SecurityException("Call expiry mismatch");
+            if(Set.of("VIDEO_REQUEST","VIDEO_ACCEPT").contains(p.getString("type")) && expiry>p.getJSONObject("data").getLong("expires"))
+                throw new SecurityException("Video review envelope exceeds consent deadline");
         } else if (kind.equals("location")) {
             if(!(c.get("location") instanceof JSONObject p)) throw new SecurityException("Invalid location object");
             app.umbra.location.LocationPayload.validate(p,now);

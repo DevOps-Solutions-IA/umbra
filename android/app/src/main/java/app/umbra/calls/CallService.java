@@ -148,6 +148,10 @@ public final class CallService {
             JSONObject row=get(id); JSONObject c=row.getJSONObject("context");
             if(Bytes.now()>c.getLong("ends")+Engine.MAX_TTL+300) { drop(id); db.remove("calls",id); leases.remove(id); cancelled.remove(id); continue; }
             if(!terminal(row)) {
+                JSONObject video=row.optJSONObject("video");
+                if(videoPending(video) && (Bytes.now()>=video.getLong("expires") || elapsed.getAsLong()>=video.getLong("reviewDeadline"))) {
+                    video.put("state","EXPIRED"); dropVideo(id); save(row);
+                }
                 try { lease(row); if(Set.of("OUTGOING","INCOMING","ACCEPTING").contains(row.getString("state"))) ring(row); }
                 catch(SecurityException invalid) { finish(row,Bytes.now()>=c.getLong("inviteUntil") || (runtime.equals(row.getString("runtime")) && elapsed.getAsLong()>=row.getLong("ringDeadline"))?"EXPIRED":"FAILED"); leases.remove(id); }
             }
@@ -168,10 +172,13 @@ public final class CallService {
         }
     }
     private void emit(JSONObject row,String type,List<String> recipients,JSONObject data) throws Exception {
+        emitVersion(row,type,recipients,data,1,row.getInt("generation"));
+    }
+    private void emitVersion(JSONObject row,String type,List<String> recipients,JSONObject data,int version,int generation) throws Exception {
         if(row.getInt("sent")>=128) throw new SecurityException("Call control limit");
-        JSONObject p=new JSONObject().put("v",1).put("purpose","UMBRA-CALL-SIGNALING").put("context",copy(row.getJSONObject("context")))
+        JSONObject p=new JSONObject().put("v",version).put("purpose","UMBRA-CALL-SIGNALING").put("context",copy(row.getJSONObject("context")))
             .put("type",type).put("event",UUID.randomUUID().toString()).put("device",engine.id()).put("selected",row.getString("selected"))
-            .put("generation",row.getInt("generation")).put("policy",row.getString("policy")).put("data",copy(data));
+            .put("generation",generation).put("policy",row.getString("policy")).put("data",copy(data));
         CallPayload.validate(p,Bytes.now());
         row.put("sent",row.getInt("sent")+1); save(row);
         engine.enqueueCall(new Permit(p),p,recipients);
@@ -186,6 +193,12 @@ public final class CallService {
         if(Set.of("INVITE","ACCEPT").contains(type)) ring(row);
         if(type.equals("INVITE") && !row.getString("state").equals("OUTGOING")) throw new SecurityException("Call invite superseded");
         if(Set.of("DESCRIPTION","ICE").contains(type) && queued.getInt("callGeneration")!=row.getInt("generation")) throw new SecurityException("Old negotiation delivery");
+        if(queued.has("videoChange") && !Set.of("VIDEO_REJECT","VIDEO_STOP").contains(type)) {
+            JSONObject video=row.optJSONObject("video");
+            if(video==null || !queued.getString("videoChange").equals(video.getString("change")) ||
+                Set.of("STOPPED","REJECTED","EXPIRED").contains(video.getString("state"))) throw new SecurityException("Video delivery no longer authorized");
+            if(Set.of("VIDEO_REQUEST","VIDEO_ACCEPT").contains(type) && Bytes.now()>=video.getLong("expires")) throw new SecurityException("Video review delivery expired");
+        }
     }
     public void end(String id) throws Exception {
         // UI may already have cancelledPending. Preserve cancellation on failure, allow only this synchronous terminal send.
@@ -256,6 +269,7 @@ public final class CallService {
             }
             case "CANCEL" -> { if(!fromCaller) throw new SecurityException("Only caller cancels"); finish(row,"CANCELLED"); }
             case "END" -> { selected(row,peer,p); finish(row,"ENDED"); }
+            case "VIDEO_REQUEST","VIDEO_ACCEPT","VIDEO_REJECT","VIDEO_STOP" -> { selected(row,peer,p); videoControl(row,p); }
             case "DESCRIPTION","ICE" -> { selected(row,peer,p); negotiation(row,p,peer); }
             default -> throw new SecurityException("Unknown call event");
         }
@@ -269,6 +283,14 @@ public final class CallService {
         JSONObject d=p.getJSONObject("data"),descriptions=row.getJSONObject("descriptions"); int gen=p.getInt("generation");
         String caller=row.getJSONObject("context").getString("callerDevice");
         if(p.getString("type").equals("DESCRIPTION")) {
+            JSONObject video=row.optJSONObject("video");
+            if(p.getInt("v")==2) {
+                if(video==null || !video.getString("state").equals("CONFIRMED") || gen!=video.getInt("generation") ||
+                    !canonical(VideoPayload.bindingOf(video)).equals(canonical(d.getJSONObject("video"))))
+                    throw new SecurityException("Description lacks matching video consent");
+            } else if(video!=null && gen==video.getInt("generation") && video.getString("state").equals("CONFIRMED")) {
+                throw new SecurityException("Video description downgrade");
+            }
             boolean offer=d.getString("role").equals("offer");
             if(offer!=author.equals(caller)) throw new SecurityException("Wrong negotiation role");
             if(offer) {
@@ -294,11 +316,146 @@ public final class CallService {
     private void control(String id,int generation,String type,JSONObject data) throws Exception {
         db.transaction(() -> {
             JSONObject row=usable(id); requireState(row,"SELECTED","NEGOTIATING");
-            JSONObject p=new JSONObject().put("v",1).put("purpose","UMBRA-CALL-SIGNALING").put("context",row.getJSONObject("context"))
+            JSONObject video=row.optJSONObject("video"); int wireVersion=1;
+            if(type.equals("DESCRIPTION") && video!=null && video.getString("state").equals("CONFIRMED") && generation==video.getInt("generation")) {
+                wireVersion=2; data.put("video",VideoPayload.bindingOf(video));
+            }
+            JSONObject p=new JSONObject().put("v",wireVersion).put("purpose","UMBRA-CALL-SIGNALING").put("context",row.getJSONObject("context"))
                 .put("type",type).put("event",UUID.randomUUID().toString()).put("device",engine.id()).put("selected",row.getString("selected"))
                 .put("generation",generation).put("policy",row.getString("policy")).put("data",data);
-            CallPayload.validate(p,Bytes.now()); negotiation(row,p,engine.id()); save(row); emit(row,type,destinations(row),data); return null;
+            CallPayload.validate(p,Bytes.now()); negotiation(row,p,engine.id()); save(row); emitVersion(row,type,destinations(row),data,wireVersion,generation); return null;
         });
+    }
+    /** A local action authorizes independent sending/receiving for exactly one change. */
+    public final class VideoConsent {
+        private final CallService owner=CallService.this;
+        private final String id,change; private final boolean sending,receiving,accepting;
+        private final int generation; private final Runnable authorization; private final long reviewed;
+        private boolean used;
+        private VideoConsent(JSONObject row,boolean sending,boolean receiving,boolean accepting) throws Exception {
+            id=row.getJSONObject("context").getString("callId"); this.sending=sending; this.receiving=receiving; this.accepting=accepting;
+            JSONObject video=row.optJSONObject("video");
+            change=accepting?video.getString("change"):UUID.randomUUID().toString();
+            generation=accepting?video.getInt("generation"):row.getInt("generation")+1;
+            authorization=db.authorization(); reviewed=elapsed.getAsLong();
+        }
+    }
+    private boolean localCaller(JSONObject row) throws Exception { return engine.id().equals(row.getJSONObject("context").getString("callerDevice")); }
+    private static boolean videoPending(JSONObject video) { return video!=null && Set.of("REQUESTED","REVIEW").contains(video.optString("state")); }
+    private JSONObject videoReviewRow(String id) throws Exception {
+        JSONObject row=mediaRow(id);
+        if(row.getInt("generation")<1 || row.getJSONObject("descriptions").length()!=2)
+            throw new SecurityException("Complete audio negotiation before video");
+        return row;
+    }
+    public VideoConsent reviewVideo(String id,boolean sending,boolean receiving) throws Exception {
+        return db.transaction(() -> {
+            JSONObject row=videoReviewRow(id),video=row.optJSONObject("video");
+            if(!sending && !receiving || row.getInt("generation")>=4 || video!=null && !Set.of("STOPPED","REJECTED","EXPIRED").contains(video.optString("state")))
+                throw new SecurityException("Stop previous video change before requesting another");
+            return new VideoConsent(row,sending,receiving,false);
+        });
+    }
+    public VideoConsent reviewVideoAccept(String id,boolean sending,boolean receiving) throws Exception {
+        return db.transaction(() -> {
+            JSONObject row=videoReviewRow(id),video=row.optJSONObject("video");
+            if(video==null || !video.getString("state").equals("REVIEW") || !sending && !receiving)
+                throw new SecurityException("No video proposal to review");
+            return new VideoConsent(row,sending,receiving,true);
+        });
+    }
+    private JSONObject videoConsent(VideoConsent c,boolean confirmed) throws Exception {
+        if(c==null || c.owner!=this || c.used || !confirmed) throw new SecurityException("Explicit local video consent required");
+        c.authorization.run(); long age=elapsed.getAsLong()-c.reviewed;
+        if(age<0 || age>VideoPayload.REVIEW_MILLIS) throw new SecurityException("Video consent expired");
+        JSONObject row=videoReviewRow(c.id);
+        if(row.getInt("generation")+1!=c.generation) throw new SecurityException("Video generation changed during review");
+        c.used=true; return row;
+    }
+    public void requestVideo(VideoConsent consent,boolean confirmed) throws Exception {
+        db.transaction(() -> {
+            JSONObject row=videoConsent(consent,confirmed),old=row.optJSONObject("video");
+            if(consent.accepting || old!=null && !Set.of("STOPPED","REJECTED","EXPIRED").contains(old.optString("state")))
+                throw new SecurityException("Video request already pending");
+            boolean caller=localCaller(row); long until=Math.min(Bytes.now()+VideoPayload.REQUEST_SECONDS,row.getJSONObject("context").getLong("ends"));
+            JSONObject data=new JSONObject().put("change",consent.change).put("callerSend",(caller?consent.sending:consent.receiving)?1:0)
+                .put("calleeSend",(caller?consent.receiving:consent.sending)?1:0).put("expires",until);
+            JSONObject video=copy(data).put("state","REQUESTED").put("generation",consent.generation)
+                .put("reviewDeadline",elapsed.getAsLong()+Math.max(0,until-Bytes.now())*1000);
+            rememberVideoChange(row,consent.change); row.put("video",video); save(row); emitVersion(row,"VIDEO_REQUEST",destinations(row),data,2,consent.generation); return null;
+        });
+    }
+    public void acceptVideo(VideoConsent consent,boolean confirmed) throws Exception {
+        db.transaction(() -> {
+            JSONObject row=videoConsent(consent,confirmed),video=row.optJSONObject("video");
+            if(!consent.accepting || video==null || !video.getString("state").equals("REVIEW") || !video.getString("change").equals(consent.change))
+                throw new SecurityException("Video proposal changed during review");
+            boolean caller=localCaller(row);
+            int callerSend=video.getInt("callerSend")*((caller?consent.sending:consent.receiving)?1:0);
+            int calleeSend=video.getInt("calleeSend")*((caller?consent.receiving:consent.sending)?1:0);
+            if(callerSend+calleeSend==0) throw new SecurityException("No mutually consented video direction");
+            video.put("callerSend",callerSend).put("calleeSend",calleeSend).put("state","CONFIRMED");
+            JSONObject data=VideoPayload.bindingOf(video).put("expires",video.getLong("expires"));
+            save(row); emitVersion(row,"VIDEO_ACCEPT",destinations(row),data,2,consent.generation); return null;
+        });
+    }
+    public void rejectVideo(String id) throws Exception {
+        db.transaction(() -> {
+            JSONObject row=mediaRow(id),video=row.optJSONObject("video");
+            if(video==null || !videoPending(video)) throw new SecurityException("No pending video review");
+            video.put("state","REJECTED"); dropVideo(id); save(row);
+            emitVersion(row,"VIDEO_REJECT",destinations(row),new JSONObject().put("change",video.getString("change")),2,video.getInt("generation")); return null;
+        });
+    }
+    /** Adapter stops capture synchronously before invoking this fallible persistent operation. */
+    public void stopVideo(String id) throws Exception {
+        MediaLease live=mediaLeases.get(id);if(live!=null)live.stopVideoLocal();
+        db.transaction(() -> {
+            JSONObject row=mediaRow(id),video=row.optJSONObject("video");
+            if(video==null) throw new SecurityException("No video change");
+            video.put("state","STOPPED"); dropVideo(id); save(row);
+            emitVersion(row,"VIDEO_STOP",destinations(row),new JSONObject().put("change",video.getString("change")),2,video.getInt("generation")); return null;
+        });
+    }
+    private void dropVideo(String id) throws Exception {
+        for(String key:db.keys("outbox")) {
+            JSONObject q=engine.get("outbox",key);
+            if(id.equals(q.optString("callSession")) && q.has("videoChange") && !Set.of("VIDEO_REJECT","VIDEO_STOP").contains(q.optString("callType"))) db.remove("outbox",key);
+        }
+    }
+    private void rememberVideoChange(JSONObject row,String change) throws Exception {
+        JSONObject used=row.optJSONObject("videoChanges");
+        if(used==null) { used=new JSONObject(); row.put("videoChanges",used); }
+        if(used.has(change) || used.length()>=128) throw new SecurityException("Video change replay or capacity");
+        used.put(change,1);
+    }
+    private void videoControl(JSONObject row,JSONObject p) throws Exception {
+        String type=p.getString("type"); JSONObject data=p.getJSONObject("data"),video=row.optJSONObject("video"); int gen=p.getInt("generation");
+        if(type.equals("VIDEO_REQUEST")) {
+            rememberVideoChange(row,data.getString("change"));
+            if(gen!=row.getInt("generation")+1 || row.getJSONObject("descriptions").length()!=2) throw new SecurityException("Video request generation mismatch");
+            if(video!=null && !Set.of("STOPPED","REJECTED","EXPIRED").contains(video.optString("state"))) {
+                // Crossed requests reject independently; neither side inherits consent from the other.
+                emitVersion(row,"VIDEO_REJECT",destinations(row),new JSONObject().put("change",data.getString("change")),2,gen); return;
+            }
+            row.put("video",copy(data).put("state","REVIEW").put("generation",gen)
+                .put("reviewDeadline",elapsed.getAsLong()+Math.max(0,data.getLong("expires")-Bytes.now())*1000));
+        } else {
+            if(video==null || !video.getString("change").equals(data.getString("change")) || gen!=video.getInt("generation"))
+                throw new SecurityException("Unknown video change");
+            if(type.equals("VIDEO_ACCEPT")) {
+                if(!video.getString("state").equals("REQUESTED") || data.getLong("expires")!=video.getLong("expires") ||
+                    data.getInt("callerSend")>video.getInt("callerSend") || data.getInt("calleeSend")>video.getInt("calleeSend"))
+                    throw new SecurityException("Video acceptance exceeds consent");
+                video.put("callerSend",data.getInt("callerSend")).put("calleeSend",data.getInt("calleeSend")).put("state","CONFIRMED");
+            } else if(type.equals("VIDEO_REJECT")) {
+                if(videoPending(video)) { video.put("state","REJECTED"); dropVideo(row.getJSONObject("context").getString("callId")); }
+            } else {
+                String call=row.getJSONObject("context").getString("callId");
+                MediaLease live=mediaLeases.get(call);if(live!=null)live.stopVideoLocal();
+                video.put("state","STOPPED"); dropVideo(call);
+            }
+        }
     }
     /** Separate explicit consent for local audio, never granted by a received message. */
     public final class MediaConsent {
@@ -346,6 +503,7 @@ public final class CallService {
         private final java.util.concurrent.atomic.AtomicBoolean invalid=new java.util.concurrent.atomic.AtomicBoolean();
         private final java.util.concurrent.atomic.AtomicReference<Runnable> cancellation=new java.util.concurrent.atomic.AtomicReference<>();
         private final java.util.concurrent.atomic.AtomicBoolean attached=new java.util.concurrent.atomic.AtomicBoolean();
+        private final java.util.concurrent.atomic.AtomicReference<Runnable> videoCancellation=new java.util.concurrent.atomic.AtomicReference<>();
         private volatile boolean cancellationFailed;
         public boolean cancellationFailed() { return cancellationFailed; }
         private MediaLease(MediaConsent consent) { id=consent.id; revision=consent.revision; authorization=consent.authorization; }
@@ -353,6 +511,21 @@ public final class CallService {
         public String localDevice() throws Exception { snapshot(); return engine.id(); }
         public void end() throws Exception { CallService.this.end(id); }
         public String configurationRevision() { return revision; }
+        /** No disk I/O: capture callbacks must not block camera teardown on a database lock. */
+        public void checkCaptureLease() {
+            authorization.run();
+            if(invalid.get() || mediaLeases.get(id)!=this || cancelled.contains(id)) throw new SecurityException("Capture lease cancelled");
+        }
+
+        public VideoConsent reviewVideo(boolean sending,boolean receiving,boolean accepting) throws Exception {
+            snapshot(); return accepting?CallService.this.reviewVideoAccept(id,sending,receiving):CallService.this.reviewVideo(id,sending,receiving);
+        }
+        public void video(VideoConsent consent,boolean accepting) throws Exception {
+            snapshot(); if(accepting) CallService.this.acceptVideo(consent,true); else CallService.this.requestVideo(consent,true);
+        }
+        public void stopVideo() throws Exception { snapshot(); CallService.this.stopVideo(id); }
+        public void rejectVideo() throws Exception { snapshot(); CallService.this.rejectVideo(id); }
+
         public JSONObject snapshot() throws Exception {
             if(invalid.get()) throw new SecurityException("Media lease cancelled");
             return db.transaction(() -> {
@@ -368,6 +541,14 @@ public final class CallService {
             cancellation.set(onCancel);
             try { snapshot(); } catch(Exception failure) { invalidate(); throw failure; }
             if(invalid.get()) invalidateCallback();
+        }
+        public void attachVideoCancellation(Runnable callback) throws Exception {
+            snapshot();if(!videoCancellation.compareAndSet(null,Objects.requireNonNull(callback))) throw new SecurityException("Video callback already attached");
+            if(invalid.get())stopVideoLocal();
+        }
+        private void stopVideoLocal() {
+            Runnable callback=videoCancellation.get();
+            if(callback!=null)try {callback.run();}catch(RuntimeException failure){cancellationFailed=true;invalidate();}
         }
         private void invalidateCallback() {
             Runnable callback=cancellation.getAndSet(null);

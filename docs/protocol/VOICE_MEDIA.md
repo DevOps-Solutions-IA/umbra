@@ -67,3 +67,12 @@ Un reemplazo de dependencia no hereda esa capacidad automáticamente. La entrada
 productiva sigue exigiendo permiso, consentimiento, selección, verificación, lease
 vigente y comprobación DTLS nativa; el hash no autoriza una llamada por sí solo.
 Pruebas de micrófono/hardware, IPv6, TURN TLS y recorrido de voz R8 quedan pendientes.
+
+## Extensión video v2 en validación
+
+[VIDEO_MEDIA.md](VIDEO_MEDIA.md) define los controles v2 y su consentimiento
+direccional. El establecimiento inicial de voz permanece v1. Un cliente antiguo
+rechaza v2; no se interpreta como texto ni como una descripción de voz. La extensión
+no amplía los 60/180 segundos, no activa DIRECT_ALLOWED ni permite captura remota.
+Las afirmaciones históricas de solo voz anteriores describen la entrega previa;
+la evidencia de video y sus bloqueos se registran por separado.
