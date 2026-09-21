@@ -49,10 +49,14 @@ public final class CameraProviderFixtureListener extends RunListener {
             assertEquals(1,capture.completedSwitches);assertFalse("Front to back",capture.lastSwitchFront);
             int before=frames.get();awaitFrames(frames,before+10,failed);
             assertTrue(dimensions.get());assertTrue(rotations.get());
+            // Start a second real provider switch, then revoke the local capture lease.
+            // This is a provider race, separate from Engine/vault lock acceptance.
+            capture.switchCamera();
             long requested=SystemClock.elapsedRealtimeNanos();authorized.set(false);capture.invalidate();capture.close();
             assertTrue(capture.closedNanos>=requested);assertTrue(capture.closedNanos-requested<2_000_000_000L);
             int closedFrames=frames.get();Thread.sleep(1000);assertEquals(closedFrames,frames.get());
             try {capture.start();fail("Closed capture restarted");}catch(SecurityException expected){}
+            try {capture.switchCamera();fail("Closed capture switched camera");}catch(SecurityException expected){}
         } finally {if(capture!=null)capture.close();factory.dispose();}
     }
     private void deniedPermissionDoesNotCreateCapturer() {

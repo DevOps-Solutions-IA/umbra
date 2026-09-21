@@ -1,8 +1,10 @@
 # Sexta entrega — video — trabajo en curso (2026-09-21 UTC)
 
-**PARTIAL. Video todavía NO IMPLEMENTADO.** Este informe registra el primer bloque
-de regresiones nativas y laboratorio R8; no acredita cámara, frames remotos, TLS,
-IPv6 o hardware. Se preserva íntegra la evidencia anterior.
+**PARTIAL — aceptación final pendiente.** Hay implementación y ejecuciones de
+video/audio sintéticos nativos en dos AVD, incluido un arnés R8 aislado. Los apartados
+siguientes conservan los resultados y fallos de cada árbol intermedio. La CI del
+último HEAD publicado no está verde; no se declara terminada la entrega ni probado
+hardware físico. Los resultados posteriores no validan retroactivamente otro binario.
 
 ## Base y aislamiento
 
@@ -275,3 +277,88 @@ Local baseline command first failed with an inherited mismatched Java toolchain
 `.venv` passed `test_local.sh`; 136 Python tool tests passed, and history guard
 checked 281 current source files / 541 reachable historical blobs without a supported
 credential pattern. Android preflight passed; it is not a compilation result.
+
+## Follow-up after publishing 7c996345e21815f3d215b19d5d11b1c3107cb1c9
+
+CI `35641166463` failed Android media execution; the other three Verify jobs passed.
+Optimized media `35641166388` also failed. Sanitized diagnostics reproduced an
+asymmetric stall: one endpoint had published its candidate; the other stayed in
+GATHERING with a usable candidate but withheld its description. Waiting for COMPLETE
+was therefore not a sufficient fix. New working-tree code publishes the first native
+candidate and sends later candidates through authenticated Engine ICE controls.
+It does not raise the negotiation timeout or authorize peer-reflexive/direct media.
+
+Video matrix `35641166472` optimized job failed during SDK installation with
+`Error on ZipFile unknown archive`, before app compilation. Early report creation
+and SDK-output capture now preserve diagnostics even for this infrastructure failure.
+No SDK failure is counted as a passed multimedia test.
+
+Intermediate local incremental-ICE execution passed direct-blocked, direct API
+camera denial with continuing audio, and CAMERA revocation/process restart without
+resuming media. A netem assertion initially rejected Android's equivalent `80.0ms`
+format; after correcting the verifier, real 80 ms / 2% loss / 128 Kbit / 20-packet
+queue execution passed decoded audio/video and required actual processed/dropped
+packet counters. The wrong-fingerprint scenario remains under investigation: it
+has not yet produced the required native binding rejection evidence. A timeout is
+not accepted as proof of that property. These are working-tree results, not final CI.
+
+Packaging explicitly preserves only `libjingle_peerconnection_so.so`: all four
+reviewed ELF binaries are already stripped (no `.debug_*` or `.symtab`). This keeps
+the packaged bytes equal to the pinned inventory instead of asking a host NDK to
+strip them again; it does not disable R8 or broadly suppress native checks.
+
+The repeated incremental-ICE matrix also passed TURN loss with a direct route still
+available; allocation expiry failed its 35-second socket-release expectation after
+successful media. Reviewing pinned coturn 4.18.0 found `stun_adjust_allocate_lifetime`
+checks the 600-second minimum before the configured maximum. A short refresh request
+can therefore obtain 600 seconds after an initial 20-second allocation. References:
+[function](https://github.com/coturn/coturn/blob/4.18.0/src/client/ns_turn_msg.c),
+[minimum](https://github.com/coturn/coturn/blob/4.18.0/src/client/ns_turn_msg_defs.h).
+The laboratory now uses a 180-second allocation for this case, kills the clients
+before the first 90-second refresh, and allows a bounded 190-second observation
+of actual socket release. Its re-execution is pending; configuration alone is not
+an expiry result. This does not extend the application's 180-second session limit.
+
+## Latest local verification before the next publication
+
+With activated `.venv`, explicit JDK21 and SDK:
+- `bash scripts/test_local.sh`: exit 0, 149 backend tests, 105 core scenarios,
+  12 static policy checks kept separate.
+- `python -m unittest discover -s scripts/tests -p 'test_*.py' -v`: exit 0, 139 tests.
+- `python scripts/build_android.py --release`: exit 0; 157 connected / 117 offline
+  JVM tests, both debug/release builds, lint and APK policy. Exact APK SHA-256 values
+  and scope are in `2026-09-21-video-local-build-receipt.json`.
+- Direct `repository_guard.py`: exit 0, 288 current files. A history invocation
+  initially used unsupported `--history` (exit 2); the correct flag is `--git-history`.
+- `check_optimized_media.py`: exit 0, non-debuggable `.medialab`, minification and
+  optimization retained; Engine, CallService and NativeVoiceSession are obfuscated.
+  This static check alone does not execute media.
+
+New real executions: incorrect fingerprint rejected by native binding at both ends
+before capture; allocation sockets 2 → 0 after forced process death (147.469 seconds
+observed after recovery, maximum configured lifetime 180 seconds); IPv4 TLS video;
+IPv6 client-to-TURN TLS with IPv4 relay allocation; and synthetic bidirectional
+video/audio over the isolated R8 target. Receipts are in
+`2026-09-21-video-ice-tls-r8-working-tree.json` and the other dated ICE receipts.
+A receive-only endpoint decoded the remote changing pattern while capturing zero
+local frames, including stop/reactivation. Camera2 provider tests passed separately
+in debug and R8, including a second switch racing local lease cancellation. These
+are not Engine-lock tests or physical camera evidence. The real Engine lock,
+revocation, force-stop and media cases remain separate suites.
+
+The negative fingerprint gate permits the counterpart to close following the first
+rejection; it still requires at least one actual native certificate-binding failure
+and zero capture at both endpoints. Watchdog/negotiation timeout never qualifies.
+The prior failing attempts are retained; one successful repetition alone does not
+establish stability. The next CI matrix must pass without retrying failed cases away.
+
+Warnings remain visible: Starlette's TestClient httpx deprecation already documented
+in the voice delivery, and a deprecated Android API in existing location instrumentation.
+No global suppression was added. The fixture dependency migration and physical
+camera/headset/Keystore validation remain separate work.
+
+Cancellation receipts measure local monotonic request, invalidation, last capture
+callback, resource closure and a positive quiet window. They do NOT timestamp the
+last encrypted video datagram independently of audio multiplexed on the same TURN
+transport; do not describe those receipts as that unperformed wire-level measurement.
+No images, PCM, raw SDP, credentials or packet captures are published.

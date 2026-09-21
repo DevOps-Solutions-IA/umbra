@@ -160,3 +160,10 @@ transporte. No hay grabación ni persistencia de imágenes; esto no impide copia
 el receptor. TURN/ISP siguen viendo metadatos. Las pruebas locales sintéticas no
 validan cámaras físicas, Keystore hardware ni todas las familias/transporte de red.
 Ver evidencia de fallos, límites y resultados parciales en la sexta entrega.
+
+La señalización ICE incremental conserva el digest de descripción y la generación;
+no permite cambiar TURN ni la política RELAY. La autorización de captura exige
+relay en ambos candidatos seleccionados y certificado DTLS efectivo autenticado.
+Las pruebas de huella exigen al menos un rechazo nativo por binding y cero captura
+en ambos extremos; la cancelación del otro extremo no se presenta como una segunda
+comprobación de certificado. Timeout o falta de evidencia no cuentan como éxito.

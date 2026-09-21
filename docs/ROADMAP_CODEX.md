@@ -7,8 +7,9 @@ Voz sintética optimizada comprobada localmente; corregida eliminación de JNI Z
 que abortaba inicialización nativa. [Evidencia](validation/2026-09-21-turn-video-core.md).
 Video PARTIAL: consentimiento direccional y renegociación implementados; patrones
 sintéticos remotos + audio comprobados en dos AVD debug/R8 sobre un árbol intermedio.
-Pendientes: aceptación final, negativas completas, Camera2 AVD, TURN/TLS, IPv6,
-cancelación/red, pin nativo nuevo y CI de video. No cerrar por CI de voz anterior.
+Pin `.3`, C++ seleccionado, Camera2 AVD, TURN/TLS e IPv6 hacia TURN cuentan con
+evidencia parcial nueva. Pendientes: aceptación final, negativas completas,
+consentimiento unidireccional nativo y CI del nuevo árbol. No cerrar por CI anterior.
 UI definitiva, hardware y auditoría continúan fuera.
 
 ## Quinta entrega — voz — en curso, 2026-09-21

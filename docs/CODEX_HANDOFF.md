@@ -10,13 +10,17 @@ bidireccional con Engine/Signal/HTTPS/TURN sobre clases UMBRA optimizadas pasó 
 dos AVD. Target `.medialab` separado, no APK productivo exacto ni Keystore hardware.
 C++ TURN: el fallo inicial CI35625739825 se corrigió sin omitir el test upstream
 previamente deshabilitado; CI35630454176 ejecutó 83 casos, incluidos 18 de redirección.
-La restricción nativa de secciones SDP requiere su propio build CI35634570646.
+La restricción nativa de secciones SDP pasó en CI35634570646: cuatro ABI, 83 TURN
+y 12 pruebas seleccionadas del modelo/política SDP. AAR `.3` fijado por hash.
 Video: implementación local de consentimiento direccional, generaciones acotadas,
 captura/render y recorrido de patrones remotos + audio ejecutado en debug y R8.
 Recibos de árbol de trabajo disponibles; NO es aceptación final ni CI del video.
-Quedan negativas completas, proveedor Camera2, red TLS/IPv6, revisión final y nuevo
-pin nativo. Se diagnosticó publicación prematura del SDP al primer candidato;
-la corrección espera ICE gathering COMPLETE sin autorizar un par remoto prflx.
+Camera2 sintética, TLS y trayecto cliente-TURN IPv6 (relay IPv4) ya tienen ejecuciones
+parciales; quedan CI final y matriz completa del nuevo árbol. Esperar gathering
+COMPLETE bloqueó extremos con candidatos válidos: la corrección envía candidatos
+incrementales por Engine/Signal, ligados a descripción/generación. Un par prflx no
+autoriza captura. La caducidad de asignaciones se prueba con 180 segundos: el caso
+anterior de 20 segundos no contemplaba el mínimo que coturn aplica al renovar.
 Conservar TURN obligatorio, plazos, offline y evidencia de fallos. No empezar desde main.
 
 ## Quinta entrega — voz — en curso, 2026-09-21

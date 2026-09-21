@@ -4,10 +4,17 @@ import sys
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from run_voice_integration import valid_audio, valid_report, valid_stop
+from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment
 import voice_network_evidence as network
 
 class VoiceEvidenceTest(unittest.TestCase):
+    def test_netem_equivalent_decimal_format_still_requires_all_bounds(self):
+        good="qdisc netem 8002: root refcnt 2 limit 20 delay 80.0ms loss 2% rate 128Kbit"
+        self.assertTrue(valid_impairment(good))
+        self.assertTrue(valid_impairment(good.replace("80.0ms","80ms")))
+        for before,after in (("80.0ms","800ms"),("limit 20","limit 1000"),("limit 20","limit 200"),("loss 2%","loss 0%"),("128Kbit","1Mbit"),("netem","noqueue")):
+            self.assertFalse(valid_impairment(good.replace(before,after)))
+
     def test_ipv6_link_observation_also_rejects_other_ipv4_paths(self):
         sources=["fec0::10","fec0::20"]
         with patch.object(network,"count",side_effect=[100,0]) as counter:

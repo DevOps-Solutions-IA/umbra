@@ -56,6 +56,8 @@ the disabled customizer regression. The sanitized receipt is in
 model at Android JNI ingress: exactly one audio section, at most one video section,
 no data/unsupported section, at most one stream per section. It does not parse or
 rewrite SDP text. The recipe also compiles `rtc_pc_unittests` and executes the
-focused UMBRA policy + upstream session-model tests. Results of this additional
-patch remain pending until the next source build; the earlier 83-test result does
-not validate it. Java still checks per-generation consent and allowed directions.
+focused UMBRA policy + upstream session-model tests. Run 35634570646 passed all
+four ABI builds, 83 TURN tests and 12 selected media-model/policy tests. The `.3`
+AAR and per-ABI hashes are recorded in android/webrtc-artifact.json and the dated
+video-native-media receipt. This is not the full upstream suite. Java still checks
+per-generation consent and allowed directions.

@@ -42,7 +42,8 @@ Cliente de voz anterior conserva el flujo v1. Una extensión desconocida se rech
 explícitamente por versión/tipo; nunca se interpreta como DESCRIPTION v1 o texto.
 La sección audio sigue siendo única. La extensión permite una sección video
 autorizada; el parche del parser nativo rechaza DATA, secciones repetidas y varias
-pistas por sección antes de aplicar la descripción. Su reconstrucción está pendiente.
+pistas por sección antes de aplicar la descripción. La reconstrucción `.3` y 12
+pruebas C++ seleccionadas pasaron en 35634570646; no equivalen a toda la suite upstream.
 
 ## Adaptador y superficie
 

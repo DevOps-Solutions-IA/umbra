@@ -61,6 +61,14 @@ public final class VoiceEngineFixtureListener extends RunListener {
     private static void auditNativeDescriptions(JSONObject row,String turnUrl,String relayOverride) throws Exception {
         boolean tls=turnUrl.startsWith("turns:");
         String relay=relayOverride.isEmpty()?turnUrl.substring(tls?"turns:".length():"turn:".length(),turnUrl.indexOf(tls?":5349":":3478")):relayOverride;
+        var incremental=row.getJSONArray("ice");
+        for(int i=0;i<incremental.length();i++) {
+            String candidate=incremental.getJSONObject(i).getJSONObject("data").getString("candidate");
+            if(!candidate.contains(" typ relay ") || !candidate.contains(" "+relay+" ") ||
+                (candidate.contains(" raddr ")&&!candidate.contains(" raddr 0.0.0.0 ")) ||
+                (candidate.contains(" rport ")&&!candidate.contains(" rport 0 ")))
+                throw new AssertionError("Incremental native ICE exposed a direct or related address");
+        }
         JSONObject descriptions=row.getJSONObject("descriptions");
         if(descriptions.length()!=2) throw new AssertionError("Missing both authenticated native descriptions");
         for(var keys=descriptions.keys();keys.hasNext();) {
@@ -94,6 +102,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
         boolean caller=configuration.getString("role").equals("A");
         boolean expectedRejection=configuration.optBoolean("expectedRejection");
         boolean withVideo=configuration.optBoolean("video");
+        boolean oneWay=configuration.optBoolean("receiveOnlyCallee");
         var original=HttpsURLConnection.getDefaultSSLSocketFactory();
         var cert=java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(new java.io.ByteArrayInputStream(Bytes.utf8(configuration.getString("certificate"))));
         var trust=java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType()); trust.load(null,null); trust.setCertificateEntry("synthetic-voice",cert);
@@ -177,6 +186,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
             int videoStage=0,videoAudioBaseline=0,videoFrameBaseline=0,videoCaptureBaseline=0;long videoOffAt=0,videoOffRequestedNanos=0;
             boolean videoRequested=false,videoAccepted=false;
             boolean evidence=false,muting=false,mutedEvidence=false,resuming=false,resumedEvidence=false,terminationApplied=false;
+            boolean cameraDeniedChecked=false,cameraDeniedEvidence=false;int cameraDeniedBaseline=0;
             long muteAt=0; int quietBaseline=-1,resumeBaseline=0;
             while(SystemClock.elapsedRealtime()<deadline) {
                 pump(relay,engine);
@@ -185,7 +195,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     if(captured.get()!=0 || decoded.get()!=0 || videoCaptured.get()!=0) throw new AssertionError("Rejected TURN path captured or decoded audio");
                     JSONObject rejected=new JSONObject().put("rejectedBeforeCapture",true);
                     if(configuration.optBoolean("incorrectFingerprint")) {
-                        if(!voice.failureStage().equals("native-certificate-binding"))throw new AssertionError("Wrong-fingerprint test did not reach native certificate binding: "+voice.failureStage());
+                        if(!java.util.Set.of("native-certificate-binding","native-connection-failed","native-connection-disconnected","authorization-cancelled").contains(voice.failureStage()))throw new AssertionError("Wrong-fingerprint test did not reach certificate rejection or native peer closure: "+voice.failureStage()+"; "+voice.negotiationDiagnostic());
                         rejected.put("reason",voice.failureStage());
                     }
                     write("synthetic-voice-audio.json",rejected);
@@ -194,6 +204,18 @@ public final class VoiceEngineFixtureListener extends RunListener {
                 if(withVideo && evidence && voice.state()==NativeVoiceSession.State.FAILED && !terminationApplied)
                     throw new AssertionError("Video path failed: "+voice.failureStage()+", video="+voice.videoStatus());
                 if(expectedRejection && voice.state()==NativeVoiceSession.State.ACTIVE) throw new AssertionError("Invalid TURN unexpectedly connected");
+                if(configuration.optBoolean("cameraDenied") && evidence && !cameraDeniedEvidence) {
+                    if(!cameraDeniedChecked) {
+                        try {voice.video(true,true,false,true);throw new AssertionError("Direct API accepted denied CAMERA permission");}
+                        catch(SecurityException expected) { /* No camera or video request may be created. */ }
+                        if(engine.calls().session(id).has("video") || voice.state()!=NativeVoiceSession.State.ACTIVE)
+                            throw new AssertionError("Camera denial altered the authorized voice session");
+                        cameraDeniedChecked=true;cameraDeniedBaseline=decoded.get();
+                    } else if(decoded.get()-cameraDeniedBaseline>=50) {
+                        write("synthetic-voice-camera-denied.json",new JSONObject().put("deniedWithoutVideoState",true).put("decodedAudioAfterDenial",decoded.get()-cameraDeniedBaseline));
+                        cameraDeniedEvidence=true;
+                    }
+                }
                 if(evidence && !terminationApplied && Files.exists(files.resolve("synthetic-voice-loss.json"))) {
                     String action=read("synthetic-voice-loss.json").optString("action");
                     if(action.equals("trust-loss")) engine.block(peer,true);
@@ -256,19 +278,24 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     if((videoStage==0 && Files.exists(files.resolve("synthetic-voice-video-start.json"))) ||
                         (videoStage==3 && Files.exists(files.resolve("synthetic-voice-video-resume.json")))) {
                         videoStage=videoStage==0?1:4;videoRequested=false;videoAccepted=false;
-                        videoAudioBaseline=decoded.get();videoFrameBaseline=videoDecoded.frames.get();
+                        videoAudioBaseline=decoded.get();videoFrameBaseline=videoDecoded.frames.get();videoCaptureBaseline=videoCaptured.get();
                     }
                     if(videoStage==1 || videoStage==4) {
-                        if(caller && !videoRequested) {voice.video(true,true,false,true);videoRequested=true;}
+                        if(caller && !videoRequested) {voice.video(true,!oneWay,false,true);videoRequested=true;}
                         JSONObject pending=engine.calls().session(id).optJSONObject("video");
                         if(!caller && !videoAccepted && pending!=null && pending.optString("state").equals("REVIEW")) {
                             // Host-invoked synthetic owner action; production never auto-accepts this proposal.
-                            voice.video(true,true,true,true);videoAccepted=true;
+                            voice.video(!oneWay,true,true,true);videoAccepted=true;
                         }
-                        if(videoDecoded.frames.get()-videoFrameBaseline>=20 && videoDecoded.phases.get()==3 && decoded.get()-videoAudioBaseline>=50) {
+                        boolean framesReady=oneWay && caller?
+                            videoCaptured.get()-videoCaptureBaseline>=20 && videoDecoded.frames.get()==0:
+                            videoDecoded.frames.get()-videoFrameBaseline>=20 && videoDecoded.phases.get()==3;
+                        if(oneWay && !caller && videoCaptured.get()!=0)throw new AssertionError("Receive-only consent captured a local frame");
+                        if(framesReady && voice.videoStatus().equals("ACTIVE") && decoded.get()-videoAudioBaseline>=50) {
                             auditNativeDescriptions(engine.calls().session(id),credential.getJSONArray("urls").getString(0),credential.optString("relayAddress"));
                             write("synthetic-voice-video-"+(videoStage==1?"active":"resumed")+".json",new JSONObject()
-                                .put("decodedRemotePatterns",videoDecoded.frames.get()-videoFrameBaseline).put("distinctPatternPhases",2)
+                                .put("decodedRemotePatterns",videoDecoded.frames.get()-videoFrameBaseline).put("distinctPatternPhases",oneWay&&caller?0:2)
+                                .put("sendPermitted",!oneWay||caller).put("receivePermitted",!oneWay||!caller)
                                 .put("decodedAudioDuringVideo",decoded.get()-videoAudioBaseline).put("capturedFrames",videoCaptured.get())
                                 .put("generation",engine.calls().session(id).getInt("generation")).put("videoCodec",new JSONObject(voice.videoStats()).getString("codec")).put("sdpAddressAudit",true));
                             videoStage=videoStage==1?2:5;
@@ -283,13 +310,22 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         long invalidation=voice.videoStopRequestedNanos()-videoOffRequestedNanos;
                         long lastCallback=Math.max(0,voice.videoCaptureLastNanos()-videoOffRequestedNanos);
                         long closure=voice.videoClosedNanos()-videoOffRequestedNanos;
-                        if(invalidation<0 || invalidation>500_000_000L || closure<0 || closure>2_000_000_000L || lastCallback>1_500_000_000L)
+                        if(!(oneWay&&!caller) && (invalidation<0 || invalidation>500_000_000L || closure<0 || closure>2_000_000_000L || lastCallback>1_500_000_000L))
                             throw new AssertionError("Video cancellation missed monotonic request bounds");
-                        write("synthetic-voice-video-stopped.json",new JSONObject().put("captureStopped",true)
+                        if(oneWay&&!caller) {
+                            if(atRest!=0 || voice.videoClosedNanos()!=0)throw new AssertionError("Receive-only endpoint instantiated a camera source");
+                            invalidation=0;lastCallback=0;closure=0;
+                        }
+                        write("synthetic-voice-video-stopped.json",new JSONObject().put("captureStopped",true).put("captureWasAuthorized",!oneWay||caller)
                             .put("requestToInvalidationNanos",invalidation).put("requestToLastCaptureNanos",lastCallback).put("requestToClosedNanos",closure)
                             .put("observedAfterRequestMillis",SystemClock.elapsedRealtime()-videoOffAt)
                             .put("captureCallbacksAfterRequest",atRest-videoCaptureBaseline).put("decodedAudioAfterVideoOff",decoded.get()-videoAudioBaseline));videoStage=3;
                     }
+                }
+                if(!expectedRejection && voice.state()==NativeVoiceSession.State.ACTIVE) {
+                    JSONObject current=engine.calls().session(id);
+                    if(current.getJSONObject("descriptions").length()==2)
+                        auditNativeDescriptions(current,credential.getJSONArray("urls").getString(0),credential.optString("relayAddress"));
                 }
                 if(Files.exists(files.resolve("synthetic-voice-stop.json"))) {
                     voice.close(); pump(relay,engine); break;
