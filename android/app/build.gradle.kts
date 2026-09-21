@@ -85,6 +85,10 @@ android {
     }
     if (providers.gradleProperty("umbraMediaLab").orNull == "true") testBuildType = "mediaLab"
     packaging {
+        // Source-built WebRTC is already stripped (symbol_level=0). Preserve the
+        // exact reviewed four-ABI bytes; APK policy verifies their pinned hashes.
+        // This is specific to WebRTC, not a global symbol-processing exclusion.
+        jniLibs.keepDebugSymbols += "**/libjingle_peerconnection_so.so"
         resources.excludes += setOf("libsignal_jni*.dylib", "signal_jni*.dll", "libsignal_jni*.so")
         // Upstream client-testing APIs are unused; retain production JNI for every ABI.
         jniLibs.excludes += "**/libsignal_jni_testing.so"

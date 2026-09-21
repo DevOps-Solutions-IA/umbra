@@ -92,6 +92,23 @@ Remote frame freshness is independent of transport state: no frame is WAITING_FO
 a last frame older than 3 seconds is STALE. A frozen image is not proof of live video.
 Surfaces clear on stop/close; no application frame archive or thumbnails are created.
 
+## Incremental ICE
+
+The initial native-generated description contains an allocated TURN candidate. Later
+native candidates are sent through existing encrypted ICE controls, bound to the
+current generation, description digest and media mid. An exact candidate already
+present in the native SDP need not be sent twice. No SDP rewrite is performed.
+Waiting for every interface to finish gathering is not required and must not delay
+the peer indefinitely. The native negotiation deadline remains 30 seconds.
+
+A provisional peer-reflexive native classification does not authorize capture.
+Before activation, wait within the same deadline for native recognition of the
+authenticated remote relay candidate; both selected candidates must be relay and
+the effective DTLS certificate must match. Any non-relay pair after activation
+fails closed. This does not enable direct ICE or change the native RELAY policy.
+Delayed callbacks from an earlier generation are discarded; pending candidates and
+controls remain bounded by the native adapter and CallService capacities.
+
 ## Verification boundaries
 
 Synthetic patterns live in androidTestConnected, enter before the encoder, and are

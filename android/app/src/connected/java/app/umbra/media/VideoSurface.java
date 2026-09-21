@@ -24,8 +24,8 @@ final class VideoSurface {
             .setView(layout).setPositiveButton("Cerrar vista",null).create();
         Runnable refresh=new Runnable() {
             public void run() {
-                status.setText(session.videoStatus());
-                if(session.videoStatus().equals("OFF") || session.state()!=NativeVoiceSession.State.ACTIVE)view.clearImage();
+                String current=session.videoStatus();status.setText(current);
+                if((!current.equals("ACTIVE") && !current.equals("STALE")) || session.state()!=NativeVoiceSession.State.ACTIVE)view.clearImage();
                 if(dialog.isShowing())status.postDelayed(this,500);
             }
         };

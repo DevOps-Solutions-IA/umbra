@@ -560,6 +560,9 @@ public final class CallService {
         public void description(int generation,String role,String sdp,String fingerprint) throws Exception {
             snapshot(); CallService.this.description(id,generation,role,sdp,fingerprint);
         }
+        public void ice(int generation,String description,String mid,String candidate) throws Exception {
+            snapshot(); CallService.this.ice(id,generation,description,mid,candidate);
+        }
         public void verifyRemote(int generation,String digest,String certificateFingerprint) throws Exception {
             snapshot(); verifyRemoteBinding(id,generation,digest,certificateFingerprint);
         }

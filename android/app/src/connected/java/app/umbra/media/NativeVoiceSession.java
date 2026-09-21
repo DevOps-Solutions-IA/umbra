@@ -44,6 +44,9 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         try {
             checkVideoCapture();
             if(this.cancelled.get() || videoStopped) return;
+            int width=frame.getBuffer().getWidth(),height=frame.getBuffer().getHeight();
+            if(width<1 || height<1 || width>320 || height>320 || (long)width*height>320L*240)
+                throw new SecurityException("Decoded video exceeds the consented initial profile");
             lastVideoFrameNanos=android.os.SystemClock.elapsedRealtimeNanos();decodedVideoFrames++;
             VideoSink sink=remoteSink;if(sink!=null)sink.onFrame(frame);
         } catch(Exception invalid) { stopVideoLocally(); }
@@ -53,6 +56,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     private final AtomicBoolean cancelled=new AtomicBoolean(), disposed=new AtomicBoolean();
     private volatile State state=State.NEGOTIATING;
     private volatile String failureStage="none";
+    private volatile String statsDiagnostic="not-received";
     private volatile String negotiationDiagnostic="initializing",pairDiagnostic="unobserved";
     private volatile long receivedAudioPackets;
     private volatile String audioCodec="",videoStats="{}",nativeRelayProtocol="";
@@ -65,6 +69,10 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     private VoiceAudioRoute route;
     private String self,peer,localFingerprint,remoteDigest;
     private int generation;
+    private volatile int localDescriptionGeneration;
+    private record PendingIce(int generation,IceCandidate candidate) {}
+    private final ArrayDeque<PendingIce> pendingLocalIce=new ArrayDeque<>();
+    private String publishedLocalSdp="",publishedLocalDigest="";
     private boolean caller,creating,localReady,localSent,remoteApplied,checkingStats;
     private int receivedIce;
     private volatile int candidates;
@@ -151,7 +159,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
                         throw new SecurityException("Native media deadline expired");
                     if(requireMicrophone&&context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)!=PackageManager.PERMISSION_GRANTED)
                         throw new SecurityException("Microphone permission revoked");
-                } catch(RuntimeException invalid) { cancelLocally(); }
+                } catch(RuntimeException invalid) { if(failureStage.equals("none"))failureStage="local-watchdog";cancelLocally(); }
             },0,100,TimeUnit.MILLISECONDS);
         } } catch(Exception failure) { invalidate(); dispose(); throw failure; }
     }
@@ -164,7 +172,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     }
     public State state() { return state; }
     public String failureStage() { return failureStage; }
-    public String negotiationDiagnostic() { return negotiationDiagnostic+", pair="+pairDiagnostic; }
+    public String negotiationDiagnostic() { return negotiationDiagnostic+", pair="+pairDiagnostic+", stats="+statsDiagnostic; }
     public long receivedAudioPackets() { return receivedAudioPackets; }
     public String audioCodec() { return audioCodec; }
     public String videoStats() { return videoStats; }
@@ -220,14 +228,24 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
                 Callback callback=new Callback(true,null);
                 if(caller) pc.createOffer(callback,new MediaConstraints()); else pc.createAnswer(callback,new MediaConstraints());
             }
-            // This adapter publishes a complete authenticated SDP, not trickle
-            // ICE. Publishing the first candidate loses later allocations and
-            // leaves a selected remote endpoint classified as peer-reflexive.
-            if(localReady && !localSent && candidates>0 && pc.iceGatheringState()==PeerConnection.IceGatheringState.COMPLETE) {
+            // Publish an initial TURN candidate, then deliver every later native
+            // candidate through the existing authenticated ICE control. Waiting
+            // for all interfaces to finish can starve a valid relay connection.
+            if(localReady && !localSent && candidates>0) {
                 check();
                 String sdp=pc.getLocalDescription().description;
                 descriptionPublisher.publish(generation,caller?"offer":"answer",sdp,localFingerprint);
+                publishedLocalSdp=sdp;publishedLocalDigest=Bytes.sha256(Bytes.utf8(sdp));
                 localSent=true;
+            }
+            if(localSent) while(!pendingLocalIce.isEmpty()) {
+                PendingIce item=pendingLocalIce.removeFirst();
+                if(item.generation()!=generation)continue;
+                IceCandidate candidate=item.candidate();
+                // Exact comparison against native-generated SDP, not a parser
+                // or a rewrite. Already-announced candidates need no new control.
+                if(publishedLocalSdp.contains("a="+candidate.sdp+"\r\n"))continue;
+                check();authorization.ice(generation,publishedLocalDigest,candidate.sdpMid,candidate.sdp);
             }
             if(remoteApplied) {
                 var ice=row.getJSONArray("ice");
@@ -256,6 +274,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         String bindingStage="native-authorization";
         try {
             check(); var stats=report.getStatsMap(); boolean validated=false;
+            statsDiagnostic="received:"+stats.size();
             for(var stat:stats.values()) if(stat.getType().equals("inbound-rtp") && "audio".equals(stat.getMembers().get("kind"))) {
                 Object packets=stat.getMembers().get("packetsReceived");
                 if(packets instanceof Number number) receivedAudioPackets=number.longValue();
@@ -273,11 +292,11 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
             videoStats=videoCounters.toString();
             for(var stat:stats.values()) if(stat.getType().equals("transport") && "connected".equals(stat.getMembers().get("dtlsState"))) {
                 var pair=stats.get(stat.getMembers().get("selectedCandidatePairId"));
-                if(pair==null) continue;
+                if(pair==null) {statsDiagnostic="dtls-connected-pair-missing";continue;}
                 var local=stats.get(pair.getMembers().get("localCandidateId"));
                 var remote=stats.get(pair.getMembers().get("remoteCandidateId"));
                 var cert=stats.get(stat.getMembers().get("remoteCertificateId"));
-                if(local==null || remote==null || cert==null) continue;
+                if(local==null || remote==null || cert==null) {statsDiagnostic="dtls-connected-local="+(local!=null)+"-remote="+(remote!=null)+"-certificate="+(cert!=null);continue;}
                 bindingStage="native-relay-pair";
                 for(var entry:List.of(local,remote)) {
                     String type=String.valueOf(entry.getMembers().get("candidateType"));
@@ -328,7 +347,11 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
             }
             bindingStage="native-video-activation";
             if(validated && !videoChange.isEmpty() && !videoStopped && localSent && remoteApplied) activateVideo();
-        } catch(Exception invalid) { failureStage=bindingStage.equals("native-video-activation")?videoFailureStage:bindingStage; fail(); }
+        } catch(Exception invalid) {
+            failureStage=bindingStage.equals("native-video-activation")?videoFailureStage:bindingStage;
+            if(bindingStage.equals("native-video-activation") && Set.of("video-capture-initialize","video-capture-start").contains(videoFailureStage)) cameraFailed();
+            else fail();
+        }
     }
     public String videoStatus() {
         if(videoStopped) return videoStatus;
@@ -378,6 +401,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         videoStopped=false;videoStatus="NEGOTIATING";lastVideoFrameNanos=0;
         videoNegotiationDeadline=Math.min(sessionDeadline,android.os.SystemClock.elapsedRealtime()+15_000);
         localReady=false;localSent=false;remoteApplied=false;receivedIce=0;remoteDigest=null;
+        pendingLocalIce.clear();publishedLocalSdp="";publishedLocalDigest="";
         if(caller) {
             if(mediaTransceivers.size()==1) {
                 pc.addTransceiver(MediaStreamTrack.MediaType.MEDIA_TYPE_VIDEO,new RtpTransceiver.RtpTransceiverInit(videoDirection()));
@@ -412,12 +436,13 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
             remoteVideo=video;remoteVideo.addSink(videoSink);
         }
         if(videoSend && videoCapture==null) {
-            VideoCapturer capturer=syntheticVideo==null?NativeVideoCapture.camera(context,frontCamera,this::stopVideoLocally):syntheticVideo.get();
             videoFailureStage="video-capture-initialize";
             String captureChange=videoChange;
+            Runnable captureFailure=()->{if(captureChange.equals(videoChange))cameraFailed();};
+            VideoCapturer capturer=syntheticVideo==null?NativeVideoCapture.camera(context,frontCamera,captureFailure):syntheticVideo.get();
             NativeVideoCapture capture=new NativeVideoCapture(context,factory,capturer,()->{
                 checkVideoCapture();if(!captureChange.equals(videoChange))throw new SecurityException("Stale camera callback");
-            },this::stopVideoLocally);
+            },captureFailure);
             videoCapture=capture;lastVideoCapture=capture;checkVideo();
             videoFailureStage="video-attach-track";
             if(!transceivers.get(1).getSender().setTrack(capture.track,false)) throw new SecurityException("Native video track rejected");
@@ -447,6 +472,10 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
                 if(current!=null && stoppedChange.equals(current.getString("change")) && current.getString("state").equals("CONFIRMED")) authorization.stopVideo();
             } catch(Exception invalid) { if(!cancelled.get())fail(); }
         });
+    }
+    private void cameraFailed() {
+        if(videoStopped)return;
+        stopVideoLocally();videoStatus="CAMERA_UNAVAILABLE";
     }
     private void refreshTransceivers() {
         // This pinned Java API DISPOSES previous wrappers on every getTransceivers.
@@ -485,7 +514,10 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
                 try {watchdog.execute(()->release(capture::close));}catch(RejectedExecutionException stopped){release(capture::close);}
             }
             remoteSink=null;
-            if(state!=State.ENDED) state=State.FAILED;
+            if(state!=State.ENDED) {
+                if(failureStage.equals("none"))failureStage="authorization-cancelled";
+                state=State.FAILED;
+            }
             adm.setMicrophoneMute(true); adm.setSpeakerMute(true); adm.setAudioRecordEnabled(false);
             // Volatile ADM flags stop hardware capture independently of a stalled database worker.
         }
@@ -496,6 +528,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     }
     public void cancelLocally() { authorization.close(); invalidate(); }
     private void fail() {
+        if(failureStage.equals("none"))failureStage="native-operation-failed";
         state=State.FAILED; authorization.close(); invalidate();
     }
     @Override public void close() {
@@ -521,7 +554,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         private final boolean create; private final Runnable applied; private final int expectedGeneration=generation;
         Callback(boolean create,Runnable applied) { this.create=create;this.applied=applied; }
         public void onCreateSuccess(SessionDescription description) { post(()->{
-            try { check(); if(expectedGeneration!=generation) throw new SecurityException("Stale SDP callback"); if(!create) throw new IllegalStateException(); pc.setLocalDescription(new Callback(false,()->{localReady=true;creating=false;}),description); }
+            try { check(); if(expectedGeneration!=generation) throw new SecurityException("Stale SDP callback"); if(!create) throw new IllegalStateException(); localDescriptionGeneration=expectedGeneration;pc.setLocalDescription(new Callback(false,()->{localReady=true;creating=false;}),description); }
             catch(Exception invalid) { fail(); }
         }); }
         public void onSetSuccess() { post(()->{ try { check(); if(expectedGeneration!=generation) throw new SecurityException("Stale SDP callback"); if(applied!=null) applied.run(); } catch(Exception invalid) { fail(); } }); }
@@ -531,14 +564,20 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     public void onSignalingChange(PeerConnection.SignalingState ignored) {}
     public void onIceConnectionChange(PeerConnection.IceConnectionState ignored) {}
     public void onConnectionChange(PeerConnection.PeerConnectionState connection) { post(()->{
-        if(connection==PeerConnection.PeerConnectionState.FAILED) fail();
+        if(connection==PeerConnection.PeerConnectionState.FAILED) { failureStage="native-connection-failed";fail(); }
         else if(connection==PeerConnection.PeerConnectionState.DISCONNECTED) {
-            fail(); // New explicit consent/session is required; no automatic ICE/P2P fallback.
+            failureStage="native-connection-disconnected";fail(); // New explicit consent/session is required; no automatic ICE/P2P fallback.
         } else if(connection==PeerConnection.PeerConnectionState.CONNECTED) disconnectedAt=0;
     }); }
     public void onIceConnectionReceivingChange(boolean ignored) {}
     public void onIceGatheringChange(PeerConnection.IceGatheringState ignored) {}
-    public void onIceCandidate(IceCandidate candidate) { candidates++; }
+    public void onIceCandidate(IceCandidate candidate) {
+        if(++candidates>128 || candidate.sdpMid==null || candidate.sdpMid.length()>32 || candidate.sdp==null || candidate.sdp.length()>2048) {
+            failureStage="native-candidate-limit";cancelLocally();return;
+        }
+        int expected=localDescriptionGeneration;
+        post(()->{if(expected==generation)pendingLocalIce.addLast(new PendingIce(expected,candidate));});
+    }
     public void onIceCandidatesRemoved(IceCandidate[] ignored) {}
     public void onAddStream(MediaStream ignored) {}
     public void onRemoveStream(MediaStream ignored) {}

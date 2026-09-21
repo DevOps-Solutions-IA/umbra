@@ -7,6 +7,19 @@ import static org.junit.Assert.*;
 /** Real Engine/Signal authorization; not a native media transport test. */
 public final class ConnectedMediaAuthorizationTest {
     private static final String REVISION="a".repeat(64);
+    @Test public void incrementalIceRequiresCurrentDescriptionGenerationAndLease() throws Exception {
+        var p=new ConnectedCallTest.Pair();String id=p.selected();
+        var media=p.ae.calls().prepareMedia(p.ae.calls().reviewMedia(id,REVISION),true);
+        String sdp="synthetic bounded description, not native SDP",digest=app.umbra.core.Bytes.sha256(app.umbra.core.Bytes.utf8(sdp));
+        String candidate="candidate:synthetic 1 udp 1 192.0.2.10 49160 typ relay";
+        assertThrows(SecurityException.class,()->media.ice(1,digest,"0",candidate));
+        media.description(1,"offer",sdp,"b".repeat(64));
+        media.ice(1,digest,"0",candidate);ConnectedCallTest.deliver(p.ae,p.be);
+        assertEquals(1,p.be.calls().session(id).getJSONArray("ice").length());
+        assertThrows(SecurityException.class,()->media.ice(2,digest,"0",candidate));
+        assertThrows(SecurityException.class,()->media.ice(1,"c".repeat(64),"0",candidate));
+        media.close();assertThrows(SecurityException.class,()->media.ice(1,digest,"0",candidate));
+    }
     @Test public void productionRequiresReviewedNativeArtifactAndCurrentConsent() throws Exception {
         var p=new ConnectedCallTest.Pair();String id=p.selected();
         var media=p.ae.calls().prepareMedia(p.ae.calls().reviewMedia(id,REVISION),true);
