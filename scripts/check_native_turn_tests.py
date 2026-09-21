@@ -17,6 +17,7 @@ def validate(path: Path) -> int:
                        'LoopbackUdpIpv4', 'LoopbackUdpIpv6', 'LoopbackTcpIpv4',
                        'LoopbackTcpIpv6', 'LoopbackTlsIpv4', 'LoopbackTlsIpv6')
     }
+    required.add(('TurnPortTest', 'DISABLED_TestTurnCustomizerAddAttribute'))
     if not cases or not required <= names or len(names) != len(cases):
         raise ValueError('Missing or duplicate TURN regression results')
     if int(root.get('tests', '0')) != len(cases):

@@ -10,7 +10,7 @@ from check_native_turn_tests import validate
 
 class NativeTurnEvidenceTest(unittest.TestCase):
     def report(self):
-        root = ET.Element('testsuites', tests='18', failures='0')
+        root = ET.Element('testsuites', tests='19', failures='0')
         suite = ET.SubElement(root, 'testsuite', name='TurnPortTest')
         suffixes = ['UDP', 'TCP', 'TLS', 'V4toV6UDP', 'V4toV6TCP', 'V4toV6TLS',
                     'PingPongUDP', 'PingPongTCP', 'PingPongTLS',
@@ -21,6 +21,9 @@ class NativeTurnEvidenceTest(unittest.TestCase):
             ET.SubElement(suite, 'testcase', classname='TurnPortTest',
                           name='TestTurnAlternateServer' + suffix,
                           status='run', result='completed')
+        ET.SubElement(suite, 'testcase', classname='TurnPortTest',
+                      name='DISABLED_TestTurnCustomizerAddAttribute',
+                      status='run', result='completed')
         return root
 
     def check(self, root):
@@ -30,10 +33,10 @@ class NativeTurnEvidenceTest(unittest.TestCase):
             return validate(path)
 
     def test_executed_results(self):
-        self.assertEqual(18, self.check(self.report()))
+        self.assertEqual(19, self.check(self.report()))
 
     def test_empty_missing_duplicate_or_inconsistent_results(self):
-        for change in ('empty', 'missing', 'duplicate', 'count'):
+        for change in ('empty', 'missing', 'customizer', 'duplicate', 'count'):
             with self.subTest(change=change):
                 root = self.report()
                 suite = root.find('testsuite')
@@ -41,10 +44,13 @@ class NativeTurnEvidenceTest(unittest.TestCase):
                     root.clear()
                 elif change == 'missing':
                     suite.remove(suite[0])
+                elif change == 'customizer':
+                    suite.remove(suite[-1])
+                    root.set('tests', '18')
                 elif change == 'duplicate':
                     suite.append(ET.fromstring(ET.tostring(suite[0])))
                 else:
-                    root.set('tests', '19')
+                    root.set('tests', '20')
                 with self.assertRaises(ValueError):
                     self.check(root)
 

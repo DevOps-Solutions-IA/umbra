@@ -10,6 +10,7 @@ cd "$source_root"
 # The binary under test must contain both reviewed patches, not clean upstream.
 git apply --reverse --check "$repo/native/webrtc/reject-turn-redirect.patch"
 git apply --reverse --check "$repo/native/webrtc/java-generics.patch"
+git apply --reverse --check "$repo/native/webrtc/customize-before-integrity.patch"
 export DEPOT_TOOLS_UPDATE=0 DEPOT_TOOLS_COLLECT_METRICS=0
 export VPYTHON_BYPASS='manually managed python not supported by chrome operations'
 report="$repo/native-test-output"

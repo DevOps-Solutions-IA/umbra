@@ -142,3 +142,21 @@ retenidas mediante TraceReferences (cuerpos/nombres optimizables), entradas Kotl
 del runner y almacenamiento/PCM en APK de instrumentación separado. No micrófono,
 Keystore hardware o video probados. Los resultados pertenecen al árbol de trabajo
 posterior a e67762f; el commit publicado y CI final se deben registrar aparte.
+
+## Native failure and corrective rebuild (in progress)
+
+Run `35625739825` compiled all four Android ABI targets and the Linux x64
+`rtc_p2p_unittests` target (2303 build steps). The actual TURN suite aborted in
+`TurnPortTest.DISABLED_TestTurnCustomizerAddAttribute`: `StunMessage::AddAttribute`
+rejected modification after signing. This is an upstream-disabled test with an
+explicit integrity TODO at the pinned source revision. The suite is **FAILED**,
+not passed; its XML was not completed. Logs are retained in the native test
+artifact. No complete upstream test suite has been executed.
+
+The follow-up recipe adds `customize-before-integrity.patch`: authenticated TURN
+requests invoke the customizer after adding credentials but before calculating
+MESSAGE-INTEGRITY; unauthenticated requests still invoke it once. Allocation,
+refresh, permission and channel binding share this rule. Integrity validation and
+the original disabled regression assertions are unchanged. The full TURN test
+selection still includes disabled tests. Rebuild/test results and adoption into
+the Android pin remain pending; the application still uses the previous AAR.
