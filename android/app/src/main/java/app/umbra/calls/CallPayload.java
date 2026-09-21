@@ -36,6 +36,10 @@ public final class CallPayload {
         String selected=Wire.string(p,"selected",64); if(!selected.isEmpty()) Wire.identity(selected);
         policy(Wire.string(p,"policy",16));
         long gen=Wire.integer(p,"generation"); if(gen<0 || gen>4) throw new SecurityException("Invalid negotiation generation");
+        if(Set.of("INVITE","ACCEPT","REJECT","BUSY","CANCEL").contains(type) && (gen!=0 || !selected.isEmpty()))
+            throw new SecurityException("Unexpected preselection context");
+        if(type.equals("SELECT") && (gen!=0 || selected.isEmpty())) throw new SecurityException("Invalid selection context");
+        if(type.equals("END") && selected.isEmpty()) throw new SecurityException("End requires selected device");
         if(!(p.get("context") instanceof JSONObject c) || !(p.get("data") instanceof JSONObject data)) throw new SecurityException("Invalid call objects");
         Wire.fields(c,"callId","caller","callerDevice","callee","targets","callerVersion","calleeVersion","created","inviteUntil","ends");
         Wire.uuid(Wire.string(c,"callId",36));
