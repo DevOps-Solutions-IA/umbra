@@ -105,3 +105,17 @@ pendiente. Sin SDP/ICE/callId en claro en relay, pero persisten metadatos de buz
 IP, tiempos y tamaños. TURN no ofrece anonimato frente al operador. Sin secretos
 TURN en APK ni claves multimedia derivadas/exportadas del ratchet. Offline rechaza
 llamadas y conserva chat/ubicación/RFCOMM. No nuevos permisos micrófono/cámara/red.
+
+## Voz nativa — quinta entrega en curso
+
+Connected incorpora WebRTC fijado y TURN obligatorio antes de crear PeerConnection.
+Consentimiento de media ligado a CallService/selección/lease; DTLS-SRTP y comparación
+del certificado remoto efectivo con huella autenticada por Signal antes de habilitar
+pistas. Bloquear/cancelar invalida captura; no recuperación automática ni llamadas
+prolongadas en segundo plano. Fallar conectividad no activa P2P. Offline no incorpora
+WebRTC, RECORD_AUDIO ni MODIFY_AUDIO_SETTINGS. No hay cámara.
+
+La evidencia de audio es sintética en AVD con SQLite de laboratorio, no micrófonos ni
+Keystore hardware. El operador TURN sigue viendo direcciones/tiempos/volumen. Pruebas
+adversariales completas de red, IPv6, revocación durante audio y release necesitan sus
+resultados específicos; ver [informe](validation/2026-09-21-turn-voice-core.md).

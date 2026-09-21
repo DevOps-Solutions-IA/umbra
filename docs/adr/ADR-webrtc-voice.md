@@ -1,6 +1,6 @@
 # ADR — WebRTC Android y voz privada 1:1
 
-Fecha: 2026-09-21. Estado: EN IMPLEMENTACIÓN; no acredita todavía audio ni TURN.
+Fecha: 2026-09-21. Estado: EN IMPLEMENTACIÓN; audio sintético integrado ejecutado, aceptación completa pendiente.
 Base: PR #7, `e495793ba191cce0523db243ab7baac55389ef64`. No sustituir Signal ni
 crear otra política de identidad. CALL_SIGNALING conserva consentimiento, selección,
 versiones de roster, invitación de 60 s y sesión de 180 s. Video queda fuera.
@@ -69,6 +69,63 @@ no se retiran al revocar. Captura y canal se detienen al bloquear/pausar; no rea
 tras reinicio, permisos o force-stop. Micrófono/cámara reales y tráfico ajeno prohibidos
 en pruebas automáticas. Offline no incorpora dependencia ni permiso de micrófono.
 
-Pendiente: coturn fijado/aislado, proveedor temporal ejecutado, integración Engine,
-consentimiento Android, pipeline bidireccional, red sin fallback, IPv6 según entorno,
-release ejecutado y revisión independiente. No declarar este ADR entrega funcional.
+## Integración implementada en este bloque
+
+`NativeVoiceSession` reside solo en connected. `CallService.reviewMedia/prepareMedia`
+entrega un lease de consentimiento de un uso (revisión <=30 s, sesión desbloqueada,
+selección y contexto exactos). El método antiguo sin consentimiento sigue rechazando.
+El lease se invalida con lock, END, cancelación y pérdida de autorización. El adaptador
+revalida a intervalos de 100 ms y antes de aplicar negociación. No persiste autorización
+multimedia ni reinicia llamadas. Persistencia de señalización/outbox/ratchet sigue en Engine.
+
+Cada extremo crea un certificado ECDSA efímero nativo. El SDP producido y parseado por
+WebRTC viaja por Signal; el digest de descripción y huella SHA-256 están autenticados.
+Antes de crear la pista y habilitar grabación/reproducción se obtiene `RTCStats` del
+transporte DTLS conectado, su certificado remoto y par relay/relay, y se contrasta con
+`MediaLease.verifyRemote`. El motor WebRTC valida DTLS contra la descripción remota;
+la comprobación de estadísticas añade el enlace al contexto UMBRA. No se exportan claves.
+ACTIVE local acredita ese canal autenticado, no audio humano: el test analiza PCM aparte.
+
+Cancelación y activación/unmute comparten una barrera local sin transacción de base de
+datos: un callback tardío no puede deshacer el mute. Cleanup nativo y END son posteriores;
+fallar END no mantiene captura. Desconexión falla cerrado; todavía no se implementa una
+reconexión automática ni ICE restart de voz. Una generación nueva requiere otra sesión y
+consentimiento; no ampliar los 180 s. La revocación remota solo puede aplicarse al conocerse.
+
+Ruta Android productiva: ADM AudioRecord/AudioTrack, permiso RECORD_AUDIO connected,
+MODIFY_AUDIO_SETTINGS, foco transitorio de comunicación y `setCommunicationDevice`
+(API31+, [AudioManager](https://developer.android.com/reference/android/media/AudioManager),
+[restricción de foco target35+](https://developer.android.com/media/optimize/audio-focus)).
+Perder foco/salida detiene. Controles mínimos locales para TURN temporal, consentimiento,
+mute y salida; no directorio TURN remoto ni credencial permanente. Pedir permiso no inicia
+media y una pausa mantiene el bloqueo existente. Sin servicio oculto o background exception.
+
+Coturn 4.18.0-r0 está fijado por digest en `scripts/turn_lab.py` y Dockerfile. Red Docker
+interna, sin puertos publicados, nobody, sin capabilities, solo peers de sus propias
+asignaciones; cuotas, intervalo de puertos y duración acotados. REST HMAC-SHA1 estándar
+proporciona credenciales efímeras de prueba; secreto maestro solo en temporal 0700 del
+host y archivo del contenedor, nunca en APK/logs. UDP hacia TURN en este laboratorio;
+DTLS-SRTP sigue cifrando media extremo a extremo. TURN TLS no está probado aquí.
+
+El fixture de integración usa dos AVD independientes, SQLite de laboratorio, identidades
+sintéticas, libsignal y relay HTTPS real. Se desactiva AudioRecord físico antes de crear
+la factoría, se inyectan tonos PCM de 1/2 kHz a ritmo real y se detecta energía espectral
+en PCM decodificado Opus. Generadores, CA y configuración se encuentran en androidTest,
+fuera de release. No equiparar SQLite de laboratorio con Keystore hardware.
+
+Pendiente: batería adversarial de media completa, observación de red y ausencia de
+fallback bajo fallos, IPv6, ruta acústica física, recorrido R8 de voz y revisión independiente.
+Consultar evidencia fechada; no declarar terminada la quinta entrega por este ADR.
+
+## Observación de red del laboratorio
+
+En Emulator37, la captura de consola antigua no observa la ruta Wi-Fi de netsim:
+una captura sin paquetes TURN se rechaza, no acredita ausencia de fuga. Se usa
+`-netsim-args --pcap`, con `ANDROID_TMP` privado bajo RUNNER_TEMP y borrado en el trap
+propietario. [Documentación oficial de captura por radio](https://developer.android.com/studio/run/emulator-networking-advanced).
+`tcpdump`/libpcap analiza el pcap Wi-Fi de cada AVD durante la ventana de la prueba;
+solo se guardan contadores sanitizados. Se exige tráfico TURN positivo, ningún STUN
+UDP fuera de TURN ni otro UDP ajeno al tráfico de sistema explícito (DNS, DHCP, NTP,
+mDNS, LLMNR). Los dos AVD deben responder ping entre sí antes del escenario para
+comprobar disponibilidad de una ruta directa IPv4. Esto no acredita IPv6 ni TCP media.
+PCAPs de ejecución anteriores y fallos nunca se suben como artefactos públicos.

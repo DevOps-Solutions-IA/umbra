@@ -49,6 +49,7 @@ public final class MainActivity extends Activity {
     private final AccessGate gate = new AccessGate();
     private volatile RelayClient activeRelay;
     private final Set<Dialog> dialogs = new HashSet<>();
+    private final app.umbra.media.VoiceControls voiceControls=new app.umbra.media.VoiceControls();
     private boolean networkStateLoaded;
     private PendingResult pendingResult;
     private String pendingExportKey;
@@ -512,7 +513,10 @@ public final class MainActivity extends Activity {
             if(session!=null) action(() -> { engine.locations().stop(session); return true; },ok -> { locationStatus="Ubicación detenida"; refresh(); syncNow(); });
             else { engine.locations().cancelLocal(); action(() -> { engine.expire(); return true; },ok -> { locationStatus="Entregas de ubicación canceladas"; refresh(); }); }
         },false);
-        if(BuildConfig.ALLOW_RELAY) button(page,"Señalización 1:1 (sin audio)…",this::callControls,false);
+        if(BuildConfig.ALLOW_RELAY) {
+            button(page,"Llamada 1:1…",this::callControls,false);
+            if(voiceControls.hasSession()) button(page,"Voz: "+voiceControls.status()+" · detener",() -> {voiceControls.close();refresh();},false);
+        }
         // The composer remains below the scrollable history, without fake send or call buttons.
         LinearLayout composer = row(); composer.setGravity(Gravity.CENTER_VERTICAL); root.addView(composer);
         TextView attach = text("+", 29, MINT); attach.setPadding(dp(5), dp(8), dp(12), dp(8)); composer.addView(attach);
@@ -744,6 +748,7 @@ public final class MainActivity extends Activity {
     @Override public void onBackPressed() { back(); }
     private void back() { if (peerDetails != null) { peerDetails = null; render(); } else if (chat != null) { chat = null; refresh(); } else { lock(); moveTaskToBack(true); } }
     private void stopLocationLocally() {
+        voiceControls.close();
         var capture=locationCapture; locationCapture=null; if(capture!=null) capture.close();
         if(engine!=null) { engine.locations().cancelLocal(); engine.calls().cancelLocal(); }
         locationStatus="Ubicación interrumpida; requiere nueva autorización";
@@ -751,25 +756,25 @@ public final class MainActivity extends Activity {
     private void callControls() {
         if(!BuildConfig.ALLOW_RELAY || !unlocked || chat==null) return;
         String peer=chat;
-        new AlertDialog.Builder(this).setTitle("Señalización; audio/video no implementados")
-            .setItems(new String[]{"Invitar (solo TURN en multimedia futura)","Revisar invitaciones / terminar"},(dialog,which) -> {
+        new SecureDialogBuilder().setTitle("Llamada 1:1 — TURN obligatorio")
+            .setItems(new String[]{"Invitar (audio requiere consentimiento separado)","Revisar invitaciones / terminar"},(dialog,which) -> {
                 if(which==0) action(() -> {
                     JSONObject index=engine.get("device-index",peer);
                     if(index==null) throw new SecurityException("Apruebe primero el conjunto de dispositivos");
                     return engine.calls().reviewInvite(index.getString("root"),app.umbra.calls.CallPayload.NetworkPolicy.RELAY_ONLY);
-                },consent -> confirm("Invitar a señalización", "Sin micrófono ni cámara. Destinatario: "+peer+". Requiere TURN autorizado para multimedia futura.",
+                },consent -> confirm("Invitar a señalización", "Sin micrófono ni cámara. Destinatario: "+peer+". El audio requiere TURN autorizado y consentimiento separado.",
                     () -> action(() -> engine.calls().invite(consent,true),id -> { syncNow(); refresh(); })));
                 else action(() -> engine.calls().sessions(),sessions -> {
                     for(JSONObject session:sessions) {
                         String id=session.optJSONObject("context").optString("callId"),state=session.optString("state");
                         if(app.umbra.calls.CallPayload.TERMINAL.contains(state)) continue;
-                        new AlertDialog.Builder(this).setTitle("Señalización: "+state)
-                            .setMessage("Sesión "+id+". No hay canal de audio/video.")
+                        new SecureDialogBuilder().setTitle("Llamada: "+state)
+                            .setMessage("Sesión "+id+". Aceptar no activa el micrófono; autoriza voz después de confirmar la selección.")
                             .setPositiveButton("Aceptar",(d,w) -> action(() -> engine.calls().reviewAccept(id,app.umbra.calls.CallPayload.NetworkPolicy.RELAY_ONLY),
                                 consent -> confirm("Aceptar señalización", "Confirmar al interlocutor verificado: "+session.optJSONObject("context").optString("caller"),
                                     () -> action(() -> { engine.calls().accept(consent,true); return true; },ok -> {syncNow();refresh();}))))
                             .setNegativeButton("Rechazar / terminar",(d,w) -> { engine.calls().cancelPending(id); action(() -> {engine.calls().end(id);return true;},ok -> {syncNow();refresh();}); })
-                            .setNeutralButton("Cerrar",null).show();
+                            .setNeutralButton("Voz / controles",(d,w) -> voiceControls.show(this,engine,id,worker,voiceDialog -> { dialogs.add(voiceDialog); voiceDialog.setOnDismissListener(ignored -> dialogs.remove(voiceDialog)); },this::refresh)).show();
                     }
                 });
             }).show();

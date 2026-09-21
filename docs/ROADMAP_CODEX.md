@@ -4,9 +4,10 @@
 
 PARTIAL — rama `codex/turn-voice-core`, base #7 abierta `e495793`.
 [Estado y comandos ejecutados](validation/2026-09-21-turn-voice-core.md).
-Distribución WebRTC/guardas/configuración RELAY verificadas; no declarar una llamada
-ni habilitar media hasta completar integración Engine y prueba audiovisual requerida.
-TURN y audio de laboratorio, CI final, red y release requieren evidencia propia.
+Distribución WebRTC/guardas/configuración RELAY verificadas. Dos AVD han ejecutado
+Engine/SQLite/libsignal/HTTPS y Opus sintético bidireccional por coturn real. Adaptador
+connected y controles mínimos integrados; no conversación humana ni hardware validado.
+CI final, rechazo multimedia completo, red, IPv6 y recorrido release siguen pendientes.
 No se modifica señalización anterior ni se reducen Keystore/permisos offline.
 
 
