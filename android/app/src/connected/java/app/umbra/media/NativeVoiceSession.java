@@ -276,8 +276,9 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         release(()->{if(track!=null) track.dispose();}); release(()->{if(source!=null) source.dispose();});
         release(()->{if(factory!=null) factory.dispose();}); release(adm::release);
         release(()->{if(route!=null) route.close();}); release(turn::close);
-        try { authorization.end(); } catch(Exception unavailable) { endDeliveryFailed=true; }
         watchdog.shutdown();worker.shutdown();
+        // An unavailable store must not keep the watchdog alive after native cleanup.
+        try { authorization.end(); } catch(Exception unavailable) { endDeliveryFailed=true; }
     } }
     private void release(Runnable operation) {
         try { operation.run(); } catch(RuntimeException failure) { state=State.FAILED; failureStage="resource-cleanup"; }

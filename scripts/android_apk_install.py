@@ -12,7 +12,8 @@ import subprocess
 def ensure_apk(adb: str, serial: str, package: str, apk: Path) -> None:
     if package not in {"app.umbra.privatechat.dev", "app.umbra.privatechat.dev.test"}:
         raise ValueError("Only the isolated connected debug UID is supported")
-    digest=hashlib.sha256(apk.read_bytes()).hexdigest()
+    with apk.open("rb") as stream:
+        digest=hashlib.file_digest(stream,"sha256").hexdigest()
     result=subprocess.run([adb,"-s",serial,"shell","pm","path",package],capture_output=True,text=True,timeout=20)
     if result.returncode not in (0,1): raise RuntimeError("Cannot inspect installed debug APK")
     paths=result.stdout.strip().splitlines()
