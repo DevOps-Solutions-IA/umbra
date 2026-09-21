@@ -197,9 +197,18 @@ public final class LocationService {
             boolean valid=grant!=null;
             if(valid) { try { grant.lease.run(); } catch(SecurityException e) { valid=false; } }
             boolean expired=now>=row.getJSONObject("payload").getLong("ends") || (grant!=null && elapsed.getAsLong()>=grant.deadline);
-            if(!valid || expired) {
+            boolean cancelled=grant!=null && grant.stopped && !row.getString("state").equals("STOPPED");
+            if(!valid || expired || cancelled) {
                 drop(id,true); grants.remove(id);
                 if(Set.of("ACTIVE","PENDING","SENT").contains(row.getString("state"))) { row.put("state",expired?"EXPIRED":"INTERRUPTED"); put("location-out",id,row); }
+            }
+            if(grant!=null && row.getString("state").equals("STOPPED")) {
+                boolean pending=false;
+                for(String key:db.keys("outbox")) {
+                    JSONObject queued=get("outbox",key);
+                    if(id.equals(queued.optString("locationSession")) && queued.getJSONObject("envelope").getLong("expires")>now) pending=true;
+                }
+                if(!pending) { drop(id,true); grants.remove(id); }
             }
             if(row.getLong("retainUntil")<now) db.remove("location-out",id);
         }
@@ -252,11 +261,25 @@ public final class LocationService {
         else if(old!=null && old.has("lastPoint")) row.put("lastPoint",old.getJSONObject("lastPoint"));
         put("location-in",key,row);
     }
+    /** Clear visible coordinates while retaining terminal replay protection. Runs in the chat transaction. */
+    public void clearPeer(String peer) throws Exception {
+        for(String key:db.keys("location-in")) {
+            JSONObject row=get("location-in",key);
+            if(row.getJSONObject("payload").getString("device").equals(peer)) {
+                row.remove("lastPoint"); row.getJSONObject("payload").remove("point");
+                row.put("state","INTERRUPTED").put("hidden",true); put("location-in",key,row);
+            }
+        }
+        for(String id:db.keys("location-out")) {
+            JSONObject row=get("location-out",id);
+            if(LocationPayload.targets(row.getJSONObject("payload")).contains(peer)) interrupt(id);
+        }
+    }
     public List<JSONObject> received(String peer) throws Exception {
         return db.transaction(() -> {
             maintain(); List<JSONObject> result=new ArrayList<>();
             for(String key:db.keys("location-in")) { JSONObject row=get("location-in",key); JSONObject p=row.getJSONObject("payload");
-                if(!p.getString("device").equals(peer)) continue;
+                if(row.optBoolean("hidden") || !p.getString("device").equals(peer)) continue;
                 String display=row.getString("state");
                 if(display.equals("ACTIVE")) display=row.has("lastPoint") && Bytes.now()-row.getJSONObject("lastPoint").getLong("measured")<=30?"RECENT":"LAST_KNOWN";
                 row.put("display",display); result.add(row);

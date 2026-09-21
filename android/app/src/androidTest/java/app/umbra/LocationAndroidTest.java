@@ -100,6 +100,10 @@ public class LocationAndroidTest {
             ar.failBucket=null; assertEquals(1,a.outbox().size());
             a.locations().publish(id,1,2,3,Bytes.now(),"ANDROID_FINE");
             JSONObject pending=a.outbox().get(1).getJSONObject("envelope");
+            br.failBucket="location-in"; assertThrows(IllegalStateException.class,() -> b.receive(pending));
+            assertTrue(b.outbox().isEmpty()); assertTrue(br.keys("location-in").isEmpty());
+            br.failBucket=null; br.reopen(); b.receive(pending);
+            assertEquals(1,b.locations().received(a.id()).size());
             ar.gate.lock(); ar.gate.unlock(); assertThrows(SecurityException.class,() -> a.authorizeEnvelope(pending));
             ar.reopen(); Engine reopened=new Engine(ar); assertTrue(reopened.outbox().isEmpty());
             assertEquals("INTERRUPTED",reopened.get("location-out",id).getString("state"));

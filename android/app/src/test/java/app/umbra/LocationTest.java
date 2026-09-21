@@ -100,7 +100,12 @@ public class LocationTest {
         Pair p=new Pair(); String id=p.live(); String before=p.envelopes().get(0).toString();
         p.a.db.failBucket="location-out"; assertThrows(IllegalStateException.class,() -> p.update(id));
         p.a.db.failBucket=null; assertEquals(before,p.envelopes().get(0).toString()); assertEquals(0,p.a.e.get("location-out",id).getJSONObject("payload").getLong("seq"));
-        p.update(id); JSONObject pending=p.envelopes().get(1); p.a.db.failBucket="location-out";
+        p.update(id); JSONObject pending=p.envelopes().get(1);
+        p.b.db.failBucket="location-in";
+        assertThrows(IllegalStateException.class,() -> p.b.e.receive(pending));
+        assertTrue(p.b.e.outbox().isEmpty()); assertTrue(p.b.db.keys("location-in").isEmpty());
+        p.b.db.failBucket=null; p.b.e.receive(pending); assertEquals(1,p.b.e.locations().received(p.a.e.id()).size());
+        p.a.db.failBucket="location-out";
         assertThrows(IllegalStateException.class,() -> p.sender.locations().stop(id)); p.a.db.failBucket=null;
         assertThrows(SecurityException.class,() -> p.sender.authorizeEnvelope(pending));
     }
@@ -209,6 +214,32 @@ public class LocationTest {
         permission.set(false); assertThrows(SecurityException.class,write::run);
         permission.set(true); assertThrows(SecurityException.class,() -> p.sender.locations().authorizeCapture(id));
         assertTrue(p.sender.outbox().isEmpty());
+    }
+    @Test public void acknowledgedStopsReleaseCaptureSlotsWithoutRemovingReplayTombstones() throws Exception {
+        Pair p=new Pair();
+        for(int i=0;i<8;i++) {
+            String id=p.live(); p.sender.locations().stop(id);
+            for(JSONObject envelope:p.envelopes()) p.b.e.receive(envelope);
+            for(JSONObject receipt:p.b.e.outbox()) {
+                JSONObject envelope=receipt.getJSONObject("envelope"); p.sender.receive(envelope); p.b.e.transported(envelope.getString("id"),false);
+            }
+            assertEquals("STOPPED",p.a.e.get("location-out",id).getString("state"));
+        }
+        assertEquals(8,p.a.db.keys("location-out").size()); assertEquals(8,p.b.db.keys("location-in").size());
+    }
+    @Test public void clearingChatRemovesCoordinatesButRetainsTerminalReplayProtection() throws Exception {
+        Pair p=new Pair(); String id=p.live(); p.update(id);
+        for(JSONObject e:p.envelopes()) p.b.e.receive(e);
+        p.b.e.clearConversation(p.a.e.id()); assertTrue(p.b.e.locations().received(p.a.e.id()).isEmpty());
+        p.update(id); JSONObject pending=p.envelopes().get(1); p.b.e.receive(pending);
+        assertTrue(p.b.e.locations().received(p.a.e.id()).isEmpty());
+        for(String key:p.b.db.keys("location-in")) {
+            JSONObject tombstone=p.b.e.get("location-in",key);
+            assertFalse(tombstone.has("lastPoint")); assertFalse(tombstone.getJSONObject("payload").has("point"));
+        }
+        p.sender.clearConversation(p.b.e.id());
+        assertThrows(SecurityException.class,() -> p.sender.authorizeEnvelope(pending));
+        assertThrows(SecurityException.class,() -> p.update(id));
     }
     private static String safeId(DeviceLinkingTest.Device d) { try { return d.e.id(); } catch(Exception e) { throw new AssertionError(e); } }
 }

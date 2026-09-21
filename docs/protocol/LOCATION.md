@@ -104,6 +104,8 @@ sesión Signal. Los límites globales de outbox, cuotas, seen y ACK siguen vigen
 No hay historial de puntos intermedios; se persiste solo el último punto recibido.
 
 Revalidación antes de capturar, callback, cifrar, encolar y escribir HTTPS/RFCOMM.
+El adaptador liga permiso/AppOps, primer plano y proveedor al grant; también se
+comprueban al escribir una entrega pendiente. Una denegación invalida ese grant.
 Se exige la entrega concreta aún autorizada: una copia retirada de outbox no obtiene
 una autorización nueva. Bytes que ya salieron pueden llegar; no se promete retirada.
 
@@ -113,3 +115,8 @@ hardware intacta. Los adaptadores SQLite/JVM de pruebas contienen solo datos sin
 Almacenamiento fallido revierte ratchet, estado receptor y ACK; no confirma antes de
 persistir. Reapertura SQLite, muerte entre operaciones y muerte durante commit son
 controles diferentes, con resultados separados en el informe.
+
+Vaciar conversación elimina coordenadas visibles y detiene las sesiones salientes
+que incluían ese dispositivo. Conserva tombstones ocultos terminales para que replay
+no restaure posiciones borradas. Un STOP confirmado libera el grant en memoria sin
+borrar el tombstone persistente. No se eliminan copias de otros dispositivos.

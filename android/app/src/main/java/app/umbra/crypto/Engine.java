@@ -555,6 +555,7 @@ public final class Engine {
     }
     public void clearConversation(String peer) throws Exception {
         db.transaction(() -> {
+            locations.clearPeer(peer);
             for (String bucket : new String[]{"message", "outbox"}) {
                 for (String k : db.keys(bucket)) if (get(bucket, k).getString("peer").equals(peer)) db.remove(bucket, k);
             }
