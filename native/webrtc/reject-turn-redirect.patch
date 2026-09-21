@@ -1,0 +1,93 @@
+diff --git a/p2p/base/turn_port.cc b/p2p/base/turn_port.cc
+index 10e9d1e..81ec9fc 100644
+--- a/p2p/base/turn_port.cc
++++ b/p2p/base/turn_port.cc
+@@ -832,42 +832,13 @@ bool TurnPort::SupportsProtocol(absl::string_view protocol) const {
+   return protocol == UDP_PROTOCOL_NAME;
+ }
+
+-// Update current server address port with the alternate server address port.
+-bool TurnPort::SetAlternateServer(const SocketAddress& address) {
+-  // Check if we have seen this address before and reject if we did.
+-  AttemptedServerSet::iterator iter = attempted_server_addresses_.find(address);
+-  if (iter != attempted_server_addresses_.end()) {
+-    RTC_LOG(LS_WARNING) << ToString() << ": Redirection to ["
+-                        << address.ToSensitiveNameAndAddressString()
+-                        << "] ignored, allocation failed.";
+-    return false;
+-  }
+-
+-  // If protocol family of server address doesn't match with local, return.
+-  if (!IsCompatibleAddress(address)) {
+-    RTC_LOG(LS_WARNING) << ToString()
+-                        << ": Server IP address family does not match with "
+-                           "local host address family type";
+-    return false;
+-  }
+-
+-  // Block redirects to a loopback address.
+-  // See: https://bugs.chromium.org/p/chromium/issues/detail?id=649118
+-  if (address.IsLoopbackIP()) {
+-    RTC_LOG(LS_WARNING) << ToString()
+-                        << ": Blocking attempted redirect to loopback address.";
+-    return false;
+-  }
+-
+-  RTC_LOG(LS_INFO) << ToString() << ": Redirecting from TURN server ["
+-                   << server_address_.address.ToSensitiveNameAndAddressString()
+-                   << "] to TURN server ["
+-                   << address.ToSensitiveNameAndAddressString() << "]";
+-  server_address_ = ProtocolAddress(address, server_address_.proto);
+-
+-  // Insert the current address to prevent redirection pingpong.
+-  attempted_server_addresses_.insert(server_address_.address);
+-  return true;
++// UMBRA: only locally authorized TURN destinations may be contacted. RELAY
++// candidate policy alone does not constrain TURN 300 ALTERNATE-SERVER redirects.
++// Reject before changing the address or initiating any network I/O. Redundancy
++// requires an explicit locally authorized IceServer, never server-provided URLs.
++bool TurnPort::SetAlternateServer(const SocketAddress& /* address */) {
++  RTC_LOG(LS_WARNING) << "TURN redirection rejected by local destination policy";
++  return false;
+ }
+
+ void TurnPort::ResolveTurnAddress(const SocketAddress& address) {
+diff --git a/p2p/base/turn_port_unittest.cc b/p2p/base/turn_port_unittest.cc
+index 346f4b7..30de448 100644
+--- a/p2p/base/turn_port_unittest.cc
++++ b/p2p/base/turn_port_unittest.cc
+@@ -500,18 +500,13 @@ class TurnPortTest : public ::testing::Test, public TurnPort::CallbacksForTest {
+
+     turn_port_->PrepareAddress();
+     EXPECT_THAT(
+-        WaitUntil([&] { return turn_ready_; }, IsTrue(),
++        WaitUntil([&] { return turn_error_; }, IsTrue(),
+                   {.timeout = TimeToGetAlternateTurnCandidate(protocol_type),
+                    .clock = &time_controller_}),
+         IsRtcOk());
+-    // Retrieve the address again, the turn port's address should be
+-    // changed.
+-    const SocketAddress new_addr = turn_port_->server_address().address;
+-    EXPECT_NE(old_addr, new_addr);
+-    ASSERT_EQ(1U, turn_port_->Candidates().size());
+-    EXPECT_EQ(kTurnUdpExtAddr.ipaddr(),
+-              turn_port_->Candidates()[0].address().ipaddr());
+-    EXPECT_NE(0, turn_port_->Candidates()[0].address().port());
++    EXPECT_FALSE(turn_ready_);
++    EXPECT_EQ(old_addr, turn_port_->server_address().address);
++    EXPECT_TRUE(turn_port_->Candidates().empty());
+   }
+
+   void TestTurnAlternateServerV4toV6(ProtocolType protocol_type) {
+@@ -554,9 +549,8 @@ class TurnPortTest : public ::testing::Test, public TurnPort::CallbacksForTest {
+         IsRtcOk());
+     ASSERT_EQ(0U, turn_port_->Candidates().size());
+     SocketAddress address;
+-    // Verify that we have exhausted all alternate servers instead of
+-    // failure caused by other errors.
+-    EXPECT_FALSE(redirector.ShouldRedirect(address, &address));
++    // Reject the first redirect; the second destination is never attempted.
++    EXPECT_TRUE(redirector.ShouldRedirect(address, &address));
+   }
+
+   void TestTurnAlternateServerDetectRepetition(ProtocolType protocol_type) {

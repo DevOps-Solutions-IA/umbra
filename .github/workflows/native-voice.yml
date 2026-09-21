@@ -1,0 +1,46 @@
+name: Build pinned voice native dependency
+"on":
+  push:
+    branches: [codex/turn-voice-core]
+    paths: ['native/webrtc/**', '.github/workflows/native-voice.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: native-voice-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-build:
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [x86_64, arm64-v8a, x86, armeabi-v7a]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Space for isolated pinned toolchain
+        run: |
+          set -euo pipefail
+          # This separate job uses Chromium's pinned SDK, not these preinstalled SDKs.
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL
+          df -h "$RUNNER_TEMP"
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y libglib2.0-dev libnss3-dev libx11-dev libxcomposite-dev libxdamage-dev libxext-dev libxfixes-dev libxrandr-dev libxrender-dev libxtst-dev libasound2-dev libpulse-dev
+      - name: Build reviewed source; never remote execution
+        run: bash native/webrtc/build.sh '${{ matrix.abi }}'
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: native-voice-${{ matrix.abi }}-${{ github.sha }}
+          path: native-output/${{ matrix.abi }}/
+          if-no-files-found: error
+          retention-days: 7

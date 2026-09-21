@@ -91,7 +91,7 @@ def validate_mapping(text: str) -> None:
         raise RuntimeError("Missing R8 class map")
     # R8 can inline a test/lab method into a production class. Its origin then
     # appears only on a method mapping line, not as a retained class declaration.
-    forbidden = r"(?<![\w.$])(?:app\.umbra\.lab(?:[.$]|$)|androidx\.test(?:[.$]|$)|app\.umbra\.(?:MemoryRecords|DeviceMemoryRecords)(?:[.$\s:]|$))"
+    forbidden = r"(?<![\w.$])(?:app\.umbra\.lab(?:[.$]|$)|androidx\.test(?:[.$]|$)|app\.umbra\.(?:MemoryRecords|DeviceMemoryRecords|VoiceNativeFixtureListener|media[.$]Voice(?:Engine|Restart)FixtureListener)(?:[.$\s:]|$))"
     if re.search(forbidden, text, re.MULTILINE):
         raise RuntimeError("Test/lab code retained or inlined by R8")
 
@@ -106,7 +106,7 @@ def validate_dex(package: zipfile.ZipFile) -> None:
         if re.fullmatch(r"classes\d*\.dex", name):
             data = package.read(name)
             if (b"Lapp/umbra/lab/" in data or b"Landroidx/test/" in data or
-                    re.search(rb"Lapp/umbra/(?:MemoryRecords|DeviceMemoryRecords)[;$]", data)):
+                    re.search(rb"Lapp/umbra/(?:MemoryRecords|DeviceMemoryRecords|VoiceNativeFixtureListener|media/Voice(?:Engine|Restart)FixtureListener)[;$]", data)):
                 raise RuntimeError("Test/lab code in application DEX")
 
 

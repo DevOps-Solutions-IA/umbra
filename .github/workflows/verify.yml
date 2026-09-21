@@ -134,6 +134,8 @@ jobs:
           if command -v android; then android --help; else echo "Android CLI absent; using installed avdmanager"; fi
           nproc
           free -m
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y tcpdump
           source scripts/ci_emulator.sh
           umbra_start_avd umbra-ci 5554
           python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor connected --log android/app/build/reports/device/connected.log
@@ -141,6 +143,7 @@ jobs:
           python scripts/run_location_restart.py --serial emulator-5554 --flavor connected --log-dir android/app/build/reports/device/
           python scripts/run_location_restart.py --serial emulator-5554 --flavor offline --log-dir android/app/build/reports/device/
           python scripts/smoke_release_launch.py --serial emulator-5554 > android/app/build/reports/device/release-launch.log
+          python scripts/run_voice_probe.py --serial emulator-5554 --log android/app/build/reports/device/native-voice-probe.log
           source scripts/ci_bluetooth.sh
       - name: Record checked-out commit and APK digests
         run: |

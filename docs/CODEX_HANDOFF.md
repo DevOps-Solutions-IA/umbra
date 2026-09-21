@@ -1,5 +1,29 @@
 # Transferencia técnica a Codex
 
+## Quinta entrega — voz — en curso, 2026-09-21
+
+PARTIAL — rama `codex/turn-voice-core`, base #7 abierta `e495793`.
+[Estado y comandos ejecutados](validation/2026-09-21-turn-voice-core.md).
+Distribución WebRTC/guardas/configuración RELAY verificadas. Dos AVD han ejecutado
+Engine/SQLite/libsignal/HTTPS y Opus sintético bidireccional por coturn real. Adaptador
+connected y controles mínimos integrados; no conversación humana ni hardware validado.
+Corregida la redirección TURN nativa mediante fuente fijada: cuatro ABI compiladas
+(run35577083313), cero paquetes al destino alternativo en dos AVD x86_64; Opus y rechazo
+DTLS repetidos con ese AAR. La capacidad productiva se liga al hash revisado y conserva
+la autorización Engine. Código c325788: CI35580903584, cuatro SUCCESS; checkout
+b9d5256b47ffeb3ce4c6aa9bbc8342d4f611085c. Recibo JSON/Markdown en docs/validation.
+La entrega documental posterior debe comprobar su propia CI y conservar esta distinción.
+Caducidad de credenciales/asignaciones y rutas UDP reales ejecutadas en laboratorio.
+Regresión adicional: el fixture mide con monotónico el cese de callbacks ADM
+sintéticos tras cancelación; 126 herramientas y lock/disco en dos AVD pasaron.
+CI35585672689 falló antes del AVD por el fixture MAX_TTL+1; se reprodujo la
+carrera 400→409 al cruzar un segundo y se corrigió el test, conservando MAX_TTL
+y pruebas exactas de frontera. 149 backend y HTTPS real pasan localmente.
+Consultar la CI del nuevo HEAD antes de atribuirle la batería completa.
+Hardware, IPv6, TURN TLS y recorrido de voz R8 siguen pendientes.
+No se modifica señalización anterior ni se reducen Keystore/permisos offline.
+
+
 ## Cuarta entrega — señalización — 2026-09-21 UTC
 
 USER_DECISION — rama `codex/authenticated-call-signaling`, dependiente de #6.

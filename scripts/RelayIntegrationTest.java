@@ -24,7 +24,11 @@ public final class RelayIntegrationTest {
     private static void rejectsHttp(Operation operation, int status, String label) throws Exception {
         try { operation.run(); }
         catch (java.io.IOException expected) {
-            require(expected.getMessage().contains("HTTP " + status + ")"), label);
+            var http = java.util.regex.Pattern.compile("HTTP ([0-9]{3})\\)").matcher(
+                    Objects.toString(expected.getMessage(), ""));
+            String observed = http.find() ? http.group(1) : "non-HTTP failure";
+            require(observed.equals(Integer.toString(status)),
+                    label + " (expected " + status + ", observed " + observed + ")");
             return;
         }
         throw new AssertionError(label);
@@ -96,7 +100,10 @@ public final class RelayIntegrationTest {
             rejects(() -> bob.receive(wrong), "wrong recipient rejected");
             rejectsHttp(() -> client.send(bobRoute, new JSONObject(wire.toString()).put("ct", "AAAA")), 422, "relay rejects truncated ciphertext");
             rejectsHttp(() -> client.send(bobRoute, new JSONObject(wire.toString()).put("ct", Bytes.b64(new byte[720001]))), 422, "relay rejects oversized ciphertext");
-            rejectsHttp(() -> client.send(bobRoute, new JSONObject(wire.toString()).put("expires", Bytes.now() + 604801)), 400, "relay rejects excessive TTL");
+            // HTTPS scheduling can cross a wall-clock second. Exact MAX_TTL/+1
+            // boundaries are tested with a controlled relay clock; this network
+            // rejection stays invalid for the entire bounded request timeout.
+            rejectsHttp(() -> client.send(bobRoute, new JSONObject(wire.toString()).put("expires", Bytes.now() + 604800 + 3600)), 400, "relay rejects excessive TTL");
             for (JSONObject envelope : delivery) {
                 bob.receive(envelope); bob.receive(envelope);
                 // Acknowledge only after Engine's transaction returned successfully.

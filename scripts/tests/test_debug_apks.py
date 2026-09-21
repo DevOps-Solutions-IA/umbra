@@ -1,6 +1,8 @@
 """Synthetic rejection tests for the APK gate, not Android or cryptographic tests."""
 import contextlib
 import io
+import hashlib
+import json
 from pathlib import Path
 import sys
 import struct
@@ -18,6 +20,7 @@ class ApkGateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             apk = root / "synthetic.apk"
+            pin = {"entries": {}}
             with zipfile.ZipFile(apk, "w") as package:
                 for abi in gate.ABIS - {missing}:
                     machine = {"arm64-v8a": 183, "armeabi-v7a": 40, "x86": 3, "x86_64": 62}[abi]
@@ -27,6 +30,10 @@ class ApkGateTests(unittest.TestCase):
                     struct.pack_into("<HHI", header, 16, 3, 65535 if wrong_abi else machine, 1)
                     name = f"lib/{abi}/libsignal_jni.so"
                     package.writestr(name, header)
+                    if variant == "connected":
+                        voice = f"jni/{abi}/libjingle_peerconnection_so.so"
+                        pin["entries"][voice] = hashlib.sha256(header).hexdigest()
+                        package.writestr(voice.replace("jni/", "lib/"), header)
                     if duplicate:
                         import warnings
                         with warnings.catch_warnings():
@@ -36,8 +43,10 @@ class ApkGateTests(unittest.TestCase):
                     package.writestr("libsignal_jni_amd64.so", b"synthetic")
                 if testing:
                     package.writestr("lib/arm64-v8a/libsignal_jni_testing.so", b"synthetic")
+            pin_path = root / "pin.json"
+            pin_path.write_text(json.dumps(pin))
             decoded = "\n".join(f"uses-permission: name='{p}'" for p in permissions)
-            with patch.object(gate, "ROOT", root), patch.object(gate.subprocess, "check_output", return_value=decoded), contextlib.redirect_stdout(io.StringIO()):
+            with patch.object(gate, "ROOT", root), patch.object(gate, "PIN", pin_path), patch.object(gate.subprocess, "check_output", return_value=decoded), contextlib.redirect_stdout(io.StringIO()):
                 gate.inspect(apk, Path("aapt"), variant)
 
     def test_offline_bluetooth_only(self):

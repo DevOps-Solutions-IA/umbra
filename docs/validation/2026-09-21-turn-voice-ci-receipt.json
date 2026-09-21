@@ -1,0 +1,786 @@
+{
+  "dateUtc": "2026-09-21",
+  "run": 35580903584,
+  "head": "c325788f2ecbf97f5ea0b2c0da7b47d3d60e669a",
+  "checkout": "b9d5256b47ffeb3ce4c6aa9bbc8342d4f611085c",
+  "synthetic": true,
+  "scenarios": [
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 25.484,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "allocation-expiry",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": true,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 179,
+          "turnStunPackets": 12,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 253,
+          "turnStunPackets": 30,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 100,
+          "capturedBuffers": 111,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 53,
+          "codec": "audio/opus"
+        },
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 113,
+          "capturedBuffers": 116,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 55,
+          "codec": "audio/opus"
+        }
+      ],
+      "allocationExpiry": {
+        "maxLifetimeSeconds": 20,
+        "allocationsBeforeDeath": 2,
+        "allocationsAfterProcessRecovery": 2,
+        "allocationsAfterExpiry": 0,
+        "observedWaitSeconds": 11.595
+      }
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 12.549,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "audio",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": true,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 183,
+          "turnStunPackets": 14,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 200,
+          "turnStunPackets": 31,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 113,
+          "capturedBuffers": 122,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 58,
+          "codec": "audio/opus"
+        },
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 111,
+          "capturedBuffers": 112,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 54,
+          "codec": "audio/opus"
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 32.036,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "credential-expiry",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": true,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 1342,
+          "turnStunPackets": 16,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 1366,
+          "turnStunPackets": 36,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 110,
+          "capturedBuffers": 119,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 54,
+          "codec": "audio/opus"
+        },
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 115,
+          "capturedBuffers": 108,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 50,
+          "codec": "audio/opus"
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 14.06,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "device-revoked",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": true,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 191,
+          "turnStunPackets": 14,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 208,
+          "turnStunPackets": 30,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 100,
+          "capturedBuffers": 112,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 53,
+          "codec": "audio/opus"
+        },
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 107,
+          "capturedBuffers": 103,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 51,
+          "codec": "audio/opus"
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 22.922,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "direct-blocked",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": true,
+      "muteUnmute": true,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 191,
+          "turnStunPackets": 14,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 207,
+          "turnStunPackets": 33,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 108,
+          "capturedBuffers": 111,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 50,
+          "codec": "audio/opus"
+        },
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 113,
+          "capturedBuffers": 120,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 57,
+          "codec": "audio/opus"
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 36.511,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "expired-auth",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": false,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 10,
+          "turnStunPackets": 10,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "NOT_EXECUTED: no remote description after initiator rejection",
+          "turnPackets": 0,
+          "turnStunPackets": 0,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "rejectedBeforeCapture": true
+        },
+        {
+          "rejectedBeforeCapture": true
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 14.351,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "force-stop",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": true,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 178,
+          "turnStunPackets": 13,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 253,
+          "turnStunPackets": 30,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 106,
+          "capturedBuffers": 110,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 53,
+          "codec": "audio/opus"
+        },
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 106,
+          "capturedBuffers": 112,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 53,
+          "codec": "audio/opus"
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 34.84,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "invalid-auth",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": false,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 10,
+          "turnStunPackets": 10,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "NOT_EXECUTED: no remote description after initiator rejection",
+          "turnPackets": 0,
+          "turnStunPackets": 0,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "rejectedBeforeCapture": true
+        },
+        {
+          "rejectedBeforeCapture": true
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 13.94,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "lock",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": true,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 190,
+          "turnStunPackets": 14,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 203,
+          "turnStunPackets": 30,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 115,
+          "capturedBuffers": 113,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 55,
+          "codec": "audio/opus"
+        },
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 119,
+          "capturedBuffers": 121,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 53,
+          "codec": "audio/opus"
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 13.921,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "permission-revoked",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": true,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 166,
+          "turnStunPackets": 13,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 244,
+          "turnStunPackets": 31,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 103,
+          "capturedBuffers": 110,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 52,
+          "codec": "audio/opus"
+        },
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 117,
+          "capturedBuffers": 113,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 55,
+          "codec": "audio/opus"
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 13.533,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "storage-failure",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": true,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 185,
+          "turnStunPackets": 13,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 206,
+          "turnStunPackets": 32,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 102,
+          "capturedBuffers": 103,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 50,
+          "codec": "audio/opus"
+        },
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 100,
+          "capturedBuffers": 112,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 52,
+          "codec": "audio/opus"
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 13.368,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "trust-loss",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": true,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 184,
+          "turnStunPackets": 14,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 206,
+          "turnStunPackets": 34,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 112,
+          "capturedBuffers": 108,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 56,
+          "codec": "audio/opus"
+        },
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 106,
+          "capturedBuffers": 123,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 55,
+          "codec": "audio/opus"
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 20.427,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "turn-loss",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": true,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 579,
+          "turnStunPackets": 15,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 561,
+          "turnStunPackets": 36,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 110,
+          "capturedBuffers": 121,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 56,
+          "codec": "audio/opus"
+        },
+        {
+          "sdpAddressAudit": true,
+          "decodedBuffers": 117,
+          "capturedBuffers": 110,
+          "verifiedNativeTransport": true,
+          "receivedAudioPackets": 55,
+          "codec": "audio/opus"
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 34.954,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "unauthorized-redirect",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": false,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 9,
+          "turnStunPackets": 9,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED",
+          "unapprovedTurnPackets": 0,
+          "redirectPolicy": "REJECTED_BEFORE_IO"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "NOT_EXECUTED: no remote description after initiator rejection",
+          "turnPackets": 0,
+          "turnStunPackets": 0,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED",
+          "unapprovedTurnPackets": 0,
+          "redirectPolicy": "REJECTED_BEFORE_IO"
+        }
+      ],
+      "audio": [
+        {
+          "rejectedBeforeCapture": true
+        },
+        {
+          "rejectedBeforeCapture": true
+        }
+      ],
+      "allocationExpiry": null
+    },
+    {
+      "synthetic": true,
+      "endpoints": 2,
+      "observedSeconds": 35.745,
+      "transport": "native WebRTC through coturn UDP",
+      "scenario": "unreachable",
+      "directIpv4Reachability": true,
+      "directBlockedDuringMedia": false,
+      "muteUnmute": false,
+      "network": [
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "OBSERVED",
+          "turnPackets": 16,
+          "turnStunPackets": 16,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        },
+        {
+          "scope": "owned AVD outbound IPv4 UDP",
+          "mediaAttempt": "NOT_EXECUTED: no remote description after initiator rejection",
+          "turnPackets": 0,
+          "turnStunPackets": 0,
+          "nonTurnStunPackets": 0,
+          "otherNonSystemUdpPackets": 0,
+          "ipv6": "NOT_EXECUTED"
+        }
+      ],
+      "audio": [
+        {
+          "rejectedBeforeCapture": true
+        },
+        {
+          "rejectedBeforeCapture": true
+        }
+      ],
+      "allocationExpiry": null
+    }
+  ],
+  "apkSha256": {
+    "android/app/build/outputs/apk/connected/debug/app-connected-debug.apk": "9c02ff1255aea3787e4dfab4fcd5af74de5aed1202ff60bdc238adbec18e6431",
+    "android/app/build/outputs/apk/offline/debug/app-offline-debug.apk": "9952f74d0f7dd81276d1f3ab65a2f5492c85c62541004a37396d2d44122323a1",
+    "android/app/build/outputs/apk/connected/release/app-connected-release-unsigned.apk": "874dd0e0168f42aa65441c09114032c456ca92d06eee703783604c297c80ebea",
+    "android/app/build/outputs/apk/offline/release/app-offline-release-unsigned.apk": "f688a41d94a534dfd139b86b387dc85d95a3a5a695c590eb21b850d3997c9738"
+  },
+  "artifacts": [
+    {
+      "id": 10631520171,
+      "name": "UMBRA-debug-unreviewed-b9d5256b47ffeb3ce4c6aa9bbc8342d4f611085c",
+      "digest": "sha256:9f25e1bcf5da1cf8149f3a56a4129a90cc28a026e3b0a7a211dc301df5f6ba5d",
+      "size_in_bytes": 222503897
+    },
+    {
+      "id": 10630594607,
+      "name": "Android-test-and-lint-results-b9d5256b47ffeb3ce4c6aa9bbc8342d4f611085c",
+      "digest": "sha256:b38b411a4ea0c56b78c327711d04e8dbe70cd3d531b699fb7bf0816c1c497e6d",
+      "size_in_bytes": 192105
+    }
+  ],
+  "nativeRebuild": {
+    "run": 35580899208,
+    "head": "c325788f2ecbf97f5ea0b2c0da7b47d3d60e669a",
+    "allFourJobs": "SUCCESS",
+    "jniSha256": {
+      "jni/x86/libjingle_peerconnection_so.so": "df84f7085734e690f4fca6a98877e6c5222b9c64c64ebbe7ca26de36514b5909",
+      "jni/arm64-v8a/libjingle_peerconnection_so.so": "ec9f8ca8e871ac2856f8376c36476dd7422cd1454fcb3161310db315d58c6e59",
+      "jni/armeabi-v7a/libjingle_peerconnection_so.so": "074fb9bc924cb8a7e3e1a6a046bba305febff655231a697280c91956e8c331f7",
+      "jni/x86_64/libjingle_peerconnection_so.so": "0278242f552f58588d9c2824370a58abf9f283e5b9e2e4ace5a61d2cc91892e3"
+    },
+    "comparison": "byte-identical JNI to build 35577083313; not a claim about arbitrary toolchains or raw ZIP timestamps"
+  },
+  "localCaptureClosureRegression": {
+    "baseHead": "365607f7cf6916c9c30ce288501075d23f68349f",
+    "context": "same production code; strengthened test working tree",
+    "results": [
+      {
+        "scenario": "lock",
+        "nativeCaptureClosure": [
+          {
+            "failedClosed": true,
+            "nativeCaptureQuietAfterMillis": 1000,
+            "nativeCaptureObservedMillis": 500,
+            "lateCaptureCallbacks": 0
+          },
+          {
+            "failedClosed": true,
+            "nativeCaptureQuietAfterMillis": 1000,
+            "nativeCaptureObservedMillis": 500,
+            "lateCaptureCallbacks": 0
+          }
+        ]
+      },
+      {
+        "scenario": "storage-failure",
+        "nativeCaptureClosure": [
+          {
+            "failedClosed": true,
+            "nativeCaptureQuietAfterMillis": 1000,
+            "nativeCaptureObservedMillis": 501,
+            "lateCaptureCallbacks": 0
+          },
+          {
+            "failedClosed": true,
+            "nativeCaptureQuietAfterMillis": 1000,
+            "nativeCaptureObservedMillis": 500,
+            "lateCaptureCallbacks": 0
+          }
+        ]
+      }
+    ]
+  }
+}

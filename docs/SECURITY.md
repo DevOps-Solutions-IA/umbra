@@ -105,3 +105,33 @@ pendiente. Sin SDP/ICE/callId en claro en relay, pero persisten metadatos de buz
 IP, tiempos y tamaños. TURN no ofrece anonimato frente al operador. Sin secretos
 TURN en APK ni claves multimedia derivadas/exportadas del ratchet. Offline rechaza
 llamadas y conserva chat/ubicación/RFCOMM. No nuevos permisos micrófono/cámara/red.
+
+## Voz nativa — quinta entrega en curso
+
+Connected incorpora WebRTC fijado y TURN obligatorio antes de crear PeerConnection.
+Consentimiento de media ligado a CallService/selección/lease; DTLS-SRTP y comparación
+del certificado remoto efectivo con huella autenticada por Signal antes de habilitar
+pistas. Bloquear/cancelar invalida captura; no recuperación automática ni llamadas
+prolongadas en segundo plano. Fallar conectividad no activa P2P. Offline no incorpora
+WebRTC, RECORD_AUDIO ni MODIFY_AUDIO_SETTINGS. No hay cámara.
+
+La evidencia de audio es sintética en AVD con SQLite de laboratorio, no micrófonos ni
+Keystore hardware. El operador TURN sigue viendo direcciones/tiempos/volumen. Pruebas
+adversariales completas de red, IPv6, revocación durante audio y release necesitan sus
+resultados específicos; ver [informe](validation/2026-09-21-turn-voice-core.md).
+
+## Autorización de destinos TURN (2026-09-21)
+
+La distribución Maven inicial seguía TURN `300 ALTERNATE-SERVER` a un destino no
+autorizado (ocho paquetes reproducidos). Se sustituyó por una compilación fijada con
+rechazo nativo antes de modificar el destino. Las cuatro ABI compilaron en Actions
+35577083313. En dos AVD x86_64: nueve peticiones al TURN autorizado, cero al destino
+alternativo; el mismo AAR conservó Opus bidireccional, mute y rechazo DTLS adulterado.
+No extrapolar esta observación IPv4/UDP a otras familias o hardware.
+
+El SHA del AAR revisado es `bbc5675f91b31f901e1a482b00991a36ac2b3d912d2782b80e1cc1b756b1c413`.
+Gradle, la guarda de repositorio y `NativeDistributionPolicy` fijan su integridad.
+Un reemplazo de dependencia no hereda esa capacidad automáticamente. La entrada
+productiva sigue exigiendo permiso, consentimiento, selección, verificación, lease
+vigente y comprobación DTLS nativa; el hash no autoriza una llamada por sí solo.
+Pruebas de micrófono/hardware, IPv6, TURN TLS y recorrido de voz R8 quedan pendientes.

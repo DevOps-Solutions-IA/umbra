@@ -2,6 +2,7 @@
 from xml.etree.ElementTree import Element
 
 NETWORK = {"android.permission.INTERNET", "android.permission.ACCESS_NETWORK_STATE"}
+VOICE = {"android.permission.RECORD_AUDIO", "android.permission.MODIFY_AUDIO_SETTINGS"}
 COMMON = {
     "android.permission.USE_BIOMETRIC", "android.permission.HIDE_OVERLAY_WINDOWS",
     "android.permission.BLUETOOTH_CONNECT", "android.permission.BLUETOOTH_SCAN",
@@ -28,7 +29,7 @@ def validate_permissions(permissions: set[str], variant: str) -> None:
         raise ValueError("Unknown transport variant")
     if not permissions or any(not isinstance(value, str) for value in permissions):
         raise RuntimeError("Missing or malformed permission declarations")
-    unexpected = permissions - COMMON - NETWORK
+    unexpected = permissions - COMMON - NETWORK - (VOICE if variant == "connected" else set())
     expected_network = NETWORK if variant == "connected" else set()
     if unexpected or permissions & NETWORK != expected_network:
         raise RuntimeError(f"Unexpected permissions for {variant}: "

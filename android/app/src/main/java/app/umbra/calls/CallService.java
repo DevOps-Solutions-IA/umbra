@@ -16,6 +16,7 @@ public final class CallService {
     private final String runtime=UUID.randomUUID().toString();
     private final Map<String,Runnable> leases=new ConcurrentHashMap<>();
     private final Set<String> cancelled=ConcurrentHashMap.newKeySet();
+    private final Map<String,MediaLease> mediaLeases=new ConcurrentHashMap<>();
     public CallService(Records db,Engine engine,LongSupplier elapsed) { this.db=db; this.engine=engine; this.elapsed=elapsed; }
     private void enabled() { if(!CallPlatform.ENABLED) throw new SecurityException("Calls unavailable in offline edition"); }
     private JSONObject get(String id) throws Exception { return engine.get("calls",id); }
@@ -124,12 +125,14 @@ public final class CallService {
         enabled(); return db.transaction(() -> { maintain(); List<JSONObject> rows=new ArrayList<>(); for(String id:db.keys("calls")) rows.add(copy(get(id))); return rows; });
     }
     /** Cancels synchronously before any disk I/O, including callbacks waiting on the worker. */
-    public void cancelLocal() { cancelled.addAll(leases.keySet()); leases.clear(); }
-    public void cancelPending(String id) { cancelled.add(id); }
+    public void cancelLocal() { cancelled.addAll(leases.keySet()); leases.clear(); for(MediaLease media:mediaLeases.values()) media.invalidate(); mediaLeases.clear(); }
+    public void cancelPending(String id) { cancelled.add(id); invalidateMedia(id); }
+    private void invalidateMedia(String id) { MediaLease media=mediaLeases.remove(id); if(media!=null) media.invalidate(); }
     private void drop(String id) throws Exception {
         for(String key:db.keys("outbox")) { JSONObject q=engine.get("outbox",key); if(id.equals(q.optString("callSession"))) db.remove("outbox",key); }
     }
     private void finish(JSONObject row,String state) throws Exception {
+        invalidateMedia(row.getJSONObject("context").getString("callId"));
         drop(row.getJSONObject("context").getString("callId")); row.put("state",state).put("descriptions",new JSONObject()).put("ice",new JSONArray()); save(row);
     }
     public void suspendIdentity(String identity) throws Exception {
@@ -186,7 +189,7 @@ public final class CallService {
     }
     public void end(String id) throws Exception {
         // UI may already have cancelledPending. Preserve cancellation on failure, allow only this synchronous terminal send.
-        Runnable old=leases.get(id); cancelled.add(id);
+        Runnable old=leases.get(id); cancelPending(id);
         db.transaction(() -> {
             JSONObject row=get(id); if(row==null || terminal(row)) return null;
             if(old==null) { finish(row,"FAILED"); return null; }
@@ -297,7 +300,91 @@ public final class CallService {
             CallPayload.validate(p,Bytes.now()); negotiation(row,p,engine.id()); save(row); emit(row,type,destinations(row),data); return null;
         });
     }
-    /** Explicit media request cannot succeed in this delivery, even with a local TURN configuration. */
+    /** Separate explicit consent for local audio, never granted by a received message. */
+    public final class MediaConsent {
+        private final CallService owner=CallService.this;
+        private final String id, revision, selected, context;
+        private final Runnable authorization;
+        private final long reviewed;
+        private boolean consumed;
+        private MediaConsent(JSONObject row,String revision) throws Exception {
+            id=row.getJSONObject("context").getString("callId");
+            selected=row.getString("selected"); context=CallPayload.canonical(row.getJSONObject("context"));
+            this.revision=revision; authorization=db.authorization(); reviewed=elapsed.getAsLong();
+        }
+    }
+    private JSONObject mediaRow(String id) throws Exception {
+        JSONObject row=usable(id); requireState(row,"SELECTED","NEGOTIATING");
+        String self=engine.id(), caller=row.getJSONObject("context").getString("callerDevice");
+        if(row.getString("selected").isEmpty() || (!self.equals(caller)&&!self.equals(row.getString("selected"))))
+            throw new SecurityException("Device not selected for media");
+        return row;
+    }
+    public MediaConsent reviewMedia(String id,String localConfigurationRevision) throws Exception {
+        if(localConfigurationRevision==null || !localConfigurationRevision.matches("[a-f0-9]{64}")) throw new SecurityException("Invalid local TURN revision");
+        return db.transaction(() -> new MediaConsent(mediaRow(id),localConfigurationRevision));
+    }
+    /** Grants a revocable lease, NOT an ACTIVE transition or evidence of native media. */
+    public MediaLease prepareMedia(MediaConsent consent,boolean confirmed) throws Exception {
+        return db.transaction(() -> {
+            if(consent==null || consent.owner!=this || !confirmed || consent.consumed) throw new SecurityException("Fresh media consent required");
+            consent.authorization.run();
+            long age=elapsed.getAsLong()-consent.reviewed;
+            if(age<0 || age>30_000) throw new SecurityException("Media consent expired");
+            JSONObject row=mediaRow(consent.id);
+            if(!consent.selected.equals(row.getString("selected")) || !consent.context.equals(CallPayload.canonical(row.getJSONObject("context"))))
+                throw new SecurityException("Media consent context changed");
+            MediaLease media=new MediaLease(consent);
+            if(mediaLeases.putIfAbsent(consent.id,media)!=null) throw new SecurityException("Media already attached");
+            consent.consumed=true;
+            return media;
+        });
+    }
+    public final class MediaLease implements AutoCloseable {
+        private final String id,revision;
+        private final Runnable authorization;
+        private final java.util.concurrent.atomic.AtomicBoolean invalid=new java.util.concurrent.atomic.AtomicBoolean();
+        private final java.util.concurrent.atomic.AtomicReference<Runnable> cancellation=new java.util.concurrent.atomic.AtomicReference<>();
+        private final java.util.concurrent.atomic.AtomicBoolean attached=new java.util.concurrent.atomic.AtomicBoolean();
+        private volatile boolean cancellationFailed;
+        public boolean cancellationFailed() { return cancellationFailed; }
+        private MediaLease(MediaConsent consent) { id=consent.id; revision=consent.revision; authorization=consent.authorization; }
+        public String callId() { return id; }
+        public String localDevice() throws Exception { snapshot(); return engine.id(); }
+        public void end() throws Exception { CallService.this.end(id); }
+        public String configurationRevision() { return revision; }
+        public JSONObject snapshot() throws Exception {
+            if(invalid.get()) throw new SecurityException("Media lease cancelled");
+            return db.transaction(() -> {
+                authorization.run();
+                if(invalid.get() || mediaLeases.get(id)!=this) throw new SecurityException("Media lease cancelled");
+                return copy(mediaRow(id));
+            });
+        }
+        /** Callback must only mute/invalidate locally and schedule disposal; never wait for disk/network. */
+        public void attach(Runnable onCancel) throws Exception {
+            Objects.requireNonNull(onCancel);
+            if(!attached.compareAndSet(false,true)) throw new SecurityException("Media lease already claimed");
+            cancellation.set(onCancel);
+            try { snapshot(); } catch(Exception failure) { invalidate(); throw failure; }
+            if(invalid.get()) invalidateCallback();
+        }
+        private void invalidateCallback() {
+            Runnable callback=cancellation.getAndSet(null);
+            if(callback!=null) try { callback.run(); } catch(RuntimeException failure) {
+                cancellationFailed=true; // Never let one adapter prevent the vault from locking.
+            }
+        }
+        private void invalidate() { invalid.set(true); invalidateCallback(); }
+        public void description(int generation,String role,String sdp,String fingerprint) throws Exception {
+            snapshot(); CallService.this.description(id,generation,role,sdp,fingerprint);
+        }
+        public void verifyRemote(int generation,String digest,String certificateFingerprint) throws Exception {
+            snapshot(); verifyRemoteBinding(id,generation,digest,certificateFingerprint);
+        }
+        @Override public void close() { cancelPending(id); }
+    }
+    /** Legacy request without fresh consent/adapter ownership remains fail-closed. */
     public void prepareMedia(String id,RelayOnlyContract localConfiguration) throws Exception {
         db.transaction(() -> {
             JSONObject row=usable(id); requireState(row,"SELECTED","NEGOTIATING");

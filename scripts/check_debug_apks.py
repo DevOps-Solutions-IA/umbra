@@ -2,6 +2,8 @@
 """Inspect actual debug APK permissions with aapt and packaged Signal JNI with zipfile."""
 import argparse
 import hashlib
+import json
+from check_voice_artifact import verify_apk, PIN
 import os
 from pathlib import Path
 import re
@@ -39,6 +41,7 @@ def inspect(apk: Path, aapt: Path, variant: str) -> None:
                 if (len(header) < minimum or header[:7] != b"\x7fELF" + bytes([expected_class, 1, 1]) or
                         struct.unpack_from("<HHI", header, 16) != (3, expected_machine, 1)):
                     raise RuntimeError(f"Invalid Signal JNI ELF class/machine/header: {name}")
+        verify_apk(package, variant, json.loads(PIN.read_text()))
         desktop = [n for n in package.namelist() if not n.startswith("lib/")
                    and re.search(r"(?:libsignal_jni.*\.(?:so|dylib)|signal_jni.*\.dll)$", n)]
         if desktop:
