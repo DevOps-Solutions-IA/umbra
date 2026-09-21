@@ -1,5 +1,16 @@
 # Transferencia técnica a Codex
 
+## Tercera entrega — ubicación cifrada — 2026-09-21 UTC
+
+USER_DECISION — Rama `codex/encrypted-location-core`, dependiente de #5 hacia
+`codex/device-linking-core`; base abierta comprobada `c538b68`. No modificar ramas previas.
+Implementación, comandos y estado de validación en el [informe](validation/2026-09-21-encrypted-location-core.md).
+Consultar el recibo final de la nueva PR para HEAD/checkout/CI; no atribuir CI histórica
+al código nuevo. Hardware GPS/Keystore/radio y auditoría siguen pendientes.
+Siguiente bloque: señalización autenticada de llamadas, después audio/video; no están
+implementados por la entrega de ubicación. Recuperación exportable sigue bloqueada.
+
+
 ## Segunda entrega de dispositivos — 2026-09-20
 
 USER_DECISION — Rama `codex/device-linking-core`, PR dependiente de #4 hacia

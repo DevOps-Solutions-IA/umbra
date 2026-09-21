@@ -1,5 +1,15 @@
 # Backlog de finalización verificable
 
+## Tercera entrega — ubicación — 2026-09-21 UTC
+
+Ubicación manual/proveedor, reducción local, sesiones temporales con consentimiento
+por conjunto destinatario y cancelación al bloquear: implementación y pruebas en el
+[informe nuevo](validation/2026-09-21-encrypted-location-core.md). No cerrar hardware,
+Vault positivo ni auditoría por resultados de laboratorio. El flujo conserva primer
+plano y bloqueo automático; no ubicación background. Siguientes bloques mantienen
+señalización, audio/video y TURN, pendientes de implementación propia.
+
+
 ## Segunda entrega — dispositivos
 
 `codex/device-linking-core` parte del HEAD abierto de #4. Añade autoridad/listas,
