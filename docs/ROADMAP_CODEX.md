@@ -9,7 +9,9 @@ Video PARTIAL: consentimiento direccional y renegociación implementados; patron
 sintéticos remotos + audio comprobados en dos AVD debug/R8 sobre un árbol intermedio.
 Pin `.3`, C++ seleccionado, Camera2 AVD, TURN/TLS e IPv6 hacia TURN cuentan con
 evidencia parcial nueva. Pendientes: aceptación final, negativas completas,
-consentimiento unidireccional nativo y CI del nuevo árbol. No cerrar por CI anterior.
+CI del nuevo árbol y revisión de límites de cancelación. El consentimiento
+unidireccional nativo y las nuevas regresiones del cierre de superficies ya tienen
+ejecución local. No cerrar por CI anterior.
 UI definitiva, hardware y auditoría continúan fuera.
 
 ## Quinta entrega — voz — en curso, 2026-09-21

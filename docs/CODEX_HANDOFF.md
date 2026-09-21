@@ -21,6 +21,11 @@ COMPLETE bloqueó extremos con candidatos válidos: la corrección envía candid
 incrementales por Engine/Signal, ligados a descripción/generación. Un par prflx no
 autoriza captura. La caducidad de asignaciones se prueba con 180 segundos: el caso
 anterior de 20 segundos no contemplaba el mínimo que coturn aplica al renovar.
+Revisión posterior a 69e9dc1: voz R8 verde, Verify Android y video no verdes.
+Corregido cierre de renderer reemplazado por el listener de MainActivity (dos
+regresiones Android rojo→verde), doble STOP local y carreras de clasificación en el
+arnés. La nueva instrumentación connected exige 27 pruebas; offline conserva 25.
+La CI siguiente debe validar estas correcciones; no atribuirle resultados previos.
 Conservar TURN obligatorio, plazos, offline y evidencia de fallos. No empezar desde main.
 
 ## Quinta entrega — voz — en curso, 2026-09-21

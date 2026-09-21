@@ -362,3 +362,54 @@ callback, resource closure and a positive quiet window. They do NOT timestamp th
 last encrypted video datagram independently of audio multiplexed on the same TURN
 transport; do not describe those receipts as that unperformed wire-level measurement.
 No images, PCM, raw SDP, credentials or packet captures are published.
+
+## Follow-up to HEAD 69e9dc19305a096fa88b2162b08385414bba5e67
+
+Published HEAD and merge checkout `7560d23fee67ac50d4af2c65ae65e7e36847b5a4`
+remain distinct. Verify `35646143351`: guard/backend/container SUCCESS, Android FAIL.
+Optimized voice `35646143234`: SUCCESS. Video `35646143377`: FAIL in both targets;
+retain matrix failures (debug credential-expiry/TLS/TLS-loss, optimized force-stop).
+Native `35646136452`: all four jobs SUCCESS, 83 TURN + 12 media model/policy tests.
+All four rebuilt JNI objects match the pinned `.3` bytes; receipt in
+`2026-09-21-video-native-repeat.json`.
+
+Two orchestration races were visible in failure logs: auditing the call after its
+lease had concurrently expired, and treating the deliberately injected TURN loss
+as an unexpected failure before reading the host's termination command. The fixture
+now consumes that command before classifying termination and still requires actual
+native capture closure. A rejected authorization snapshot is tolerated only after
+the adapter has left ACTIVE, not as successful media evidence.
+
+Review also found a product resource leak: MainActivity replaces the dialog's
+OnDismissListener to maintain its registry, overwriting the video renderer cleanup.
+Two real Android regressions reproduced cleanup count 0 instead of 1. Cleanup now
+belongs to MediaDialog.onStop, independently of replaceable listeners, and runs
+once even on repeated dismiss/cancel. Both regressions then passed; the complete
+connected instrumentation ran 27 tests, with offline's existing 25 unchanged.
+The Camera2/R8 helper also explicitly executes these lifecycle checks.
+
+Stopping video previously scheduled a persistent STOP and then wrote it directly,
+creating redundant concurrent operations. The synchronous API now invalidates
+capture and performs only its direct write; the UI asynchronous path retains its
+single queued write. Native track attachment/start is serialized with camera
+closure to prevent accessing a track disposed by the cancellation watchdog. No
+permission, lease, fingerprint or TURN check was relaxed.
+
+### Comprobación local de la corrección de ciclo de vida
+
+Se conserva el fallo inicial R8 `NoSuchMethodError`: el nuevo test de diálogo no
+estaba entre los orígenes de TraceReferences y su constructor había sido eliminado.
+Se añadió exclusivamente `VideoSurfaceLifecycleTest*.class` a esos orígenes, con
+optimización/ofuscación conservadas. Tras reconstruir, Camera2 AVD y los dos tests
+de cierre pasaron; force-stop con audio/video real sintético R8 y reinicio pasó.
+Hashes/evidencia: `2026-09-21-video-lifecycle-r8-working-tree.json`.
+Las comprobaciones de disco quedan fuera del monitor de cierre de captura; dentro
+se revalida el lease sin disco antes de usar la pista. El cierre no espera ese acceso
+SQLite. El recorrido ejecutado sigue siendo un arnés separado del APK productivo.
+
+Nueva ejecución local: `bash scripts/test_local.sh` exit 0 (149 backend,105 Java,
+12 guardas estáticas), herramientas exit 0 (140 tests), guardia con `--git-history`
+exit 0 (293 archivos,594 blobs). La advertencia existente Starlette/httpx continúa
+visible. Compilación mediaLab/test exit 0; helper Camera2 `--optimized` exit 0;
+`run_voice_integration.py --optimized --video --scenario force-stop` exit 0.
+La CI final de esta corrección todavía debe ejecutarse.

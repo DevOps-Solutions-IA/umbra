@@ -66,6 +66,9 @@ final class NativeVideoCapture implements AutoCloseable {
             });
         } catch(Exception invalid) { close();throw invalid; }
     }
+    synchronized void requireOpen() throws Exception {
+        check.run();if(stopped.get() || disposed)throw new SecurityException("Video capture cancelled");
+    }
     synchronized void start() throws Exception {
         check.run();if(stopped.get()) throw new SecurityException("Video capture cancelled");
         source.adaptOutputFormat(320,240,15);

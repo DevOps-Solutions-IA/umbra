@@ -201,8 +201,6 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     write("synthetic-voice-audio.json",rejected);
                     evidence=true;waitFor("synthetic-voice-stop.json",deadline);break;
                 }
-                if(withVideo && evidence && voice.state()==NativeVoiceSession.State.FAILED && !terminationApplied)
-                    throw new AssertionError("Video path failed: "+voice.failureStage()+", video="+voice.videoStatus());
                 if(expectedRejection && voice.state()==NativeVoiceSession.State.ACTIVE) throw new AssertionError("Invalid TURN unexpectedly connected");
                 if(configuration.optBoolean("cameraDenied") && evidence && !cameraDeniedEvidence) {
                     if(!cameraDeniedChecked) {
@@ -228,6 +226,8 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     }
                     terminationApplied=true;
                 }
+                if(withVideo && evidence && voice.state()==NativeVoiceSession.State.FAILED && !terminationApplied)
+                    throw new AssertionError("Video path failed: "+voice.failureStage()+", video="+voice.videoStatus());
                 if(evidence && terminationApplied && (voice.state()==NativeVoiceSession.State.FAILED || voice.state()==NativeVoiceSession.State.ENDED)) {
                     long terminalObserved=SystemClock.elapsedRealtime();
                     Thread.sleep(1000);
@@ -323,9 +323,15 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     }
                 }
                 if(!expectedRejection && voice.state()==NativeVoiceSession.State.ACTIVE) {
-                    JSONObject current=engine.calls().session(id);
-                    if(current.getJSONObject("descriptions").length()==2)
-                        auditNativeDescriptions(current,credential.getJSONArray("urls").getString(0),credential.optString("relayAddress"));
+                    try {
+                        JSONObject current=engine.calls().session(id);
+                        if(current.getJSONObject("descriptions").length()==2)
+                            auditNativeDescriptions(current,credential.getJSONArray("urls").getString(0),credential.optString("relayAddress"));
+                    } catch(SecurityException cancelled) {
+                        if(voice.state()==NativeVoiceSession.State.ACTIVE)throw cancelled;
+                        // A concurrent termination invalidated the snapshot. The next
+                        // iteration still requires the scenario's native closure evidence.
+                    }
                 }
                 if(Files.exists(files.resolve("synthetic-voice-stop.json"))) {
                     voice.close(); pump(relay,engine); break;

@@ -19,9 +19,15 @@ final class VideoSurface {
         TextView status=new TextView(activity);LinearLayout layout=new LinearLayout(activity);
         layout.setOrientation(LinearLayout.VERTICAL);layout.addView(status);
         layout.addView(view,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,480));
-        AlertDialog dialog=new AlertDialog.Builder(activity).setTitle("Video del interlocutor")
-            .setMessage("Esta vista no autoriza tu cámara. Una imagen anterior no demuestra conexión actual.")
-            .setView(layout).setPositiveButton("Cerrar vista",null).create();
+        Runnable[] refreshHolder=new Runnable[1];
+        MediaDialog dialog=new MediaDialog(activity,()->{
+            session.setRemoteVideoSink(null);
+            if(refreshHolder[0]!=null)status.removeCallbacks(refreshHolder[0]);
+            try {view.clearImage();} finally {try {view.release();} finally {egl.release();}}
+        });
+        dialog.setTitle("Video del interlocutor");
+        dialog.setMessage("Esta vista no autoriza tu cámara. Una imagen anterior no demuestra conexión actual.");
+        dialog.setView(layout);dialog.setButton(Dialog.BUTTON_POSITIVE,"Cerrar vista",(android.content.DialogInterface.OnClickListener)null);
         Runnable refresh=new Runnable() {
             public void run() {
                 String current=session.videoStatus();status.setText(current);
@@ -29,7 +35,7 @@ final class VideoSurface {
                 if(dialog.isShowing())status.postDelayed(this,500);
             }
         };
-        dialog.setOnDismissListener(ignored->{session.setRemoteVideoSink(null);status.removeCallbacks(refresh);view.clearImage();view.release();egl.release();});
+        refreshHolder[0]=refresh;
         dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);track.accept(dialog);dialog.show();
         session.setRemoteVideoSink(view);refresh.run();
     }

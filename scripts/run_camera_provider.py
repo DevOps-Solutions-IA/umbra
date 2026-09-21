@@ -33,6 +33,13 @@ def main():
                 or re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b',result.stdout)
                 or any(x in result.stdout for x in ('FAILURES!!!','Process crashed','INSTRUMENTATION_FAILED'))):
                 raise RuntimeError('Camera provider did not execute successfully: '+case)
+        result=run('shell','am','instrument','-w','-r','-e','class','app.umbra.media.VideoSurfaceLifecycleTest',
+                   package+'.test/androidx.test.runner.AndroidJUnitRunner')
+        (args.reports/'surface-lifecycle.log').write_text(result.stdout+result.stderr)
+        if (not re.search(r'^OK \(2 tests\)$',result.stdout,re.M) or 'INSTRUMENTATION_CODE: -1' not in result.stdout
+            or re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b',result.stdout)
+            or any(x in result.stdout for x in ('FAILURES!!!','Process crashed','INSTRUMENTATION_FAILED'))):
+            raise RuntimeError('Video surface lifecycle checks did not execute successfully')
         print('PASS AVD Camera2 provider: denial, front/back capture, switch, bounded closure; not a physical camera or codec claim')
     finally:
         run('shell','am','force-stop',package)

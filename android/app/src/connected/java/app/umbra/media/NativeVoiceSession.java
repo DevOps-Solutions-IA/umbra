@@ -378,7 +378,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     /** UI cancellation gate must not wait behind storage or signaling work. */
     public void requestVideoStop() { stopVideoLocally(); }
     public void stopVideo() throws Exception {
-        stopVideoLocally();
+        invalidateVideo();
         try { authorization.stopVideo(); } catch(Exception invalid) { cancelLocally();throw invalid; }
     }
     public void switchCamera() throws Exception {
@@ -443,14 +443,18 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
             NativeVideoCapture capture=new NativeVideoCapture(context,factory,capturer,()->{
                 checkVideoCapture();if(!captureChange.equals(videoChange))throw new SecurityException("Stale camera callback");
             },captureFailure);
-            videoCapture=capture;lastVideoCapture=capture;checkVideo();
-            videoFailureStage="video-attach-track";
-            if(!transceivers.get(1).getSender().setTrack(capture.track,false)) throw new SecurityException("Native video track rejected");
-            videoFailureStage="video-encoding-parameters";
-            RtpParameters parameters=transceivers.get(1).getSender().getParameters();
-            for(var encoding:parameters.encodings) { encoding.maxBitrateBps=400_000;encoding.maxFramerate=15; }
-            if(!transceivers.get(1).getSender().setParameters(parameters)) throw new SecurityException("Video limits rejected");
-            videoFailureStage="video-capture-start";capture.start();
+            videoCapture=capture;lastVideoCapture=capture;
+            checkVideo(); // Disk-backed policy checks must not hold the capture teardown monitor.
+            synchronized(capture) {
+                capture.requireOpen();
+                videoFailureStage="video-attach-track";
+                if(!transceivers.get(1).getSender().setTrack(capture.track,false)) throw new SecurityException("Native video track rejected");
+                videoFailureStage="video-encoding-parameters";
+                RtpParameters parameters=transceivers.get(1).getSender().getParameters();
+                for(var encoding:parameters.encodings) { encoding.maxBitrateBps=400_000;encoding.maxFramerate=15; }
+                if(!transceivers.get(1).getSender().setParameters(parameters)) throw new SecurityException("Video limits rejected");
+                videoFailureStage="video-capture-start";capture.start();
+            }
         }
         videoStatus="ACTIVE"; // Decoded image evidence is separate, including last frame freshness.
     }
