@@ -11,6 +11,7 @@ cd "$source_root"
 git apply --reverse --check "$repo/native/webrtc/reject-turn-redirect.patch"
 git apply --reverse --check "$repo/native/webrtc/java-generics.patch"
 git apply --reverse --check "$repo/native/webrtc/customize-before-integrity.patch"
+git apply --reverse --check "$repo/native/webrtc/restrict-media-sections.patch"
 export DEPOT_TOOLS_UPDATE=0 DEPOT_TOOLS_COLLECT_METRICS=0
 export VPYTHON_BYPASS='manually managed python not supported by chrome operations'
 report="$repo/native-test-output"
@@ -28,3 +29,13 @@ timeout --signal=TERM --kill-after=10s 15m out_turn_tests/rtc_p2p_unittests \
   --gtest_also_run_disabled_tests --gtest_output="xml:$report/turn.xml" \
   > "$report/turn.log" 2>&1
 python "$repo/scripts/check_native_turn_tests.py" "$report/turn.xml"
+
+# The same maintained parsed SDP model is constrained at the Android JNI ingress.
+# Run its focused policy and upstream model regressions, not the entire pc suite.
+third_party/siso/cipd/siso ninja -C out_turn_tests -local_jobs=2 rtc_pc_unittests
+sha256sum out_turn_tests/rtc_pc_unittests > "$report/media-binary-sha256.txt"
+timeout --signal=TERM --kill-after=10s 15m out_turn_tests/rtc_pc_unittests \
+  --gtest_filter='UmbraMediaPolicyTest.*:MediaContentDescriptionTest.*:SessionDescriptionTest.*' \
+  --gtest_also_run_disabled_tests --gtest_output="xml:$report/media.xml" \
+  > "$report/media.log" 2>&1
+python "$repo/scripts/check_native_turn_tests.py" --media "$report/media.xml"

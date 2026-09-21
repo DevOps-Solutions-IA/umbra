@@ -20,15 +20,15 @@
 +    port_->TurnCustomizerMaybeModifyOutgoingStunMessage(message);
 +  }
  }
- 
+
  void TurnAllocateRequest::OnSent() {
 @@ -1547,7 +1551,6 @@
    }
- 
+
    port_->AddRequestAuthInfo(message);
 -  port_->TurnCustomizerMaybeModifyOutgoingStunMessage(message);
  }
- 
+
  void TurnRefreshRequest::OnSent() {
 @@ -1638,7 +1641,6 @@
    message->AddAttribute(std::make_unique<StunXorAddressAttribute>(
@@ -36,7 +36,7 @@
    port_->AddRequestAuthInfo(message);
 -  port_->TurnCustomizerMaybeModifyOutgoingStunMessage(message);
  }
- 
+
  TurnCreatePermissionRequest::~TurnCreatePermissionRequest() {
 @@ -1711,7 +1713,6 @@
    message->AddAttribute(std::make_unique<StunXorAddressAttribute>(
@@ -44,5 +44,5 @@
    port_->AddRequestAuthInfo(message);
 -  port_->TurnCustomizerMaybeModifyOutgoingStunMessage(message);
  }
- 
+
  TurnChannelBindRequest::~TurnChannelBindRequest() {

@@ -5,7 +5,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 
-def validate(path: Path) -> int:
+def validate(path: Path, *, media: bool = False) -> int:
     root = ET.parse(path).getroot()
     cases = root.findall('.//testcase')
     names = {(case.get('classname'), case.get('name')) for case in cases}
@@ -18,6 +18,11 @@ def validate(path: Path) -> int:
                        'LoopbackTcpIpv6', 'LoopbackTlsIpv4', 'LoopbackTlsIpv6')
     }
     required.add(('TurnPortTest', 'DISABLED_TestTurnCustomizerAddAttribute'))
+    if media:
+        required = {('UmbraMediaPolicyTest', name) for name in (
+            'RejectsEmptyAndVideoOnly', 'AcceptsAudioAndOneVideo', 'RejectsDataEvenWhenRejected',
+            'RejectsDuplicateAudio', 'RejectsDuplicateVideo', 'RejectsMultipleTracksInOneSection')}
+
     if not cases or not required <= names or len(names) != len(cases):
         raise ValueError('Missing or duplicate TURN regression results')
     if int(root.get('tests', '0')) != len(cases):
@@ -35,5 +40,6 @@ def validate(path: Path) -> int:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('report', type=Path)
+    parser.add_argument("--media", action="store_true")
     args = parser.parse_args()
-    print(f'PASS {validate(args.report)} executed native TURN tests; not the full upstream suite')
+    print(f'PASS {validate(args.report, media=args.media)} executed native {"media policy" if args.media else "TURN"} tests; not the full upstream suite')

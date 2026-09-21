@@ -47,3 +47,15 @@ its additions in integrity protection. The disabled test remains required and is
 executed explicitly; no assertion or integrity check is removed. The Android AAR
 is **not** replaced by editing this recipe: new four-ABI hashes and acceptance are
 required before adopting its output.
+
+Run 35630454176 rebuilt all four ABIs and **passed 83 TURN C++ tests**, including
+the disabled customizer regression. The sanitized receipt is in
+`docs/validation/2026-09-21-video-native-turn-receipt.json`.
+
+`restrict-media-sections.patch` adds an independent bound over WebRTC's parsed SDP
+model at Android JNI ingress: exactly one audio section, at most one video section,
+no data/unsupported section, at most one stream per section. It does not parse or
+rewrite SDP text. The recipe also compiles `rtc_pc_unittests` and executes the
+focused UMBRA policy + upstream session-model tests. Results of this additional
+patch remain pending until the next source build; the earlier 83-test result does
+not validate it. Java still checks per-generation consent and allowed directions.

@@ -160,3 +160,29 @@ refresh, permission and channel binding share this rule. Integrity validation an
 the original disabled regression assertions are unchanged. The full TURN test
 selection still includes disabled tests. Rebuild/test results and adoption into
 the Android pin remain pending; the application still uses the previous AAR.
+
+## Prerequisite results checked after the corrective native build
+
+- `35630454176`, builder `02d1ebf939bf6455571b9df35a0627711b31a4d6`:
+  four source ABI jobs SUCCESS; 83 TURN C++ tests actually executed and passed,
+  including all 18 redirect regressions and the previously aborting customizer.
+  Receipt: `2026-09-21-video-native-turn-receipt.json`. Not the entire upstream suite.
+- `35630460378`: optimized media laboratory SUCCESS; downloaded and inspected all
+  15 voice scenario receipts. Published HEAD `02d1ebf…`; actual integration checkout
+  `854bff10b00d0ccf3d469e4a1ab72993da4c055c`. This code precedes local video changes.
+- `35630460376`: first attempt FAILED in debug voice with sanitized stage
+  `native-binding`; second attempt on the SAME code completed all four jobs SUCCESS.
+  The first failure is retained, not replaced by the retry. Its precise cause is
+  unresolved; local adapter diagnostics now distinguish fixed stages without SDP,
+  addresses or credentials. This is an outstanding reliability finding, not proof
+  that the initial failure was harmless.
+- The initial native-fix publish command also attempted unsupported
+  `repository_guard.py --staged` (exit 2) and reported patch-context whitespace.
+  Those are command/format errors, not successful guards. The supported
+  `python scripts/repository_guard.py` subsequently passed (268 source files);
+  blank patch context formatting was corrected without changing patch semantics.
+
+An additional native SDP section constraint and focused C++ tests are being added
+before completing video acceptance. It uses the upstream parsed model to reject
+DataChannel/unsupported sections and excess tracks, rather than a text/regex parser.
+It needs a new four-ABI build and its own test results before adoption.

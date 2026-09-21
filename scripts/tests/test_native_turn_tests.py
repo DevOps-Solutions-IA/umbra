@@ -32,6 +32,18 @@ class NativeTurnEvidenceTest(unittest.TestCase):
             ET.ElementTree(root).write(path)
             return validate(path)
 
+    def test_media_policy_requires_every_executed_rejection(self):
+        root=ET.Element('testsuites', tests='6', failures='0')
+        suite=ET.SubElement(root,'testsuite',name='UmbraMediaPolicyTest')
+        for name in ('RejectsEmptyAndVideoOnly','AcceptsAudioAndOneVideo','RejectsDataEvenWhenRejected',
+                     'RejectsDuplicateAudio','RejectsDuplicateVideo','RejectsMultipleTracksInOneSection'):
+            ET.SubElement(suite,'testcase',classname='UmbraMediaPolicyTest',name=name,status='run',result='completed')
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'media.xml';ET.ElementTree(root).write(path)
+            self.assertEqual(6,validate(path,media=True))
+            suite.remove(suite[-1]);root.set('tests','5');ET.ElementTree(root).write(path)
+            with self.assertRaises(ValueError):validate(path,media=True)
+
     def test_executed_results(self):
         self.assertEqual(19, self.check(self.report()))
 

@@ -42,6 +42,8 @@ git apply --check "$repo/native/webrtc/java-generics.patch"
 git apply "$repo/native/webrtc/java-generics.patch"
 git apply --check "$repo/native/webrtc/customize-before-integrity.patch"
 git apply "$repo/native/webrtc/customize-before-integrity.patch"
+git apply --check "$repo/native/webrtc/restrict-media-sections.patch"
+git apply "$repo/native/webrtc/restrict-media-sections.patch"
 python build/linux/sysroot_scripts/install-sysroot.py --arch=amd64
 python build/util/lastchange.py --source-dir . --filter= --revision-id-only -o build/util/LASTCHANGE
 grep -F "$source_revision" build/util/LASTCHANGE
