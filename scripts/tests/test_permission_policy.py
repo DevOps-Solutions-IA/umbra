@@ -5,7 +5,7 @@ import unittest
 import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from permission_policy import COMMON, NETWORK, VOICE, manifest_permissions, validate_permissions
+from permission_policy import COMMON, NETWORK, VOICE, VIDEO, manifest_permissions, validate_permissions
 
 
 class PermissionPolicyTests(unittest.TestCase):
@@ -24,6 +24,11 @@ class PermissionPolicyTests(unittest.TestCase):
         for permission in VOICE:
             with self.subTest(permission=permission), self.assertRaises(RuntimeError):
                 validate_permissions(COMMON | {permission}, "offline")
+
+    def test_camera_only_connected(self):
+        validate_permissions(COMMON | NETWORK | VOICE | VIDEO, "connected")
+        with self.assertRaises(RuntimeError):
+            validate_permissions(COMMON | VIDEO, "offline")
 
     def test_added_sensitive_permission_is_rejected(self):
         for permission in ("READ_CONTACTS", "ACCESS_BACKGROUND_LOCATION", "FOREGROUND_SERVICE_LOCATION", "READ_SMS", "CAMERA", "RECORD_AUDIO"):

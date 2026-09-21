@@ -13,7 +13,7 @@ import org.webrtc.PeerConnection;
  */
 public final class TurnConfiguration implements AutoCloseable {
     private final RelayOnlyContract contract;
-    private final String revision;
+    private final String revision,tlsHostname;
     private final LongSupplier elapsedMillis;
     private final long createdMillis, deadlineMillis;
     private String username, password;
@@ -21,6 +21,15 @@ public final class TurnConfiguration implements AutoCloseable {
 
     public TurnConfiguration(List<String> authorizedUrls, String revision, String username,
                              String password, long remainingMillis, LongSupplier elapsedMillis) {
+        this(authorizedUrls,revision,username,password,remainingMillis,elapsedMillis,"");
+    }
+    /** Explicit LOCAL TLS server name for a locally authorized IP endpoint; never read from signaling. */
+    TurnConfiguration(List<String> authorizedUrls,String revision,String username,String password,long remainingMillis,
+                      LongSupplier elapsedMillis,String tlsHostname) {
+        if(tlsHostname==null || tlsHostname.length()>253 || !tlsHostname.isEmpty() &&
+            (!tlsHostname.matches("[a-z0-9]+(?:[.-][a-z0-9]+)*") || authorizedUrls==null || authorizedUrls.stream().anyMatch(url->!url.startsWith("turns:"))))
+            throw new SecurityException(RelayOnlyContract.FAILURE);
+        this.tlsHostname=tlsHostname;
         contract = new RelayOnlyContract(authorizedUrls, revision);
         this.revision = revision;
         this.elapsedMillis = Objects.requireNonNull(elapsedMillis);
@@ -47,7 +56,7 @@ public final class TurnConfiguration implements AutoCloseable {
             var server = PeerConnection.IceServer.builder(contract.authorizedTurnUrls())
                     .setUsername(username).setPassword(password)
                     .setTlsCertPolicy(PeerConnection.TlsCertPolicy.TLS_CERT_POLICY_SECURE)
-                    .createIceServer();
+                    .setHostname(tlsHostname).createIceServer();
             var configuration = new PeerConnection.RTCConfiguration(List.of(server));
             configuration.iceTransportsType = PeerConnection.IceTransportsType.RELAY;
             configuration.sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN;
