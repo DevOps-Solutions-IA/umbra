@@ -240,3 +240,25 @@ def test_cursor_does_not_overflow_sqlite(client, app):
     box = register(client, app)
     result = client.get(f"/v1/boxes/{box['id']}/messages?after={10**100}", headers=header(box))
     assert result.status_code == 422
+
+
+@pytest.mark.parametrize("ttl,status", [(0, 400), (1, 201), (MAX_TTL, 201), (MAX_TTL + 1, 400)])
+def test_exact_expiry_boundaries_with_controlled_clock(client, app, monkeypatch, ttl, status):
+    now = 2_000_000_000
+    monkeypatch.setattr("umbra_relay.app.time.time", lambda: now)
+    box = register(client, app)
+    assert put(client, box, envelope(expires=now + ttl)).status_code == status
+
+
+def test_clock_tick_changes_excessive_expiry_to_existing_id_collision(client, app, monkeypatch):
+    # Reproduce why a network test cannot assume a +1-second excess survives transit.
+    clock = [2_000_000_000]
+    monkeypatch.setattr("umbra_relay.app.time.time", lambda: clock[0])
+    box = register(client, app)
+    message = envelope(expires=clock[0] + 3600)
+    assert put(client, box, message).status_code == 201
+    changed = {**message, "expires": clock[0] + MAX_TTL + 1}
+    assert put(client, box, changed).status_code == 400
+    clock[0] += 1
+    assert put(client, box, changed).status_code == 409
+    assert inbox(client, box).json()["messages"] == [message]

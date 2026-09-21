@@ -474,3 +474,41 @@ f1a393612a76c182d1fd2436ef6f7802c9a2b849. Esa ejecución precede la nueva compro
 ADM, por lo que no se usa para darla por aprobada. La repetición local con intervalos
 monotónicos midió inicio a 1.000 ms y ventanas de 500/500 ms (lock), 501/500 ms
 (error de almacenamiento), cero callbacks en los cuatro extremos observados.
+
+
+## Fallo de CI35585672689: frontera temporal del verificador HTTPS
+
+HEAD7f085571b0c41e6519f03c2daa6e09b16a0e5b71: repository-guard, relay-and-core y
+relay-container SUCCESS; Android FAILED en `test_relay_integration.py`, antes de
+instalar/arrancar AVD. Por tanto la nueva regresión ADM NO se ejecutó en ese intento;
+no existe emulator.log de ese intento que pueda demostrar su resultado.
+Error visible: `AssertionError: relay rejects excessive TTL` en
+RelayIntegrationTest.java:99. El helper antiguo omitía el HTTP recibido.
+
+El fixture construía expires=Bytes.now()+604801, apenas un segundo fuera del máximo.
+El log sitúa el control previo a 09:57:43.994 UTC y el error a 09:57:44.010 UTC.
+Reproducción determinista sobre FastAPI/SQLite con reloj controlado: el mismo mensaje
+modificado recibe 400 en t y 409 en t+1, cuando su expiración queda dentro del máximo
+y alcanza la comprobación de colisión con el ID ya almacenado. Esto demuestra la
+carrera del verificador y es compatible con el límite de segundo observado en CI;
+el HTTP concreto de aquel intento no quedó registrado y no se inventa.
+
+Corrección: el rechazo de integración HTTPS utiliza MAX_TTL+3600, inequívocamente
+inválido durante el timeout de la petición. MAX_TTL productivo permanece 604800.
+Se añaden pruebas backend con reloj controlado para expires=now, now+1,
+now+MAX_TTL y now+MAX_TTL+1, más la transición 400→409 sin alterar el mensaje almacenado.
+Así se conserva explícitamente la frontera exacta, no se aumenta el TTL ni se excluye
+el caso. El helper informa esperado/recibido como códigos HTTP, sin cuerpos o secretos.
+
+Resultados después de corregir:
+- `. .venv/bin/activate; PYTHONPATH=relay python -m pytest relay/tests/test_relay.py -q`:
+  38 pruebas, salida 0. Un intento anterior sin PYTHONPATH terminó en 2 durante la
+  colección (umbra_relay no importable); no se contó como prueba ejecutada.
+- `bash scripts/test_local.sh`, venv y JDK21: salida 0; 149 backend, 105 escenarios
+  Java y 12 controles estáticos separados.
+- `python scripts/test_relay_integration.py`, venv, JDK21 y SDK configurado: salida 0;
+  28 controles principales HTTPS, más escenario multidispositivo, con Engine,
+  libsignal JNI, relay aislado SQLite y verificación TLS real.
+
+La siguiente CI debe validar el commit que integra esta corrección y la regresión
+ADM; ninguna ejecución verde anterior se atribuye al código nuevo.

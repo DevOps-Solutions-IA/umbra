@@ -16,6 +16,9 @@ La entrega documental posterior debe comprobar su propia CI y conservar esta dis
 Caducidad de credenciales/asignaciones y rutas UDP reales ejecutadas en laboratorio.
 Regresión adicional: el fixture mide con monotónico el cese de callbacks ADM
 sintéticos tras cancelación; 126 herramientas y lock/disco en dos AVD pasaron.
+CI35585672689 falló antes del AVD por el fixture MAX_TTL+1; se reprodujo la
+carrera 400→409 al cruzar un segundo y se corrigió el test, conservando MAX_TTL
+y pruebas exactas de frontera. 149 backend y HTTPS real pasan localmente.
 Consultar la CI del nuevo HEAD antes de atribuirle la batería completa.
 Hardware, IPv6, TURN TLS y recorrido de voz R8 siguen pendientes.
 No se modifica señalización anterior ni se reducen Keystore/permisos offline.
