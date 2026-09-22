@@ -167,3 +167,12 @@ relay en ambos candidatos seleccionados y certificado DTLS efectivo autenticado.
 Las pruebas de huella exigen al menos un rechazo nativo por binding y cero captura
 en ambos extremos; la cancelación del otro extremo no se presenta como una segunda
 comprobación de certificado. Timeout o falta de evidencia no cuentan como éxito.
+
+## Evidencia posterior de video — 2026-09-22
+
+Código `171324bf` pasó las matrices debug/R8 y regresiones en Actions35661260991,
+35661261035 y35661261036. Ver [aceptación delimitada](validation/2026-09-22-turn-video-acceptance.md).
+TURN/TLS y trayecto cliente-TURN IPv6 tienen evidencia nueva; no se extiende a
+asignaciones relay IPv6, hardware físico o APK productivo exacto. El cierre de
+superficies ya no depende del listener reemplazable; los límites de cancelación
+medidos no demuestran retiro de paquetes ni borrado de copias del destinatario.

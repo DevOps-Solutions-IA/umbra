@@ -1,6 +1,8 @@
 # ADR — extensión de video 1:1 (2026-09-21)
 
-Estado: IMPLEMENTACIÓN EN VALIDACIÓN; aceptación final y CI del código de video pendientes.
+Estado: integración de laboratorio aprobada sobre `171324bf`, 2026-09-22.
+[Resultados y límites](../validation/2026-09-22-turn-video-acceptance.md).
+Hardware, APK productivo exacto y auditoría siguen pendientes.
 Ver [trabajo y resultados](../validation/2026-09-21-turn-video-core.md).
 
 ## Base que se conserva

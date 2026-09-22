@@ -1,7 +1,8 @@
 # VIDEO_MEDIA — call extension v2 (2026-09-21)
 
-Status: implementation under validation in PR #9; **not yet accepted as working
-video**. See the dated validation report. Audio starts with CALL_SIGNALING v1 and
+Status: native synthetic audio/video integration verified in PR #9 on `171324bf`.
+See [the dated acceptance and its limits](../validation/2026-09-22-turn-video-acceptance.md);
+physical hardware and the exact production APK remain unverified. Audio starts with CALL_SIGNALING v1 and
 the unchanged 60-second invitation / 180-second foreground session. This extension
 uses the same selected device, Engine, libsignal session and opaque HTTPS relay.
 Offline rejects calls before any media action and contains no WebRTC or camera permission.

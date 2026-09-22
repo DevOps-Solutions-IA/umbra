@@ -1,5 +1,16 @@
 # Transferencia técnica a Codex
 
+## Estado actual de transferencia — 2026-09-22
+
+PR #9 sigue OPEN/DRAFT hacia `codex/turn-voice-core`. Código `171324bf` probado
+en checkout `dca789944`: Verify 35661260991 (cuatro SUCCESS), voz R8 35661261035
+y video 35661261036 SUCCESS. Video: 31 casos debug y 31 R8; 15 escenarios de voz
+por variante. [Recibo y límites](validation/2026-09-22-turn-video-acceptance.md).
+Implementación integrada comprobada con medios sintéticos; no hardware físico ni
+APK productivo exacto. Pendientes: timestamp de último datagrama video, asignación
+relay IPv6, hardware y auditoría. No reabrir fallos históricos como pendientes sin
+una regresión nueva. Las secciones siguientes conservan la evolución anterior.
+
 ## Sexta entrega — video — EN CURSO, 2026-09-21
 
 Rama `codex/turn-video-core`, PR #9 borrador dependiente de #8 abierta.
