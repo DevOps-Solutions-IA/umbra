@@ -20,7 +20,8 @@ public final class SqliteDeviceRecords implements Records, AutoCloseable {
     public SqliteDeviceRecords(String fixture, boolean existing) {
         if(fixture!=null && !Set.of("location-restart","voice-restart").contains(fixture)) throw new SecurityException("Unknown synthetic fixture");
         var context = InstrumentationRegistry.getInstrumentation().getTargetContext();
-        if (!BuildConfig.DEBUG || !context.getPackageName().endsWith(".dev")) throw new SecurityException("Test-only storage");
+        if (!(BuildConfig.DEBUG && context.getPackageName().endsWith(".dev"))
+                && !context.getPackageName().equals("app.umbra.privatechat.medialab")) throw new SecurityException("Test-only storage");
         File directory = new File(context.getCacheDir(), "synthetic-device-membership-lab");
         if (!directory.isDirectory() && !directory.mkdirs()) throw new IllegalStateException("Cannot create isolated test database directory");
         path = new File(directory, "synthetic-device-" + (fixture==null?UUID.randomUUID():fixture) + ".db");

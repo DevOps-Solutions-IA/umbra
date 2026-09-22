@@ -10,7 +10,8 @@ import subprocess
 
 
 def ensure_apk(adb: str, serial: str, package: str, apk: Path) -> None:
-    if package not in {"app.umbra.privatechat.dev", "app.umbra.privatechat.dev.test"}:
+    if package not in {"app.umbra.privatechat.dev", "app.umbra.privatechat.dev.test",
+                       "app.umbra.privatechat.medialab", "app.umbra.privatechat.medialab.test"}:
         raise ValueError("Only the isolated connected debug UID is supported")
     with apk.open("rb") as stream:
         digest=hashlib.file_digest(stream,"sha256").hexdigest()

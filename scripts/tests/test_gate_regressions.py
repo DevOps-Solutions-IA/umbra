@@ -34,7 +34,7 @@ class GateRegressionTests(unittest.TestCase):
         check_apk_policy.validate_mapping(safe)
         for origin in ("app.umbra.lab.SoftwareKeys.unlock", "androidx.test.runner.Helper.run",
                        "app.umbra.MemoryRecords.get", "app.umbra.DeviceMemoryRecords$Nested.get",
-                       "app.umbra.VoiceNativeFixtureListener.run", "app.umbra.media.VoiceEngineFixtureListener.run"):
+                       "app.umbra.VoiceNativeFixtureListener.run", "app.umbra.media.VoiceEngineFixtureListener.run", "app.umbra.media.SyntheticVideoCapturer.run"):
             with self.subTest(origin=origin):
                 mapping = "app.umbra.crypto.Engine -> a:\n    1:1:void " + origin + "():10:10 -> a\n"
                 with self.assertRaisesRegex(RuntimeError, "inlined"):

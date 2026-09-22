@@ -1,5 +1,30 @@
 # Backlog de finalización verificable
 
+## Aceptación de laboratorio de la sexta entrega — 2026-09-22
+
+PR #9 sigue OPEN/DRAFT hacia `codex/turn-voice-core`. Código `171324bf` probado
+en checkout `dca789944`: Verify 35661260991 (cuatro SUCCESS), voz R8 35661261035
+y video 35661261036 SUCCESS. Video: 31 casos debug y 31 R8; 15 escenarios de voz
+por variante. [Recibo y límites](validation/2026-09-22-turn-video-acceptance.md).
+Implementación integrada comprobada con medios sintéticos; no hardware físico ni
+APK productivo exacto. Pendientes: timestamp de último datagrama video, asignación
+relay IPv6, hardware y auditoría. No reabrir fallos históricos como pendientes sin
+una regresión nueva. Las secciones siguientes conservan la evolución anterior.
+
+## Sexta entrega — video — EN CURSO, 2026-09-21
+
+PR #9 / `codex/turn-video-core`, dependiente de #8. Primero regresiones C++ y voz R8.
+Voz sintética optimizada comprobada localmente; corregida eliminación de JNI Zero
+que abortaba inicialización nativa. [Evidencia](validation/2026-09-21-turn-video-core.md).
+Video PARTIAL: consentimiento direccional y renegociación implementados; patrones
+sintéticos remotos + audio comprobados en dos AVD debug/R8 sobre un árbol intermedio.
+Pin `.3`, C++ seleccionado, Camera2 AVD, TURN/TLS e IPv6 hacia TURN cuentan con
+evidencia parcial nueva. Pendientes: aceptación final, negativas completas,
+CI del nuevo árbol y revisión de límites de cancelación. El consentimiento
+unidireccional nativo y las nuevas regresiones del cierre de superficies ya tienen
+ejecución local. No cerrar por CI anterior.
+UI definitiva, hardware y auditoría continúan fuera.
+
 ## Quinta entrega — voz — en curso, 2026-09-21
 
 PARTIAL — rama `codex/turn-voice-core`, base #7 abierta `e495793`.

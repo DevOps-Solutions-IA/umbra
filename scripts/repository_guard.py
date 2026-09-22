@@ -21,6 +21,8 @@ MAX_BYTES = 8_000_000
 # One reviewed source-built dependency, not a global size-limit increase. All
 # current/history instances must match BOTH exact size and SHA-256; no wildcard.
 APPROVED_NATIVE = {
+    'android/vendor/webrtc-150.7871.01-umbra.3.aar':
+        (23728885, '5743b0e47574a7d8bad047b00fdef8f49e56e41c944a12542282e2b91ccf9433'),
     'android/vendor/webrtc-150.7871.01-umbra.1.aar':
         (23728073, 'bbc5675f91b31f901e1a482b00991a36ac2b3d912d2782b80e1cc1b756b1c413'),
 }

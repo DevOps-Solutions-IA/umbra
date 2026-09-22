@@ -1,0 +1,130 @@
+{
+  "status": "PASS intermediate working-tree execution; NOT final CI",
+  "nativeSha256": "5743b0e47574a7d8bad047b00fdef8f49e56e41c944a12542282e2b91ccf9433",
+  "apks": {
+    "connected/debug/app-connected-debug.apk": "170aa90815dcec252c2ceee20e5f70e4d66262c928d8f5bf496bf9343cbc5b16",
+    "androidTest/connected/debug/app-connected-debug-androidTest.apk": "8da184e31fe936c877b53ec2520ff541ac5a8b742d0b1a4d2bfa1b87517a9b05"
+  },
+  "syntheticOnly": true,
+  "video": {
+    "synthetic": true,
+    "physicalCamera": false,
+    "nativeCodecPipeline": true,
+    "endpoints": 2,
+    "phases": {
+      "active": [
+        {
+          "decodedRemotePatterns": 21,
+          "distinctPatternPhases": 2,
+          "decodedAudioDuringVideo": 660,
+          "capturedFrames": 21,
+          "generation": 2,
+          "videoCodec": "video/VP8",
+          "sdpAddressAudit": true
+        },
+        {
+          "decodedRemotePatterns": 20,
+          "distinctPatternPhases": 2,
+          "decodedAudioDuringVideo": 653,
+          "capturedFrames": 40,
+          "generation": 2,
+          "videoCodec": "video/VP8",
+          "sdpAddressAudit": true
+        }
+      ],
+      "stopped": [
+        {
+          "captureStopped": true,
+          "requestToInvalidationNanos": 6222,
+          "requestToLastCaptureNanos": 0,
+          "requestToClosedNanos": 9011948,
+          "observedAfterRequestMillis": 2524,
+          "captureCallbacksAfterRequest": 0,
+          "decodedAudioAfterVideoOff": 252
+        },
+        {
+          "captureStopped": true,
+          "requestToInvalidationNanos": 3056,
+          "requestToLastCaptureNanos": 4481881,
+          "requestToClosedNanos": 11667906,
+          "observedAfterRequestMillis": 2509,
+          "captureCallbacksAfterRequest": 0,
+          "decodedAudioAfterVideoOff": 252
+        }
+      ],
+      "resumed": [
+        {
+          "decodedRemotePatterns": 21,
+          "distinctPatternPhases": 2,
+          "decodedAudioDuringVideo": 652,
+          "capturedFrames": 44,
+          "generation": 3,
+          "videoCodec": "video/VP8",
+          "sdpAddressAudit": true
+        },
+        {
+          "decodedRemotePatterns": 21,
+          "distinctPatternPhases": 2,
+          "decodedAudioDuringVideo": 646,
+          "capturedFrames": 88,
+          "generation": 3,
+          "videoCodec": "video/VP8",
+          "sdpAddressAudit": true
+        }
+      ]
+    }
+  },
+  "transport": {
+    "synthetic": true,
+    "endpoints": 2,
+    "observedSeconds": 30.129,
+    "transport": "native WebRTC through coturn UDP",
+    "turnTlsCase": null,
+    "scenario": "audio",
+    "directIpv4Reachability": true,
+    "directBlockedDuringMedia": false,
+    "muteUnmute": true,
+    "network": [
+      {
+        "scope": "owned AVD outbound IPv4 UDP",
+        "mediaAttempt": "OBSERVED",
+        "turnPackets": 1378,
+        "turnStunPackets": 16,
+        "nonTurnStunPackets": 0,
+        "otherNonSystemUdpPackets": 0,
+        "ipv6": "NOT_EXECUTED"
+      },
+      {
+        "scope": "owned AVD outbound IPv4 UDP",
+        "mediaAttempt": "OBSERVED",
+        "turnPackets": 1455,
+        "turnStunPackets": 36,
+        "nonTurnStunPackets": 0,
+        "otherNonSystemUdpPackets": 0,
+        "ipv6": "NOT_EXECUTED"
+      }
+    ],
+    "audio": [
+      {
+        "sdpAddressAudit": true,
+        "decodedBuffers": 110,
+        "capturedBuffers": 114,
+        "verifiedNativeTransport": true,
+        "receivedAudioPackets": 54,
+        "codec": "audio/opus",
+        "nativeRelayProtocol": "udp"
+      },
+      {
+        "sdpAddressAudit": true,
+        "decodedBuffers": 110,
+        "capturedBuffers": 104,
+        "verifiedNativeTransport": true,
+        "receivedAudioPackets": 52,
+        "codec": "audio/opus",
+        "nativeRelayProtocol": "udp"
+      }
+    ],
+    "allocationExpiry": null,
+    "nativeCaptureClosure": []
+  }
+}

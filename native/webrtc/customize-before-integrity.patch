@@ -1,0 +1,48 @@
+--- a/p2p/base/turn_port.cc
++++ b/p2p/base/turn_port.cc
+@@ -1166,6 +1166,10 @@
+       std::make_unique<StunByteStringAttribute>(STUN_ATTR_REALM, realm_));
+   msg->AddAttribute(
+       std::make_unique<StunByteStringAttribute>(STUN_ATTR_NONCE, nonce_));
++  // Customize before signing: attributes added after MESSAGE-INTEGRITY are
++  // either unauthenticated or rejected by StunMessage. Keep auth attributes
++  // visible to the customizer and authenticate its additions as well.
++  TurnCustomizerMaybeModifyOutgoingStunMessage(msg);
+   const bool success = msg->AddMessageIntegrity(hash());
+   RTC_DCHECK(success);
+ }
+@@ -1350,8 +1354,8 @@
+     port_->AddRequestAuthInfo(message);
+   } else {
+     SetAuthenticationRequired(false);
+-  }
+-  port_->TurnCustomizerMaybeModifyOutgoingStunMessage(message);
++    port_->TurnCustomizerMaybeModifyOutgoingStunMessage(message);
++  }
+ }
+
+ void TurnAllocateRequest::OnSent() {
+@@ -1547,7 +1551,6 @@
+   }
+
+   port_->AddRequestAuthInfo(message);
+-  port_->TurnCustomizerMaybeModifyOutgoingStunMessage(message);
+ }
+
+ void TurnRefreshRequest::OnSent() {
+@@ -1638,7 +1641,6 @@
+   message->AddAttribute(std::make_unique<StunXorAddressAttribute>(
+       STUN_ATTR_XOR_PEER_ADDRESS, ext_addr_));
+   port_->AddRequestAuthInfo(message);
+-  port_->TurnCustomizerMaybeModifyOutgoingStunMessage(message);
+ }
+
+ TurnCreatePermissionRequest::~TurnCreatePermissionRequest() {
+@@ -1711,7 +1713,6 @@
+   message->AddAttribute(std::make_unique<StunXorAddressAttribute>(
+       STUN_ATTR_XOR_PEER_ADDRESS, ext_addr_));
+   port_->AddRequestAuthInfo(message);
+-  port_->TurnCustomizerMaybeModifyOutgoingStunMessage(message);
+ }
+
+ TurnChannelBindRequest::~TurnChannelBindRequest() {

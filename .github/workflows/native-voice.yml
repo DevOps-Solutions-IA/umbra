@@ -1,7 +1,7 @@
 name: Build pinned voice native dependency
 "on":
   push:
-    branches: [codex/turn-voice-core]
+    branches: [codex/turn-voice-core, codex/turn-video-core]
     paths: ['native/webrtc/**', '.github/workflows/native-voice.yml']
   workflow_dispatch:
 permissions:
@@ -38,6 +38,16 @@ jobs:
           sudo apt-get install --no-install-recommends -y libglib2.0-dev libnss3-dev libx11-dev libxcomposite-dev libxdamage-dev libxext-dev libxfixes-dev libxrandr-dev libxrender-dev libxtst-dev libasound2-dev libpulse-dev
       - name: Build reviewed source; never remote execution
         run: bash native/webrtc/build.sh '${{ matrix.abi }}'
+      - name: Execute pinned TURN C++ tests (including redirect rejection)
+        if: matrix.abi == 'x86_64'
+        run: bash native/webrtc/test-turn.sh
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always() && matrix.abi == 'x86_64'
+        with:
+          name: native-turn-tests-${{ github.sha }}
+          path: native-test-output/
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: native-voice-${{ matrix.abi }}-${{ github.sha }}

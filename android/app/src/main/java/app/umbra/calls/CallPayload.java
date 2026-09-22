@@ -30,8 +30,9 @@ public final class CallPayload {
     }
     public static void validate(JSONObject p,long now) throws Exception {
         Wire.fields(p,"v","purpose","context","type","event","device","selected","generation","policy","data");
-        if(Wire.integer(p,"v")!=1 || !Wire.string(p,"purpose",32).equals("UMBRA-CALL-SIGNALING") || p.toString().length()>40000) throw new SecurityException("Invalid call protocol");
-        String type=Wire.string(p,"type",16); if(!TYPES.contains(type)) throw new SecurityException("Unknown call control");
+        long version=Wire.integer(p,"v");
+        if((version!=1 && version!=2) || !Wire.string(p,"purpose",32).equals("UMBRA-CALL-SIGNALING") || p.toString().length()>40000) throw new SecurityException("Invalid call protocol");
+        String type=Wire.string(p,"type",16); if(version==1 ? !TYPES.contains(type) : !(VideoPayload.CONTROLS.contains(type) || type.equals("DESCRIPTION"))) throw new SecurityException("Unknown call control/version");
         Wire.uuid(Wire.string(p,"event",36)); Wire.identity(Wire.string(p,"device",64));
         String selected=Wire.string(p,"selected",64); if(!selected.isEmpty()) Wire.identity(selected);
         policy(Wire.string(p,"policy",16));
@@ -50,7 +51,12 @@ public final class CallPayload {
         long start=Wire.integer(c,"created"), ring=Wire.integer(c,"inviteUntil"), end=Wire.integer(c,"ends");
         if(start<1 || start>now+30 || ring-start!=RING_SECONDS || end-start!=SESSION_SECONDS || now>=end) throw new SecurityException("Call expired or invalid clock");
         if(type.equals("DESCRIPTION")) {
-            Wire.fields(data,"role","sdp","digest","fingerprint");
+            if(version==1) Wire.fields(data,"role","sdp","digest","fingerprint");
+            else {
+                Wire.fields(data,"role","sdp","digest","fingerprint","video");
+                if(!(data.get("video") instanceof JSONObject video) || gen<2) throw new SecurityException("Missing video binding");
+                VideoPayload.binding(video);
+            }
             if(!Set.of("offer","answer").contains(Wire.string(data,"role",6))) throw new SecurityException("Invalid description role");
             String sdp=Wire.string(data,"sdp",24000); if(sdp.isEmpty() || Bytes.utf8(sdp).length>24000 || sdp.indexOf(0)>=0) throw new SecurityException("Invalid description size");
             if(!Bytes.sha256(Bytes.utf8(sdp)).equals(Wire.identity(Wire.string(data,"digest",64)))) throw new SecurityException("Description digest mismatch");
@@ -61,6 +67,9 @@ public final class CallPayload {
             if(Wire.string(data,"candidate",2048).isEmpty() || Wire.string(data,"mid",32).isEmpty()) throw new SecurityException("Empty ICE data");
             Wire.identity(Wire.string(data,"description",64));
             if(gen<1 || selected.isEmpty()) throw new SecurityException("ICE before selection");
+        } else if(VideoPayload.CONTROLS.contains(type)) {
+            if(selected.isEmpty()) throw new SecurityException("Video before selection");
+            VideoPayload.validate(type,data,(int)gen,now,end);
         } else Wire.fields(data);
     }
     /** Stable hash independent of JSON object iteration order; duplicate fields rejected by Wire.parse. */

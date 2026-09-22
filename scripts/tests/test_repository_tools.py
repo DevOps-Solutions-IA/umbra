@@ -14,7 +14,7 @@ import publish_github as pub
 
 class GuardTests(unittest.TestCase):
     def test_only_exact_reviewed_native_dependency_can_exceed_source_limit(self):
-        name='android/vendor/webrtc-150.7871.01-umbra.1.aar'
+        name='android/vendor/webrtc-150.7871.01-umbra.3.aar'
         data=(SCRIPTS.parent/name).read_bytes()
         self.assertEqual([],guard.check_bytes(name,data))
         self.assertTrue(guard.check_bytes(name,data[:-1]+bytes([data[-1]^1])))

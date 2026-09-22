@@ -40,12 +40,16 @@ def verify_apk(archive: zipfile.ZipFile, variant: str, pin: dict) -> None:
             digest = hashlib.sha256(archive.read(name)).hexdigest()
             if digest != pin["entries"]["jni/" + name.removeprefix("lib/")]:
                 raise RuntimeError("WebRTC JNI digest mismatch: " + name)
+        dex = b"".join(archive.read(name) for name in names if name.startswith("classes") and name.endswith(".dex"))
+        for binding in (b"Lorg/jni_zero/JniZero;", b"Lorg/jni_zero/CommonApis;"):
+            if binding not in dex:
+                raise RuntimeError("WebRTC JNI Zero entry missing from DEX")
     else:
         if any(name.startswith("assets/umbra-webrtc/") for name in names):
             raise RuntimeError("WebRTC assets leaked into offline")
         for name in names:
             if name.startswith("classes") and name.endswith(".dex"):
-                if b"Lorg/webrtc/" in archive.read(name):
+                if any(prefix in archive.read(name) for prefix in (b"Lorg/webrtc/", b"Lorg/jni_zero/")):
                     raise RuntimeError("WebRTC DEX leaked into offline")
 
 

@@ -351,10 +351,15 @@ public final class Engine {
                     .put("logicalTo",c.getString(caller?"callee":"caller"));
                 long expiry=Math.min(c.getLong("ends"),Bytes.now()+app.umbra.calls.CallPayload.DELIVERY_SECONDS);
                 if(Set.of("INVITE","ACCEPT","SELECT").contains(payload.getString("type"))) expiry=Math.min(expiry,c.getLong("inviteUntil"));
+                if(Set.of("VIDEO_REQUEST","VIDEO_ACCEPT").contains(payload.getString("type"))) expiry=Math.min(expiry,payload.getJSONObject("data").getLong("expires"));
                 if(expiry<=Bytes.now()) throw new SecurityException("Call delivery expired");
                 JSONObject envelope=encrypt(peer,content,expiry); putOutbox(peer,envelope,false);
                 JSONObject queued=get("outbox",envelope.getString("id"));
                 queued.put("callSession",c.getString("callId")).put("callType",payload.getString("type")).put("callGeneration",payload.getInt("generation"));
+                if(payload.getInt("v")==2) {
+                    JSONObject data=payload.getJSONObject("data");
+                    queued.put("videoChange",data.has("video")?data.getJSONObject("video").getString("change"):data.getString("change"));
+                }
                 put("outbox",envelope.getString("id"),queued);
             }
             return null;

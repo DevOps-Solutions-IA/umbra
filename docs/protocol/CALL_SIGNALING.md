@@ -125,3 +125,12 @@ Pruebas posteriores obligatorias, NOT EXECUTED aquí:
 RELAY_ONLY evita exponer direcciones directas al interlocutor cuando el adaptador lo
 cumpla; la señalización sola no acredita esa propiedad. Operador TURN/ISP/relay ven
 IP, horarios y volumen. Logs/retención TURN requieren política separada. No anonimato.
+
+## Extensión video v2 en validación
+
+[VIDEO_MEDIA.md](VIDEO_MEDIA.md) define los controles v2 y su consentimiento
+direccional. El establecimiento inicial de voz permanece v1. Un cliente antiguo
+rechaza v2; no se interpreta como texto ni como una descripción de voz. La extensión
+no amplía los 60/180 segundos, no activa DIRECT_ALLOWED ni permite captura remota.
+Las afirmaciones históricas de solo voz anteriores describen la entrega previa;
+la evidencia de video y sus bloqueos se registran por separado.

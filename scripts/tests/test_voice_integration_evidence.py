@@ -4,10 +4,43 @@ import sys
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from run_voice_integration import valid_audio, valid_report, valid_stop
+from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment
 import voice_network_evidence as network
 
 class VoiceEvidenceTest(unittest.TestCase):
+    def test_netem_equivalent_decimal_format_still_requires_all_bounds(self):
+        good="qdisc netem 8002: root refcnt 2 limit 20 delay 80.0ms loss 2% rate 128Kbit"
+        self.assertTrue(valid_impairment(good))
+        self.assertTrue(valid_impairment(good.replace("80.0ms","80ms")))
+        for before,after in (("80.0ms","800ms"),("limit 20","limit 1000"),("limit 20","limit 200"),("loss 2%","loss 0%"),("128Kbit","1Mbit"),("netem","noqueue")):
+            self.assertFalse(valid_impairment(good.replace(before,after)))
+
+    def test_ipv6_link_observation_also_rejects_other_ipv4_paths(self):
+        sources=["fec0::10","fec0::20"]
+        with patch.object(network,"count",side_effect=[100,0]) as counter:
+            value=network.summarize_ipv6_turn(Path("synthetic.pcap"),"fd42::2","10.0.2.16",sources,43210,0,10,tls=False)
+            self.assertEqual(100,value["turnIpv6Packets"])
+            self.assertIn("IPv4 relay allocation",value["scope"])
+            self.assertIn("src host 10.0.2.16",counter.call_args_list[1].args[1])
+            for source in sources:self.assertIn("src host "+source,counter.call_args_list[1].args[1])
+        for counts in ([0,0],[100,1]):
+            with patch.object(network,"count",side_effect=counts):
+                with self.assertRaises(RuntimeError):network.summarize_ipv6_turn(Path("synthetic.pcap"),"fd42::2","10.0.2.16",sources,43210,0,10,tls=True)
+
+    def test_tls_capture_selects_device_not_entire_emulator_subnet(self):
+        with patch.object(network,"count",side_effect=[100,0,0,0]) as counter:
+            report=network.summarize_tls(Path("synthetic.pcap"),"172.20.0.2",43210,0,10,source_address="10.0.2.16")
+            self.assertEqual(100,report["turnTlsPackets"])
+            for call in counter.call_args_list:
+                self.assertIn("src host 10.0.2.16",call.args[1])
+                self.assertNotIn("src net",call.args[1])
+        for values in ([0,0,0,0],[100,1,0,0],[100,0,1,0],[100,0,0,1]):
+            with patch.object(network,"count",side_effect=values):
+                with self.assertRaises(RuntimeError):
+                    network.summarize_tls(Path("synthetic.pcap"),"172.20.0.2",43210,0,10,source_address="10.0.2.16")
+        with self.assertRaises(ValueError):
+            network.summarize_tls(Path("synthetic.pcap"),"172.20.0.2",43210,0,10,source_address="10.0.2.2")
+
     def test_ice_and_packet_counts_are_not_decoded_audio(self):
         good=dict(decodedBuffers=100,capturedBuffers=100,verifiedNativeTransport=True,receivedAudioPackets=50,codec="audio/opus",sdpAddressAudit=True)
         self.assertTrue(valid_audio(good))

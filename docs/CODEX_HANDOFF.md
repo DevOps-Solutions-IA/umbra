@@ -1,5 +1,44 @@
 # Transferencia técnica a Codex
 
+## Estado actual de transferencia — 2026-09-22
+
+PR #9 sigue OPEN/DRAFT hacia `codex/turn-voice-core`. Código `171324bf` probado
+en checkout `dca789944`: Verify 35661260991 (cuatro SUCCESS), voz R8 35661261035
+y video 35661261036 SUCCESS. Video: 31 casos debug y 31 R8; 15 escenarios de voz
+por variante. [Recibo y límites](validation/2026-09-22-turn-video-acceptance.md).
+Implementación integrada comprobada con medios sintéticos; no hardware físico ni
+APK productivo exacto. Pendientes: timestamp de último datagrama video, asignación
+relay IPv6, hardware y auditoría. No reabrir fallos históricos como pendientes sin
+una regresión nueva. Las secciones siguientes conservan la evolución anterior.
+
+## Sexta entrega — video — EN CURSO, 2026-09-21
+
+Rama `codex/turn-video-core`, PR #9 borrador dependiente de #8 abierta.
+Base a11b579 reproducida en CI35625489078: cuatro SUCCESS y 15 escenarios de voz.
+[Evidencia nueva](validation/2026-09-21-turn-video-core.md).
+Se reprodujo/corrigió una entrada JNI Zero eliminada por R8; primera voz sintética
+bidireccional con Engine/Signal/HTTPS/TURN sobre clases UMBRA optimizadas pasó en
+dos AVD. Target `.medialab` separado, no APK productivo exacto ni Keystore hardware.
+C++ TURN: el fallo inicial CI35625739825 se corrigió sin omitir el test upstream
+previamente deshabilitado; CI35630454176 ejecutó 83 casos, incluidos 18 de redirección.
+La restricción nativa de secciones SDP pasó en CI35634570646: cuatro ABI, 83 TURN
+y 12 pruebas seleccionadas del modelo/política SDP. AAR `.3` fijado por hash.
+Video: implementación local de consentimiento direccional, generaciones acotadas,
+captura/render y recorrido de patrones remotos + audio ejecutado en debug y R8.
+Recibos de árbol de trabajo disponibles; NO es aceptación final ni CI del video.
+Camera2 sintética, TLS y trayecto cliente-TURN IPv6 (relay IPv4) ya tienen ejecuciones
+parciales; quedan CI final y matriz completa del nuevo árbol. Esperar gathering
+COMPLETE bloqueó extremos con candidatos válidos: la corrección envía candidatos
+incrementales por Engine/Signal, ligados a descripción/generación. Un par prflx no
+autoriza captura. La caducidad de asignaciones se prueba con 180 segundos: el caso
+anterior de 20 segundos no contemplaba el mínimo que coturn aplica al renovar.
+Revisión posterior a 69e9dc1: voz R8 verde, Verify Android y video no verdes.
+Corregido cierre de renderer reemplazado por el listener de MainActivity (dos
+regresiones Android rojo→verde), doble STOP local y carreras de clasificación en el
+arnés. La nueva instrumentación connected exige 27 pruebas; offline conserva 25.
+La CI siguiente debe validar estas correcciones; no atribuirle resultados previos.
+Conservar TURN obligatorio, plazos, offline y evidencia de fallos. No empezar desde main.
+
 ## Quinta entrega — voz — en curso, 2026-09-21
 
 PARTIAL — rama `codex/turn-voice-core`, base #7 abierta `e495793`.

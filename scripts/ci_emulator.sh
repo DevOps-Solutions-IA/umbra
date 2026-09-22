@@ -44,6 +44,8 @@ trap 'exit 130' INT
 trap 'exit 143' TERM
 umbra_start_avd() {
   local name="$1" port="$2" avd="$ANDROID_AVD_HOME/$1.avd" log="$UMBRA_DEVICE_REPORTS/$1-emulator.log"
+  local camera="${UMBRA_SYNTHETIC_CAMERA:-none}"
+  case "$camera" in none|emulated) ;; *) echo "Only disabled or synthetic AVD cameras are allowed" >&2; return 1 ;; esac
   if ! test -r /dev/kvm || ! test -w /dev/kvm; then
     echo "BLOCKED: readable/writable /dev/kvm is mandatory" >&2
     return 1
@@ -64,6 +66,7 @@ umbra_start_avd() {
     -e 's/^hw.lcd.height[[:space:]]*=.*/hw.lcd.height=800/' \
     -e 's/^hw.lcd.density[[:space:]]*=.*/hw.lcd.density=160/' "$avd/config.ini"
   "$ANDROID_HOME/emulator/emulator" -avd "$name" -port "$port" -no-window -no-audio \
+    -camera-front "$camera" -camera-back "$camera" \
     -netsim-args "--pcap" -no-boot-anim -no-snapshot -gpu swiftshader -feature -Vulkan -accel on -memory 1536 -cores 2 > "$log" 2>&1 &
   local pid=$!
   UMBRA_EMULATOR_PIDS+=("$pid"); UMBRA_EMULATOR_SERIALS+=("emulator-$port")

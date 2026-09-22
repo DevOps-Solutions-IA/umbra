@@ -14,12 +14,12 @@ import run_bluetooth_emulation as nearby
 
 
 class AndroidExecutionTests(unittest.TestCase):
-    def run_single(self, report, returncode=0):
+    def run_single(self, report, returncode=0, flavor="offline"):
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder)
             for name in ('app.apk', 'test.apk'):
                 (base / name).touch()
-            args = ['runner', '--serial', 'emulator-synthetic', '--flavor', 'offline',
+            args = ['runner', '--serial', 'emulator-synthetic', '--flavor', flavor,
                     '--app-apk', str(base / 'app.apk'), '--test-apk', str(base / 'test.apk'),
                     '--log', str(base / 'run.log'), '--adb', 'synthetic-adb']
             def execute(command, **kwargs):
@@ -48,6 +48,11 @@ class AndroidExecutionTests(unittest.TestCase):
 
     def test_twenty_five_executed_checks_and_completion_pass(self):
         self.run_single('OK (25 tests)\nINSTRUMENTATION_CODE: -1\n')
+
+    def test_connected_requires_new_surface_lifecycle_checks(self):
+        with self.assertRaises(SystemExit):
+            self.run_single('OK (25 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
+        self.run_single('OK (27 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
 
     def test_physical_device_rejected_before_install_or_radio_changes(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -27,10 +27,32 @@ public final class VoiceControls implements AutoCloseable {
         if(current!=null) {
             NativeVoiceSession voice=current;
             display(activity,track,new AlertDialog.Builder(activity).setTitle("Voz: "+voice.state())
-                .setItems(new String[]{"Silenciar","Activar micrófono","Salida de audio","Finalizar"},(d,which)->{
+                .setItems(new String[]{"Silenciar","Activar micrófono","Salida de audio","Finalizar","Solicitar video","Responder solicitud de video","Apagar video, conservar audio","Cambiar cámara","Ver video recibido"},(d,which)->{
                     try {
                         if(which<2) voice.mute(which==0);
                         else if(which==3) { close(); }
+                        else if(which==4 || which==5) {
+                            display(activity,track,new AlertDialog.Builder(activity).setTitle(which==4?"Solicitar video":"Consentimiento de video")
+                                .setItems(new String[]{"Solo recibir","Enviar y recibir","Rechazar solicitud"},(choice,index)->{
+                                    if(index==2) {worker.execute(()->{try {voice.rejectVideo();}catch(Exception invalid){activity.runOnUiThread(()->failure(activity));}});return;}
+                                    boolean sending=index==1;
+                                    if(sending && activity.checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED) {
+                                        activity.requestPermissions(new String[]{Manifest.permission.CAMERA},304);return;
+                                    }
+                                    long clicked=SystemClock.elapsedRealtime(),reviewed=epoch;
+                                    worker.execute(()->{
+                                        try {
+                                            if(reviewed!=epoch || SystemClock.elapsedRealtime()-clicked>30_000)throw new SecurityException("Video review expired");
+                                            voice.video(sending,true,which==5,true);
+                                            activity.runOnUiThread(()->{if(reviewed==epoch)changed.run();});
+                                        } catch(Exception invalid){activity.runOnUiThread(()->failure(activity));}
+                                    });
+                                }));
+                        } else if(which==6) {
+                            voice.requestVideoStop();
+                        } else if(which==7) {
+                            worker.execute(()->{try {voice.switchCamera();}catch(Exception invalid){activity.runOnUiThread(()->failure(activity));}});
+                        } else if(which==8) VideoSurface.show(activity,voice,track);
                         else {
                             var devices=voice.communicationDevices();
                             String[] labels=devices.stream().map(device->device.getProductName().toString()).toArray(String[]::new);

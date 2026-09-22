@@ -1,0 +1,592 @@
+{
+  "sourceBuildRun": 35630454176,
+  "builderCommit": "02d1ebf939bf6455571b9df35a0627711b31a4d6",
+  "target": "rtc_p2p_unittests (Linux x64)",
+  "scope": "TurnPortTest and TurnPortWithMockDnsResolverTest, including disabled tests; not full upstream",
+  "tests": 83,
+  "failures": 0,
+  "testBinarySha256": "d4c19dfe007e0d5d14f6b393c94c6ff1db7d97d4500d3ca60fdbadec57073a79",
+  "results": [
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnPortType",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestReconstructedServerUrlForUdpIPv4",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestReconstructedServerUrlForUdpIPv6",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestReconstructedServerUrlForTcp",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestReconstructedServerUrlForTls",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.001"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestReconstructedServerUrlForHostname",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.002"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAllocate",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAllocateWithLoggingId",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAllocateWithoutLoggingId",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnBadCredentials",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestServerAddressFamilyMismatch",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestServerAddressFamilyMismatch6",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnTcpAllocate",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnTcpAllocationWhenProxyChangesAddressToLocalHost",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TurnTcpAllocationDiscardedIfBoundAddressDoesNotMatchNetwork",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TurnTcpAllocationNotDiscardedIfNotBoundToBestIP",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TCPPortNotDiscardedIfBoundToTemporaryIP",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnTcpOnAddressResolveFailure",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.002"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnTlsOnAddressResolveFailure",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.002"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnUdpOnAddressResolveFailure",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.002"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAllocateBadPassword",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAllocateNonceResetAfterAllocateMismatch",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAllocateMismatch",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestSharedSocketAllocateMismatch",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnTcpAllocateMismatch",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestRefreshRequestGetsErrorResponse",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestStopProcessingPacketsAfterClosed",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestCreateConnectionWhenSocketClosed",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestSocketCloseWillDestroyConnection",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerUDP",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerTCP",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerTLS",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.001"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerV4toV6UDP",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerV4toV6TCP",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerV4toV6TLS",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerPingPongUDP",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerPingPongTCP",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerPingPongTLS",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.001"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerDetectRepetitionUDP",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerDetectRepetitionTCP",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerDetectRepetitionTLS",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerLoopbackUdpIpv4",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerLoopbackUdpIpv6",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerLoopbackTcpIpv4",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerLoopbackTcpIpv6",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerLoopbackTlsIpv4",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnAlternateServerLoopbackTlsIpv6",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.001"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnConnection",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnConnectionUsingSharedSocket",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnTcpConnection",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnTlsConnection",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.001"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestDestroyTurnConnection",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.001"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestDestroyTurnConnectionUsingSharedSocket",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnConnectionUsingOTUNonce",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestRefreshCreatePermissionRequest",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestChannelBindGetErrorResponse",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnSendDataTurnUdpToUdp",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.015"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnSendDataTurnTcpToUdp",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.015"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnSendDataTurnTlsToUdp",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.002"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnLocalIPv6AddressServerIPv4",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnLocalIPv6AddressServerIPv6ExtenalIPv4",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestCandidateAddressFamilyMatch",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestConnectionFailedAndPrunedOnCreatePermissionFailure",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnReleaseAllocation",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnTCPReleaseAllocation",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnTLSReleaseAllocation",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.001"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnUDPGracefulReleaseAllocation",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnTCPGracefulReleaseAllocation",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnTLSGracefulReleaseAllocation",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.001"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "CanCreateTwoConnectionsToSameAddress",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestResolverShutdown",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.002"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestUnauthenticatedAllocateSuccessRejected",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnCustomizerCount",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.002"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnCustomizerDisallowChannelData",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.002"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "DISABLED_TestTurnCustomizerAddAttribute",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0.003"
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestOverlongUsername",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnDangerousServer",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnDangerousServerPermits53",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnDangerousServerPermits80",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnDangerousServerPermits443",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortTest",
+      "name": "TestTurnDangerousAlternateServer",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortWithMockDnsResolverTest",
+      "name": "TestHostnameResolved",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    },
+    {
+      "suite": "TurnPortWithMockDnsResolverTest",
+      "name": "TestHostnameResolvedIPv6Network",
+      "status": "run",
+      "result": "completed",
+      "seconds": "0."
+    }
+  ]
+}

@@ -135,3 +135,44 @@ Un reemplazo de dependencia no hereda esa capacidad automáticamente. La entrada
 productiva sigue exigiendo permiso, consentimiento, selección, verificación, lease
 vigente y comprobación DTLS nativa; el hash no autoriza una llamada por sí solo.
 Pruebas de micrófono/hardware, IPv6, TURN TLS y recorrido de voz R8 quedan pendientes.
+
+## Regresión R8 detectada al iniciar video (2026-09-21)
+
+El primer recorrido de voz con código optimizado abortó al cargar WebRTC porque
+R8 eliminaba `org.jni_zero.JniZero`, fuera de la regla org.webrtc. El APK release
+anterior también carecía de esa entrada. Se conserva ahora únicamente la superficie
+anotada CalledByNative de JNI Zero y se exige su presencia en el DEX connected.
+El primer audio sintético R8 pasó con Engine/Signal/HTTPS/TURN en dos AVD; el arnés
+separado conserva las APIs que referencia, con cuerpos/nombres optimizables.
+No equivale al APK productivo exacto, micrófono físico, video o Keystore hardware.
+Consultar [evidencia](validation/2026-09-21-turn-video-core.md) para CI y pendientes.
+
+## Extensión de video en validación (2026-09-21)
+
+La propuesta remota no autoriza captura local. Las direcciones enviar/recibir se
+consienten por separado y quedan ligadas al cambio/generación/dispositivo confirmado.
+Apagar invalida captura antes de persistir STOP; un fallo de disco no debe mantener
+la cámara activa. Reactivación exige consentimiento nuevo; bloqueo/caducidad no se
+renuevan. No se añaden permisos ni WebRTC a offline.
+
+Una superficie remota puede estar atrasada: se distingue último frame del estado de
+transporte. No hay grabación ni persistencia de imágenes; esto no impide copias por
+el receptor. TURN/ISP siguen viendo metadatos. Las pruebas locales sintéticas no
+validan cámaras físicas, Keystore hardware ni todas las familias/transporte de red.
+Ver evidencia de fallos, límites y resultados parciales en la sexta entrega.
+
+La señalización ICE incremental conserva el digest de descripción y la generación;
+no permite cambiar TURN ni la política RELAY. La autorización de captura exige
+relay en ambos candidatos seleccionados y certificado DTLS efectivo autenticado.
+Las pruebas de huella exigen al menos un rechazo nativo por binding y cero captura
+en ambos extremos; la cancelación del otro extremo no se presenta como una segunda
+comprobación de certificado. Timeout o falta de evidencia no cuentan como éxito.
+
+## Evidencia posterior de video — 2026-09-22
+
+Código `171324bf` pasó las matrices debug/R8 y regresiones en Actions35661260991,
+35661261035 y35661261036. Ver [aceptación delimitada](validation/2026-09-22-turn-video-acceptance.md).
+TURN/TLS y trayecto cliente-TURN IPv6 tienen evidencia nueva; no se extiende a
+asignaciones relay IPv6, hardware físico o APK productivo exacto. El cierre de
+superficies ya no depende del listener reemplazable; los límites de cancelación
+medidos no demuestran retiro de paquetes ni borrado de copias del destinatario.

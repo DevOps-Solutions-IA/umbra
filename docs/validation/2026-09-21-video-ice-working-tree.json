@@ -1,0 +1,919 @@
+{
+  "status": "PARTIAL",
+  "date": "2026-09-21",
+  "publishedParent": "7c996345e21815f3d215b19d5d11b1c3107cb1c9",
+  "synthetic": true,
+  "results": [
+    {
+      "case": "video-trickle-direct-blocked",
+      "scope": "intermediate working tree; not final commit validation",
+      "voice": {
+        "synthetic": true,
+        "endpoints": 2,
+        "observedSeconds": 40.167,
+        "transport": "native WebRTC through coturn UDP",
+        "turnTlsCase": null,
+        "scenario": "direct-blocked",
+        "directIpv4Reachability": true,
+        "directBlockedDuringMedia": true,
+        "muteUnmute": true,
+        "network": [
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 1473,
+            "turnStunPackets": 16,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          },
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 1550,
+            "turnStunPackets": 35,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          }
+        ],
+        "audio": [
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 109,
+            "capturedBuffers": 113,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 55,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          },
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 116,
+            "capturedBuffers": 107,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 52,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          }
+        ],
+        "allocationExpiry": null,
+        "nativeCaptureClosure": [],
+        "networkImpairment": []
+      },
+      "video": {
+        "synthetic": true,
+        "physicalCamera": false,
+        "nativeCodecPipeline": true,
+        "endpoints": 2,
+        "phases": {
+          "active": [
+            {
+              "decodedRemotePatterns": 21,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 667,
+              "capturedFrames": 21,
+              "generation": 2,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            },
+            {
+              "decodedRemotePatterns": 21,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 669,
+              "capturedFrames": 43,
+              "generation": 2,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            }
+          ],
+          "stopped": [
+            {
+              "captureStopped": true,
+              "requestToInvalidationNanos": 4208,
+              "requestToLastCaptureNanos": 901989,
+              "requestToClosedNanos": 7021221,
+              "observedAfterRequestMillis": 2529,
+              "captureCallbacksAfterRequest": 0,
+              "decodedAudioAfterVideoOff": 256
+            },
+            {
+              "captureStopped": true,
+              "requestToInvalidationNanos": 4098,
+              "requestToLastCaptureNanos": 0,
+              "requestToClosedNanos": 9529555,
+              "observedAfterRequestMillis": 2535,
+              "captureCallbacksAfterRequest": 0,
+              "decodedAudioAfterVideoOff": 258
+            }
+          ],
+          "resumed": [
+            {
+              "decodedRemotePatterns": 21,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 784,
+              "capturedFrames": 46,
+              "generation": 3,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            },
+            {
+              "decodedRemotePatterns": 21,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 787,
+              "capturedFrames": 91,
+              "generation": 3,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "video-trickle-camera-denied",
+      "scope": "intermediate working tree; not final commit validation",
+      "voice": {
+        "synthetic": true,
+        "endpoints": 2,
+        "observedSeconds": 13.029,
+        "transport": "native WebRTC through coturn UDP",
+        "turnTlsCase": null,
+        "scenario": "camera-denied",
+        "directIpv4Reachability": true,
+        "directBlockedDuringMedia": false,
+        "muteUnmute": true,
+        "network": [
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 234,
+            "turnStunPackets": 14,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          },
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 261,
+            "turnStunPackets": 41,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          }
+        ],
+        "audio": [
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 106,
+            "capturedBuffers": 116,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 54,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          },
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 117,
+            "capturedBuffers": 108,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 52,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          }
+        ],
+        "allocationExpiry": null,
+        "nativeCaptureClosure": [],
+        "networkImpairment": []
+      }
+    },
+    {
+      "case": "video-trickle-camera-permission-revoked",
+      "scope": "intermediate working tree; not final commit validation",
+      "voice": {
+        "synthetic": true,
+        "endpoints": 2,
+        "observedSeconds": 32.614,
+        "transport": "native WebRTC through coturn UDP",
+        "turnTlsCase": null,
+        "scenario": "camera-permission-revoked",
+        "directIpv4Reachability": true,
+        "directBlockedDuringMedia": false,
+        "muteUnmute": true,
+        "network": [
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 1480,
+            "turnStunPackets": 16,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          },
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 1587,
+            "turnStunPackets": 37,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          }
+        ],
+        "audio": [
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 106,
+            "capturedBuffers": 114,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 54,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          },
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 117,
+            "capturedBuffers": 108,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 52,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          }
+        ],
+        "allocationExpiry": null,
+        "nativeCaptureClosure": [],
+        "networkImpairment": []
+      },
+      "video": {
+        "synthetic": true,
+        "physicalCamera": false,
+        "nativeCodecPipeline": true,
+        "endpoints": 2,
+        "phases": {
+          "active": [
+            {
+              "decodedRemotePatterns": 21,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 646,
+              "capturedFrames": 21,
+              "generation": 2,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            },
+            {
+              "decodedRemotePatterns": 21,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 640,
+              "capturedFrames": 43,
+              "generation": 2,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            }
+          ],
+          "stopped": [
+            {
+              "captureStopped": true,
+              "requestToInvalidationNanos": 4218,
+              "requestToLastCaptureNanos": 0,
+              "requestToClosedNanos": 13460973,
+              "observedAfterRequestMillis": 2525,
+              "captureCallbacksAfterRequest": 0,
+              "decodedAudioAfterVideoOff": 252
+            },
+            {
+              "captureStopped": true,
+              "requestToInvalidationNanos": 3837,
+              "requestToLastCaptureNanos": 0,
+              "requestToClosedNanos": 10840176,
+              "observedAfterRequestMillis": 2531,
+              "captureCallbacksAfterRequest": 0,
+              "decodedAudioAfterVideoOff": 252
+            }
+          ],
+          "resumed": [
+            {
+              "decodedRemotePatterns": 20,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 782,
+              "capturedFrames": 44,
+              "generation": 3,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            },
+            {
+              "decodedRemotePatterns": 20,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 782,
+              "capturedFrames": 86,
+              "generation": 3,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "video-trickle-repeat-degraded-network",
+      "scope": "intermediate working tree; not final commit validation",
+      "voice": {
+        "synthetic": true,
+        "endpoints": 2,
+        "observedSeconds": 34.043,
+        "transport": "native WebRTC through coturn UDP",
+        "turnTlsCase": null,
+        "scenario": "degraded-network",
+        "directIpv4Reachability": true,
+        "directBlockedDuringMedia": false,
+        "muteUnmute": true,
+        "network": [
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 1476,
+            "turnStunPackets": 15,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          },
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 1585,
+            "turnStunPackets": 38,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          }
+        ],
+        "audio": [
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 114,
+            "capturedBuffers": 106,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 54,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          },
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 106,
+            "capturedBuffers": 121,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 53,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          }
+        ],
+        "allocationExpiry": null,
+        "nativeCaptureClosure": [],
+        "networkImpairment": [
+          {
+            "delayMillis": 80,
+            "lossPercent": 2,
+            "rateKbit": 128,
+            "queuePacketLimit": 20,
+            "processedPackets": 1424,
+            "droppedPackets": 74
+          },
+          {
+            "delayMillis": 80,
+            "lossPercent": 2,
+            "rateKbit": 128,
+            "queuePacketLimit": 20,
+            "processedPackets": 1491,
+            "droppedPackets": 141
+          }
+        ]
+      },
+      "video": {
+        "synthetic": true,
+        "physicalCamera": false,
+        "nativeCodecPipeline": true,
+        "endpoints": 2,
+        "phases": {
+          "active": [
+            {
+              "decodedRemotePatterns": 21,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 762,
+              "capturedFrames": 24,
+              "generation": 2,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            },
+            {
+              "decodedRemotePatterns": 20,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 805,
+              "capturedFrames": 64,
+              "generation": 2,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            }
+          ],
+          "stopped": [
+            {
+              "captureStopped": true,
+              "requestToInvalidationNanos": 3356,
+              "requestToLastCaptureNanos": 0,
+              "requestToClosedNanos": 6909940,
+              "observedAfterRequestMillis": 2582,
+              "captureCallbacksAfterRequest": 0,
+              "decodedAudioAfterVideoOff": 253
+            },
+            {
+              "captureStopped": true,
+              "requestToInvalidationNanos": 3216,
+              "requestToLastCaptureNanos": 0,
+              "requestToClosedNanos": 8221982,
+              "observedAfterRequestMillis": 3381,
+              "captureCallbacksAfterRequest": 0,
+              "decodedAudioAfterVideoOff": 337
+            }
+          ],
+          "resumed": [
+            {
+              "decodedRemotePatterns": 22,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 820,
+              "capturedFrames": 49,
+              "generation": 3,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            },
+            {
+              "decodedRemotePatterns": 25,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 857,
+              "capturedFrames": 139,
+              "generation": 3,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "video-trickle-repeat-turn-loss",
+      "scope": "intermediate working tree; not final commit validation",
+      "voice": {
+        "synthetic": true,
+        "endpoints": 2,
+        "observedSeconds": 43.648,
+        "transport": "native WebRTC through coturn UDP",
+        "turnTlsCase": null,
+        "scenario": "turn-loss",
+        "directIpv4Reachability": true,
+        "directBlockedDuringMedia": false,
+        "muteUnmute": true,
+        "network": [
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 2039,
+            "turnStunPackets": 18,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          },
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 2123,
+            "turnStunPackets": 45,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          }
+        ],
+        "audio": [
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 107,
+            "capturedBuffers": 105,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 52,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          },
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 104,
+            "capturedBuffers": 114,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 50,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          }
+        ],
+        "allocationExpiry": null,
+        "nativeCaptureClosure": [
+          {
+            "failedClosed": true,
+            "nativeCaptureQuietAfterMillis": 1000,
+            "nativeCaptureObservedMillis": 500,
+            "lateCaptureCallbacks": 0
+          },
+          {
+            "failedClosed": true,
+            "nativeCaptureQuietAfterMillis": 1001,
+            "nativeCaptureObservedMillis": 500,
+            "lateCaptureCallbacks": 0
+          }
+        ],
+        "networkImpairment": []
+      },
+      "video": {
+        "synthetic": true,
+        "physicalCamera": false,
+        "nativeCodecPipeline": true,
+        "endpoints": 2,
+        "phases": {
+          "active": [
+            {
+              "decodedRemotePatterns": 20,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 790,
+              "capturedFrames": 20,
+              "generation": 2,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            },
+            {
+              "decodedRemotePatterns": 20,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 780,
+              "capturedFrames": 42,
+              "generation": 2,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            }
+          ],
+          "stopped": [
+            {
+              "captureStopped": true,
+              "requestToInvalidationNanos": 3296,
+              "requestToLastCaptureNanos": 0,
+              "requestToClosedNanos": 19189721,
+              "observedAfterRequestMillis": 2520,
+              "captureCallbacksAfterRequest": 0,
+              "decodedAudioAfterVideoOff": 252
+            },
+            {
+              "captureStopped": true,
+              "requestToInvalidationNanos": 4449,
+              "requestToLastCaptureNanos": 0,
+              "requestToClosedNanos": 8217399,
+              "observedAfterRequestMillis": 2532,
+              "captureCallbacksAfterRequest": 0,
+              "decodedAudioAfterVideoOff": 249
+            }
+          ],
+          "resumed": [
+            {
+              "decodedRemotePatterns": 20,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 761,
+              "capturedFrames": 44,
+              "generation": 3,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            },
+            {
+              "decodedRemotePatterns": 21,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 754,
+              "capturedFrames": 85,
+              "generation": 3,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "video-trickle-repeat-device-revoked",
+      "scope": "intermediate working tree; not final commit validation",
+      "voice": {
+        "synthetic": true,
+        "endpoints": 2,
+        "observedSeconds": 30.172,
+        "transport": "native WebRTC through coturn UDP",
+        "turnTlsCase": null,
+        "scenario": "device-revoked",
+        "directIpv4Reachability": true,
+        "directBlockedDuringMedia": false,
+        "muteUnmute": true,
+        "network": [
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 1380,
+            "turnStunPackets": 16,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          },
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 1452,
+            "turnStunPackets": 41,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          }
+        ],
+        "audio": [
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 103,
+            "capturedBuffers": 114,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 54,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          },
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 111,
+            "capturedBuffers": 105,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 52,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          }
+        ],
+        "allocationExpiry": null,
+        "nativeCaptureClosure": [
+          {
+            "failedClosed": true,
+            "nativeCaptureQuietAfterMillis": 1000,
+            "nativeCaptureObservedMillis": 500,
+            "lateCaptureCallbacks": 0
+          },
+          {
+            "failedClosed": true,
+            "nativeCaptureQuietAfterMillis": 1000,
+            "nativeCaptureObservedMillis": 500,
+            "lateCaptureCallbacks": 0
+          }
+        ],
+        "networkImpairment": []
+      },
+      "video": {
+        "synthetic": true,
+        "physicalCamera": false,
+        "nativeCodecPipeline": true,
+        "endpoints": 2,
+        "phases": {
+          "active": [
+            {
+              "decodedRemotePatterns": 21,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 646,
+              "capturedFrames": 21,
+              "generation": 2,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            },
+            {
+              "decodedRemotePatterns": 21,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 646,
+              "capturedFrames": 40,
+              "generation": 2,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            }
+          ],
+          "stopped": [
+            {
+              "captureStopped": true,
+              "requestToInvalidationNanos": 3827,
+              "requestToLastCaptureNanos": 0,
+              "requestToClosedNanos": 9838354,
+              "observedAfterRequestMillis": 2516,
+              "captureCallbacksAfterRequest": 0,
+              "decodedAudioAfterVideoOff": 252
+            },
+            {
+              "captureStopped": true,
+              "requestToInvalidationNanos": 2455,
+              "requestToLastCaptureNanos": 0,
+              "requestToClosedNanos": 13165293,
+              "observedAfterRequestMillis": 2510,
+              "captureCallbacksAfterRequest": 0,
+              "decodedAudioAfterVideoOff": 252
+            }
+          ],
+          "resumed": [
+            {
+              "decodedRemotePatterns": 20,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 637,
+              "capturedFrames": 44,
+              "generation": 3,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            },
+            {
+              "decodedRemotePatterns": 21,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 639,
+              "capturedFrames": 84,
+              "generation": 3,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "case": "video-ice-next-wrong-fingerprint",
+      "scope": "intermediate working tree; not final commit validation",
+      "voice": {
+        "synthetic": true,
+        "endpoints": 2,
+        "observedSeconds": 9.057,
+        "transport": "native WebRTC through coturn UDP",
+        "turnTlsCase": null,
+        "scenario": "wrong-fingerprint",
+        "directIpv4Reachability": true,
+        "directBlockedDuringMedia": false,
+        "muteUnmute": false,
+        "network": [
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 16,
+            "turnStunPackets": 13,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          },
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 43,
+            "turnStunPackets": 40,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          }
+        ],
+        "audio": [
+          {
+            "rejectedBeforeCapture": true,
+            "reason": "native-certificate-binding"
+          },
+          {
+            "rejectedBeforeCapture": true,
+            "reason": "native-certificate-binding"
+          }
+        ],
+        "allocationExpiry": null,
+        "nativeCaptureClosure": [],
+        "networkImpairment": []
+      }
+    },
+    {
+      "case": "video-ice-next-allocation-expiry",
+      "scope": "intermediate working tree; not final commit validation",
+      "voice": {
+        "synthetic": true,
+        "endpoints": 2,
+        "observedSeconds": 186.702,
+        "transport": "native WebRTC through coturn UDP",
+        "turnTlsCase": null,
+        "scenario": "allocation-expiry",
+        "directIpv4Reachability": true,
+        "directBlockedDuringMedia": false,
+        "muteUnmute": true,
+        "network": [
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 1768,
+            "turnStunPackets": 16,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          },
+          {
+            "scope": "owned AVD outbound IPv4 UDP",
+            "mediaAttempt": "OBSERVED",
+            "turnPackets": 2090,
+            "turnStunPackets": 47,
+            "nonTurnStunPackets": 0,
+            "otherNonSystemUdpPackets": 0,
+            "ipv6": "NOT_EXECUTED"
+          }
+        ],
+        "audio": [
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 120,
+            "capturedBuffers": 114,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 53,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          },
+          {
+            "sdpAddressAudit": true,
+            "decodedBuffers": 120,
+            "capturedBuffers": 128,
+            "verifiedNativeTransport": true,
+            "receivedAudioPackets": 59,
+            "codec": "audio/opus",
+            "nativeRelayProtocol": "udp"
+          }
+        ],
+        "allocationExpiry": {
+          "maxLifetimeSeconds": 180,
+          "allocationsBeforeDeath": 2,
+          "allocationsAfterProcessRecovery": 2,
+          "allocationsAfterExpiry": 0,
+          "observedWaitSeconds": 147.469
+        },
+        "nativeCaptureClosure": [],
+        "networkImpairment": []
+      },
+      "video": {
+        "synthetic": true,
+        "physicalCamera": false,
+        "nativeCodecPipeline": true,
+        "endpoints": 2,
+        "phases": {
+          "active": [
+            {
+              "decodedRemotePatterns": 25,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 1639,
+              "capturedFrames": 25,
+              "generation": 2,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            },
+            {
+              "decodedRemotePatterns": 25,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 1643,
+              "capturedFrames": 96,
+              "generation": 2,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            }
+          ],
+          "stopped": [
+            {
+              "captureStopped": true,
+              "requestToInvalidationNanos": 4418,
+              "requestToLastCaptureNanos": 0,
+              "requestToClosedNanos": 20910837,
+              "observedAfterRequestMillis": 2528,
+              "captureCallbacksAfterRequest": 0,
+              "decodedAudioAfterVideoOff": 258
+            },
+            {
+              "captureStopped": true,
+              "requestToInvalidationNanos": 4358,
+              "requestToLastCaptureNanos": 0,
+              "requestToClosedNanos": 7108778,
+              "observedAfterRequestMillis": 2602,
+              "captureCallbacksAfterRequest": 0,
+              "decodedAudioAfterVideoOff": 258
+            }
+          ],
+          "resumed": [
+            {
+              "decodedRemotePatterns": 20,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 455,
+              "capturedFrames": 49,
+              "generation": 3,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            },
+            {
+              "decodedRemotePatterns": 21,
+              "distinctPatternPhases": 2,
+              "decodedAudioDuringVideo": 463,
+              "capturedFrames": 130,
+              "generation": 3,
+              "videoCodec": "video/VP8",
+              "sdpAddressAudit": true
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
