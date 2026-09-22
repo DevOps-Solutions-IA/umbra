@@ -63,11 +63,15 @@ debe reflejar antigüedad del frame; limpiar superficie al apagar/bloquear/termi
 No guardar frames, miniaturas ni trazas de SDP/credenciales. No webcam/micrófono del
 host en pruebas. No prometer impedir capturas/copias hechas por el destinatario.
 
-## Aceptación todavía pendiente
+## Criterios de aceptación y límites
 
 Consentimiento directo por API, simultaneidad, generación anterior, cámara denegada,
 revocación, callbacks tardíos, cierre contra cambio de cámara, disco lleno/rollback;
 frames y audio bidireccionales reales en debug y R8; cámara sintética AVD separada;
 red IPv4/IPv6 y UDP/TLS por combinación, caída/redirección TURN sin P2P; cancelación
-desde evento monotónico explícito. TLS a TURN no sustituye DTLS-SRTP extremo a extremo.
-No anonimato frente a TURN/ISP/señalización. Hardware y auditoría siguen pendientes.
+desde evento monotónico explícito. Las ejecuciones concretas y sus límites están
+registrados en el recibo de aceptación del 22 de septiembre enlazado arriba; esta
+lista es el criterio de revisión, no una afirmación de cobertura ilimitada.
+TLS a TURN no sustituye DTLS-SRTP extremo a extremo. No anonimato frente a
+TURN/ISP/señalización. Hardware, APK productivo exacto, asignaciones relay IPv6,
+timestamp independiente del último datagrama video y auditoría siguen pendientes.
