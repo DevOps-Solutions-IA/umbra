@@ -1,7 +1,7 @@
 name: Build pinned voice native dependency
 "on":
   push:
-    branches: [codex/turn-voice-core, codex/turn-video-core]
+    branches: [codex/turn-voice-core, codex/turn-video-core, codex/local-voice-modulator]
     paths: ['native/webrtc/**', '.github/workflows/native-voice.yml']
   workflow_dispatch:
 permissions:
@@ -36,6 +36,8 @@ jobs:
           df -h "$RUNNER_TEMP"
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y libglib2.0-dev libnss3-dev libx11-dev libxcomposite-dev libxdamage-dev libxext-dev libxfixes-dev libxrandr-dev libxrender-dev libxtst-dev libasound2-dev libpulse-dev
+      - name: Exercise local DSP controls and bounded processing
+        run: bash native/webrtc/voice-modulator/test.sh
       - name: Build reviewed source; never remote execution
         run: bash native/webrtc/build.sh '${{ matrix.abi }}'
       - name: Execute pinned TURN C++ tests (including redirect rejection)
