@@ -17,7 +17,9 @@ import java.util.function.Consumer;
 public final class VoiceControls implements AutoCloseable {
     private NativeVoiceSession current;
     private volatile long epoch;
-    public String status() { return current==null?"Sin audio":current.state().name(); }
+    private final android.os.Handler stateHandler=new android.os.Handler(android.os.Looper.getMainLooper());
+    private Runnable stateMonitor;
+    public String status() { return current==null?"Sin audio":current.state().name()+" · solicitado "+(current.modulationRequested()?"MODULATED":"OFF (natural)")+" · efectivo "+current.modulationStatus(); }
     public boolean hasSession() { return current!=null; }
     public void show(Activity activity,Engine engine,String id,Executor worker,Consumer<Dialog> track,Runnable changed) {
         try { NativeDistributionPolicy.requireAuthorizedTurnDestinations(); }
@@ -26,10 +28,20 @@ public final class VoiceControls implements AutoCloseable {
         }
         if(current!=null) {
             NativeVoiceSession voice=current;
-            display(activity,track,new AlertDialog.Builder(activity).setTitle("Voz: "+voice.state())
-                .setItems(new String[]{"Silenciar","Activar micrófono","Salida de audio","Finalizar","Solicitar video","Responder solicitud de video","Apagar video, conservar audio","Cambiar cámara","Ver video recibido"},(d,which)->{
+            display(activity,track,new AlertDialog.Builder(activity).setTitle("Voz: "+voice.state()+" · "+voice.modulationStatus())
+                .setItems(new String[]{"Silenciar","Activar micrófono","Salida de audio","Finalizar","Solicitar video","Responder solicitud de video","Apagar video, conservar audio","Cambiar cámara","Ver video recibido","Activar/reintentar modulación local","Transmitir voz natural"},(d,which)->{
                     try {
                         if(which<2) voice.mute(which==0);
+                        else if(which==9) {voice.modulation(true,false);changed.run();}
+                        else if(which==10) {
+                            long reviewedMode=epoch;
+                            display(activity,track,new AlertDialog.Builder(activity).setTitle("Vas a transmitir tu voz natural")
+                                .setMessage("Desactivar el efecto no quita el silencio ni concede permiso de micrófono.")
+                                .setNegativeButton("Cancelar",null).setPositiveButton("Confirmar voz natural",(confirm,button)->{
+                                    try {if(reviewedMode!=epoch)throw new SecurityException("Consentimiento caducado");voice.modulation(false,true);changed.run();}
+                                    catch(Exception invalid){failure(activity);}
+                                }));
+                        }
                         else if(which==3) { close(); }
                         else if(which==4 || which==5) {
                             display(activity,track,new AlertDialog.Builder(activity).setTitle(which==4?"Solicitar video":"Consentimiento de video")
@@ -69,6 +81,9 @@ public final class VoiceControls implements AutoCloseable {
         }
         long reviewed=epoch;
         LinearLayout fields=new LinearLayout(activity); fields.setOrientation(LinearLayout.VERTICAL);
+        CheckBox modulated=new CheckBox(activity);modulated.setText("Modulación local (desactivada: voz natural)");
+        modulated.setSaveEnabled(false);fields.addView(modulated);
+        TextView notice=new TextView(activity);notice.setText("El efecto cambia el timbre; no garantiza que no puedan reconocerte. Ante un fallo, el audio se silencia.");fields.addView(notice);
         EditText url=field(activity,fields,"TURN autorizado localmente (turn: o turns:)",false);
         EditText user=field(activity,fields,"Usuario temporal",false);
         EditText password=field(activity,fields,"Credencial temporal",true);
@@ -77,6 +92,7 @@ public final class VoiceControls implements AutoCloseable {
             .setView(fields).setNegativeButton("Cancelar",null).setPositiveButton("Autorizar micrófono",(dialog,which)->{
                 String endpoint=url.getText().toString().trim(),username=user.getText().toString(),secret=password.getText().toString();
                 url.setText(""); user.setText(""); password.setText("");
+                boolean requestedModulation=modulated.isChecked();
                 long clicked=SystemClock.elapsedRealtime();
                 worker.execute(()->{
                     TurnConfiguration turn=null; app.umbra.calls.CallService.MediaLease lease=null;
@@ -86,10 +102,10 @@ public final class VoiceControls implements AutoCloseable {
                         turn=new TurnConfiguration(List.of(endpoint),revision,username,secret,180000,SystemClock::elapsedRealtime);
                         lease=engine.calls().prepareMedia(engine.calls().reviewMedia(id,revision),true);
                         if(reviewed!=epoch) throw new SecurityException("Media consent cancelled while queued");
-                        final NativeVoiceSession opened=NativeVoiceSession.open(activity,lease,turn);
+                        final NativeVoiceSession opened=NativeVoiceSession.open(activity,lease,turn,requestedModulation);
                         activity.runOnUiThread(()->{
                             if(reviewed!=epoch || activity.isFinishing() || activity.isDestroyed()) { opened.close();return; }
-                            current=opened;changed.run();
+                            current=opened;monitor(activity,opened,changed);changed.run();
                         });
                     } catch(Exception invalid) {
                         if(lease!=null) lease.close(); if(turn!=null) turn.close();
@@ -97,6 +113,23 @@ public final class VoiceControls implements AutoCloseable {
                     }
                 });
             }));
+    }
+    private void monitor(Activity activity,NativeVoiceSession voice,Runnable changed) {
+        if(stateMonitor!=null)stateHandler.removeCallbacks(stateMonitor);
+        stateMonitor=new Runnable() {
+            private String last="";
+            @Override public void run() {
+                if(current!=voice || activity.isFinishing() || activity.isDestroyed())return;
+                String now=status();
+                if(!now.equals(last)) {
+                    last=now;changed.run();
+                    if(voice.modulationStatus().equals("ERROR_MUTED") && voice.state()==NativeVoiceSession.State.ACTIVE)
+                        Toast.makeText(activity,"Error de modulación: audio silenciado. Reintenta o confirma voz natural.",Toast.LENGTH_LONG).show();
+                }
+                stateHandler.postDelayed(this,250);
+            }
+        };
+        stateHandler.post(stateMonitor);
     }
     private static EditText field(Activity activity,LinearLayout parent,String hint,boolean secret) {
         EditText field=new EditText(activity);field.setHint(hint);field.setSingleLine(true);
@@ -110,5 +143,5 @@ public final class VoiceControls implements AutoCloseable {
         AlertDialog dialog=builder.create(); dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);track.accept(dialog);dialog.show();
     }
     private static void failure(Activity activity) { Toast.makeText(activity,"No se pudo establecer la conexión privada mediante el retransmisor.",Toast.LENGTH_LONG).show(); }
-    @Override public void close() { epoch++;NativeVoiceSession voice=current;current=null;if(voice!=null) voice.close(); }
+    @Override public void close() { if(stateMonitor!=null)stateHandler.removeCallbacks(stateMonitor);stateMonitor=null;epoch++;NativeVoiceSession voice=current;current=null;if(voice!=null) voice.close(); }
 }

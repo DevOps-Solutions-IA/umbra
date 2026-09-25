@@ -61,3 +61,23 @@ four ABI builds, 83 TURN tests and 12 selected media-model/policy tests. The `.3
 AAR and per-ABI hashes are recorded in android/webrtc-artifact.json and the dated
 video-native-media receipt. This is not the full upstream suite. Java still checks
 per-generation consent and allowed directions.
+
+## Local voice processing overlay
+
+`voice-modulator/apply.py` adds the original MIT DSP and per-call
+`UmbraVoiceProcessor` capture APM factory to the same pinned source. New files
+are included explicitly in the binary source-patch receipt. No global processor,
+render transform or bypass setting is used. Build 35825968400 produced four ABI
+artifacts and passed the 83 TURN and 12 media-policy tests. The `.4` AAR is pinned
+in `android/webrtc-artifact.json`; its source patch matches the locally inspected
+overlay byte-for-byte. The MIT license is included as a specific AAR asset.
+
+`bash native/webrtc/voice-modulator/test.sh` exercises DSP/generation/failure
+controls and reports host timings. It does not establish remote-media acceptance.
+Android native/Opus/TURN tests and R8 runs must validate the adopted AAR separately.
+
+`.5` (build 36187887900, builder 2040a2c) additionally permits supported APM
+bootstrap reconfiguration before the first admitted PCM. A reproduced C++ test
+failed before and passed after; actual initial-MODULATED remote audio passed on
+the rebuilt artifact. Later format changes still fail muted. Four-ABI receipts
+and the 83 TURN + 12 media tests were reverified; see the modulator evidence.

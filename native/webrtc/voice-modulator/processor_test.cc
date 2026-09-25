@@ -34,6 +34,7 @@ struct Block {
 };
 static P* callback_processor;
 static void Toggle() { callback_processor->Request(true,false); }
+static void Reenter() {Block nested;nested.tone();CHECK(!callback_processor->Process(nested.data,2,480,48000));CHECK(nested.zero());}
 void modes() {
   P p;Block b;p.Initialize(48000,2);b.tone();
   CHECK(!p.Process(b.data,2,480,48000));CHECK(b.zero());
@@ -70,6 +71,18 @@ void formats() {
   p.Initialize(44100,2);CHECK(p.status()==P::ERROR_MUTED);
 }
 void faults() {
+  // Finite low/high amplitudes and frequencies retain block duration and never
+  // bypass the carrier. This is signal behavior, not intelligibility evidence.
+  for(int frequency:{200,700,2100})for(float amplitude:{1.f,50.f,12000.f,40000.f}) {
+    P p(true);Block b;p.Initialize(48000,2);p.Authorize(true);
+    for(int i=0;i<480;++i)b.a[i]=b.b[i]=amplitude*std::sin(2*3.141592653589793*frequency*i/48000);
+    auto original=b.a;CHECK(p.Process(b.data,2,480,48000));
+    for(int i=0;i<480;++i) {
+      float expected=std::clamp(original[i]*float(std::cos(2*3.141592653589793*i/480))*P::kGain,-P::kLimit,P::kLimit);
+      CHECK(std::abs(b.a[i]-expected)<0.01f);CHECK(std::isfinite(b.a[i]));
+    }
+  }
+
   for(float bad:{std::numeric_limits<float>::quiet_NaN(),std::numeric_limits<float>::infinity(),65537.f}) {
     P p(true);Block b;p.Initialize(48000,2);p.Authorize(true);b.tone();b.b[479]=bad;
     CHECK(!p.Process(b.data,2,480,48000));CHECK(b.zero());CHECK(p.status()==P::ERROR_MUTED);
@@ -96,6 +109,9 @@ void stale_and_concurrent() {
   std::thread c([&]{for(int i=0;i<10000;++i)CHECK(p.Request(false,true));});
   for(int i=0;i<10000;++i) {b.tone();CHECK(!p.Process(b.data,2,480,48000));CHECK(b.zero());}
   a.join();c.join();CHECK(p.command()&P::kMuted);CHECK(p.command()&P::kAuthorized);
+  CHECK(p.Request(true,false));p.Mute(false);b.tone();
+  struct Reentrant {static void Arm(){Clock::hook=Reenter;}};
+  Clock::hook=Reentrant::Arm;CHECK(!p.Process(b.data,2,480,48000));CHECK(b.zero());CHECK(p.status()==P::ERROR_MUTED);
   p.Authorize(false);p.Mute(false);CHECK(p.Request(true,false));b.tone();CHECK(!p.Process(b.data,2,480,48000));CHECK(b.zero());
 }
 void benchmark() {

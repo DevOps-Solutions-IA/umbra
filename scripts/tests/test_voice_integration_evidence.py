@@ -4,10 +4,21 @@ import sys
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment
+from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing
 import voice_network_evidence as network
 
 class VoiceEvidenceTest(unittest.TestCase):
+    def test_modulation_needs_decoded_output_and_positive_observation_windows(self):
+        good=dict(natural=0,modified=80,loud=80,settleMillis=1300,observedMillis=2000,videoFrames=10,step=0,metrics=[200]*34)
+        self.assertTrue(valid_processing(good,"modified",video=True))
+        for field in good:
+            bad=good.copy();del bad[field];self.assertFalse(valid_processing(bad,"modified",video=True))
+        for field,value in (("modified",0),("natural",40),("observedMillis",0),("settleMillis",30000),("videoFrames",0),("metrics",[])):
+            self.assertFalse(valid_processing({**good,field:value},"modified",video=True))
+        self.assertFalse(valid_processing(good,"natural"))
+        self.assertFalse(valid_processing(good,"quiet"))
+        self.assertTrue(valid_processing({**good,"modified":0,"loud":0},"quiet"))
+
     def test_netem_equivalent_decimal_format_still_requires_all_bounds(self):
         good="qdisc netem 8002: root refcnt 2 limit 20 delay 80.0ms loss 2% rate 128Kbit"
         self.assertTrue(valid_impairment(good))

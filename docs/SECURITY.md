@@ -176,3 +176,16 @@ TURN/TLS y trayecto cliente-TURN IPv6 tienen evidencia nueva; no se extiende a
 asignaciones relay IPv6, hardware físico o APK productivo exacto. El cierre de
 superficies ya no depende del listener reemplazable; los límites de cancelación
 medidos no demuestran retiro de paquetes ni borrado de copias del destinatario.
+
+## Modulación local de voz (entrega en curso)
+
+El efecto modifica el timbre saliente, no acredita anonimato ni impide reconocer
+a la persona. PCM natural existe transitoriamente en captura/APM; no se conserva
+un historial ni se promete borrado forense de RAM. TURN, DTLS, libsignal, selección
+de dispositivo, permisos, autolock y límites de sesión no cambian. Error del
+procesador silencia; OFF desde MODULATED requiere confirmación local y no quita
+mute. El límite atómico protege bloques admitidos tras el cambio; audio ya
+encolado en Opus o en tránsito puede llegar después. El receptor puede guardar
+lo que recibe. Ver [ADR](adr/ADR-voice-modulator.md) y
+[contrato](protocol/VOICE_PROCESSING.md). Pruebas remotas y R8 deben constar en
+evidencia propia del commit; una prueba de DSP no certifica el pipeline completo.

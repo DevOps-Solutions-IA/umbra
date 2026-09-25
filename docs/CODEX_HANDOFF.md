@@ -1,5 +1,20 @@
 # Transferencia técnica a Codex
 
+## Modulación local de voz — en curso, 2026-09-25
+
+PR #10 borrador dependiente de #9, rama `codex/local-voice-modulator`.
+Base #9 verificada: `26d7326a8b2a43ee9533284d20896727ad8bb3ce`; no se modifica
+su rama. DSP por llamada después de AEC/NS/ganancia, antes de Opus; modos natural
+y timbre modulado a 100 Hz, error silenciado sin fallback. No anonimización
+biométrica. Build nativo 36187887900: cuatro ABI, 83 TURN + 12 política multimedia;
+AAR `.5` corrige preparación de formato antes del primer audio admitido.
+Arranque MODULATED y diez transiciones remotas debug ejecutadas con `.5`.
+El verde Verify 35826003642 valida solo `32ab6c6`, no la integración posterior.
+Aceptación remota y CI final siguen en curso; hardware e inteligibilidad humana
+no ejecutados. Ver ADR-voice-modulator y VOICE_PROCESSING; no declarar terminada
+la función por tener un binario o un interruptor.
+
+
 ## Estado actual de transferencia — 2026-09-22
 
 PR #9 sigue OPEN/DRAFT hacia `codex/turn-voice-core`. Código `171324bf` probado
