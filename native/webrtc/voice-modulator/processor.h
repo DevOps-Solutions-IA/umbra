@@ -67,7 +67,9 @@ template <typename Clock = MonotonicClock> class VoiceProcessor {
     if (busy_.test_and_set()) { Fail();return; }
     bool valid=(rate==8000 || rate==16000 || rate==32000 || rate==48000) && (channels==1 || channels==2);
     if (!valid) { Fail();rate_=0;channels_=0;busy_.clear();return; }
-    if (rate_!=0 && (rate_!=rate || channels_!=channels) && requested()) Fail();
+    // Supported bootstrap reconfiguration occurs before the first admitted PCM.
+    // Once any block has been delivered, a modulated route/format change is sticky-muted.
+    if (processed_.load()!=0 && (rate_!=rate || channels_!=channels) && requested()) Fail();
     rate_=rate;channels_=channels;
     for (int i=0;i<rate/100;++i) carrier_[i]=float(std::cos(2.0*3.14159265358979323846*i/(rate/100)));
     busy_.clear();

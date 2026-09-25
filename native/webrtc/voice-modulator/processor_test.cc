@@ -48,6 +48,13 @@ void modes() {
   p.Close();CHECK(!p.Request(true,false));b.tone();CHECK(!p.Process(b.data,2,480,48000));CHECK(b.zero());
 }
 void formats() {
+  // APM negotiates supported internal formats before admitting its first frame.
+  // Initial MODULATED selection must survive that bootstrap without a dry frame.
+  {
+    P initial(true);Block first;initial.Initialize(16000,1);initial.Initialize(48000,2);
+    initial.Authorize(true);first.tone();CHECK(initial.Process(first.data,2,480,48000));
+    CHECK(initial.status()==P::ON);CHECK(first.energy(1000)<0.01);
+  }
   for(int rate:{8000,16000,32000,48000})for(int channels:{1,2}) {
     P p(true);Block b;p.Initialize(rate,channels);p.Authorize(true);b.tone(rate);
     CHECK(p.status()==P::ENABLING);CHECK(p.Process(b.data,channels,rate/100,rate));
@@ -57,7 +64,7 @@ void formats() {
     for(int i=0;i<rate/100;++i)CHECK(std::abs(b.a[i])<=P::kLimit);
     CHECK(p.metrics().clipped>0);
   }
-  P p(true);Block b;p.Initialize(48000,2);p.Authorize(true);p.Initialize(16000,1);
+  P p(true);Block b;p.Initialize(48000,2);p.Authorize(true);b.tone();CHECK(p.Process(b.data,2,480,48000));p.Initialize(16000,1);
   CHECK(p.status()==P::ERROR_MUTED);b.tone();CHECK(!p.Process(b.data,1,160,16000));
   CHECK(p.Request(true,false));b.tone(16000);CHECK(p.Process(b.data,1,160,16000));
   p.Initialize(44100,2);CHECK(p.status()==P::ERROR_MUTED);
