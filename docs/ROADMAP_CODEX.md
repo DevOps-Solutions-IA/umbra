@@ -8,11 +8,15 @@ su rama. DSP por llamada después de AEC/NS/ganancia, antes de Opus; modos natur
 y timbre modulado a 100 Hz, error silenciado sin fallback. No anonimización
 biométrica. Build nativo 36187887900: cuatro ABI, 83 TURN + 12 política multimedia;
 AAR `.5` corrige preparación de formato antes del primer audio admitido.
-Arranque MODULATED y diez transiciones remotas debug ejecutadas con `.5`.
-El verde Verify 35826003642 valida solo `32ab6c6`, no la integración posterior.
-Aceptación remota y CI final siguen en curso; hardware e inteligibilidad humana
-no ejecutados. Ver ADR-voice-modulator y VOICE_PROCESSING; no declarar terminada
-la función por tener un binario o un interruptor.
+Ocho recorridos reales `.5` debug/R8 aprobados en CI 36202456119 para
+HEAD `383fc37`, checkout `7839081`, árbol común `064b1089`. También se ejecutaron
+localmente los cuatro casos por configuración: voz inicial, video, lock y
+revocación. Un fallo local sin audio no se reprodujo; causa no confirmada,
+diagnóstico de laboratorio añadido sin reducir umbrales. Verify/voz/video
+completos y CI del siguiente commit siguen pendientes en este recibo.
+Ver evidencia 2026-09-25-local-voice-modulator.md para comandos y hashes.
+Hardware, inteligibilidad física y medición cuantitativa de sincronía A/V no
+ejecutados; no confundir mediaLab R8 con el APK productivo exacto.
 
 
 ## Aceptación de laboratorio de la sexta entrega — 2026-09-22

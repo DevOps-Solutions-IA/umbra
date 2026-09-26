@@ -139,7 +139,7 @@ def main():
         if args.scenario=="camera-denied":run(serial,"shell","pm","revoke",PACKAGE,"android.permission.CAMERA")
         # Explicit names only, confined to this disposable debug UID.
         run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-")])
-        for suffix in ("public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural"):
+        for suffix in ("public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
             run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
     args.reports.mkdir(parents=True,exist_ok=True)
     if optimized_evidence:
@@ -387,13 +387,21 @@ def main():
             for serial,process in processes.items():
                 try: run(serial,"shell","am","force-stop",PACKAGE)
                 except Exception as failure: errors.append(failure)
+                if args.modulation:
+                    try:
+                        diagnostic=subprocess.run(command_for(serial,("shell","run-as",PACKAGE,"cat","files/synthetic-voice-processing-diagnostic.json")),capture_output=True,timeout=15)
+                        if diagnostic.returncode==0:
+                            detail=json.loads(diagnostic.stdout)
+                            if not isinstance(detail,dict) or not set(detail)<= {"state","effective","step","failureStage","faults","maxBlockNanos","processed","processorDisposed"}:raise RuntimeError("Unexpected processing diagnostic")
+                            (args.reports/("processing-diagnostic-"+serial+".json")).write_text(json.dumps(detail,indent=2)+"\n")
+                    except Exception as failure: errors.append(failure)
                 try:
                     if process.poll() is None: process.terminate()
                     process.wait(timeout=15)
                 except Exception as failure: errors.append(failure)
                 try: run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-")])
                 except Exception as failure: errors.append(failure)
-                for suffix in ("engine","public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural"):
+                for suffix in ("engine","public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
                     try: run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
                     except Exception as failure: errors.append(failure)
                 # These exact files belong solely to this named synthetic fixture, including failed runs.

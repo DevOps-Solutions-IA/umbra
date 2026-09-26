@@ -1,6 +1,7 @@
 # ADR: local outgoing voice modulation
 
-Status: implementation in progress; no remote-media acceptance claimed.
+Status: implemented; synthetic two-AVD voice/video acceptance passed in debug/R8.
+See 2026-09-25 validation receipt for tested revisions and pending final CI.
 Date: 2026-09-23.
 
 ## Decision and provenance
@@ -41,7 +42,7 @@ This guarantee covers frames admitted after the local command, not packets or
 Opus state already admitted before it. Codec/network tail must be measured in
 remote tests and must not be described as recalled audio. No dry/wet mixing.
 
-An unsupported format, invalid output/input, format change while modulated,
+An unsupported format, invalid output/input, post-admission format change while modulated,
 concurrent processing, unavailable clock or >10 ms processing deadline fails
 muted. Error is sticky; only an explicit retry or confirmed natural-voice action
 can clear it. Mute and authorization are independent flags preserved by mode

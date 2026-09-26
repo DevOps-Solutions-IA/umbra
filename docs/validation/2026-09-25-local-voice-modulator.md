@@ -122,3 +122,93 @@ The workflow adds four isolated cases per debug/R8 matrix without removing the
 existing Verify, voice R8 or 31-case video matrices. Final run IDs and the exact
 published HEAD/integration checkout will be attached to the PR after completion;
 no earlier green is attributed to that final HEAD.
+
+## Continuation receipt: integrated `.5`, 2026-09-25
+
+This section supersedes the pending execution status above for the explicitly
+listed checks only; the intermediate `.4` history is retained.
+Published application HEAD: `383fc37f5ccfbea4e19c384a590bf8a019f34bef`.
+Actions checkout: `7839081afb9c138c6413d7ef5cca1cfd5481ef79`.
+Both trees: `064b1089e847679abe06b3828b7f00c9ee939d28` (GitHub commit API and
+artifact commit.txt checked). Modulation run **36202456119 SUCCESS**, both
+matrices: initial-modulated voice, active video, lock and device revocation.
+Eight real two-AVD flows, ten mode/mute/error/retry stages each. Downloaded all
+eight processing receipts; they are native remote-decoder evidence, not mocks.
+
+Additional local `.5` execution, exit 0 for each: the same four cases in debug
+and optimized mediaLab. R8 mediaLab executes optimized production classes but
+uses isolated lab identity, persistence adapters and synthetic sources: it is
+NOT execution of the exact production APK with hardware-backed Keystore.
+The final local R8 repetition includes the small diagnostic-only changes following
+383fc37. Its reports are `umbra-modulator-final-{initial,video,lock,revocation}-r8`.
+
+Local checks on this integrated implementation, all exit 0:
+
+- Python 3.13.12 virtualenv, JDK 21.0.11 explicitly selected; Gradle 8.13,
+  AGP 8.13.2, SDK 36/min31/build tools 35.0.0; libsignal 0.102.3 unchanged.
+- `bash scripts/test_local.sh`: backend 149, pure core 105 behavioral checks;
+  source/syntax policy checks are counted separately.
+- `python -m unittest discover -s scripts/tests -p 'test_*.py' -v`: 141 tests.
+- `python scripts/repository_guard.py --git-history`: source/history checks.
+- `python scripts/build_android.py --release`: both debug/release variants,
+  lint, manifest/APK policy, JNI, DEX and packaging; JVM 157 connected and
+  117 offline, no failures/errors/skips. Offline excludes network/media permissions
+  and WebRTC. No production signing keys.
+- `python scripts/test_relay_integration.py`: 28 real HTTPS integration checks.
+- `bash native/webrtc/voice-modulator/test.sh`: five standalone test groups;
+  separate host ASan/UBSan execution also passed (not Android sanitizer coverage).
+
+### Failure retained and diagnostic improvement
+
+One local `.5` device-revocation scenario failed BEFORE applying revocation,
+at confirmed OFF (step 6): receiver observed no energetic/natural/modulated
+blocks. Instrumentation reported process termination; collected Android exit
+information also contains host cleanup force-stop, which does not establish the
+original cause. Root cause is NOT CONFIRMED. No threshold/deadline was relaxed.
+Added lab-only last-state diagnostics (effective state, step, failure stage,
+fault count, maximum block time) and bounded sanitized collection during cleanup.
+The repeat passed, as did subsequent R8 and both CI matrices. This is an
+unreproduced failure with better diagnostics, not a claimed product fix.
+
+### Measurements and boundaries
+
+Four successful local debug flows: processor mean wall time 2.9–4.3 us/block,
+thread CPU 1.65–2.27 us/block, maximum 0.34–1.06 ms. Synthetic tones had no
+clipping. Each sender had one deliberately injected failure; reverse endpoints
+had zero. Whole-process PSS approximately 53–75 MiB, native heap 12–34 MB;
+these include Engine/WebRTC/video and are NOT incremental DSP memory.
+Host processor object 2224 bytes; fixed oscillator storage, no PCM history or
+algorithmic lookahead. Impulse retains its sample index. This meets the added
+algorithmic-delay goal for this DSP, not an end-to-end audio latency claim.
+The four local R8 sender histograms gave p50 upper bound 4 us, p95 4–8 us,
+p99 8–32 us; mean wall 2.6–3.6 us, CPU 1.5–1.9 us, maximum 87–336 us.
+These cumulative buckets include OFF and MODULATED blocks; they are not isolated
+ON-only percentile estimates. Scheduler maxima are observations, not hard
+real-time guarantees.
+
+For local lock and revocation: capture quiet after 1000–1001 ms followed by a
+positive 500–501 ms observation, zero late capture callbacks. This is a bounded
+observed cancellation window, not immediate withdrawal of codec/network buffers.
+Video stages continued decoding 30–32 remote frames per two-second window with
+independent reverse audio. Quantitative audio/video lip synchronization remains
+NOT EXECUTED; simultaneous decoding is not a lip-sync measurement.
+Physical microphones, intelligibility, speakers/headsets and hardware Keystore
+remain NOT EXECUTED. No biometric anonymity claim or new IPv6/TLS claim.
+
+CI report hashes (SHA-256 of voice-processing.json, run 36202456119):
+
+| Mode | Case | SHA-256 |
+|---|---|---|
+| debug | initial voice | afb9d6a88425c8e17b22798a7852237d6bf1493c16e49bb52421a1502b4ffa51 |
+| debug | video | 37529f26780150b70aab51f6cbcab564b815bff938bf2e579c6eb01d7dd843ce |
+| debug | lock | 027148e6bb09ed416929da3bf7e86bd2fc3ba13d2a744ff93e200b4c59b14f32 |
+| debug | revocation | 7978416f957f583de9d27fc543cd099c96adec27c19d0344fd36b1bec11a8090 |
+| R8 | initial voice | 85686a19bff6c7a3f81b65e148b75b6b9910ca7d554a5f657e32b2206c67ca96 |
+| R8 | video | 0dbeba00510225160b5c79cb11c609c81af2c7f7783ada356245048376435a32 |
+| R8 | lock | 9278b7f978fec3a3601c42ebc6ded8bca54b7d5e64198ff53c369c0843f3d437 |
+| R8 | revocation | 73e3975a1fce06b7a5b3b30e6eba61063be4d5bb5c643900c559f7004424c86f |
+
+General Verify/voice/video regressions are still running at this receipt.
+The subsequent diagnostic/documentation commit requires its own final CI;
+its published HEAD, checkout, trees and run results will be recorded on PR #10.
+No earlier green validates that later commit automatically.

@@ -1,6 +1,7 @@
 # Local voice processing contract v1
 
-Status: implementation in progress. This is a local capture API, not a new
+Status: implemented; execution scope is recorded in the dated validation receipt.
+This is a local capture API, not a new
 signaling or network protocol. CALL_SIGNALING / VOICE_MEDIA / VIDEO_MEDIA and
 all trust, TURN, DTLS, 60-second invitation and 180-second call limits remain.
 
@@ -30,7 +31,9 @@ number of samples with no dry component, delay queue or historical PCM.
 AEC/NS/gain -> modulation -> limiter -> encoder -> DTLS-SRTP -> authorized TURN.
 No second capture source, render processing or remote mode commands. Platform
 route changes which invalidate processing must enter ERROR_MUTED; format change
-while modulated also fails muted. No automatic switch to OFF.
+after first admitted PCM while modulated also fails muted. Supported bootstrap
+format preparation before first admission is permitted; unsupported formats are
+always rejected. No automatic switch to OFF.
 
 Each control change increments an atomic generation. The callback snapshots it
 at admission and discards its block if the generation changes during processing.

@@ -201,7 +201,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
             boolean initialProcessingEvidence=false,initialNatural=false;
             boolean cameraDeniedChecked=false,cameraDeniedEvidence=false;int cameraDeniedBaseline=0;
             int processingStep=0,processingNatural=0,processingModified=0,processingLoud=0,processingVideo=0;
-            long processingAt=0,processingWindow=0;String processingExpected="";
+            long processingAt=0,processingWindow=0;String processingExpected="",processingDiagnostic="";
             long muteAt=0; int quietBaseline=-1,resumeBaseline=0;
             while(SystemClock.elapsedRealtime()<deadline) {
                 pump(relay,engine);
@@ -345,6 +345,17 @@ public final class VoiceEngineFixtureListener extends RunListener {
                             .put("requestToInvalidationNanos",invalidation).put("requestToLastCaptureNanos",lastCallback).put("requestToClosedNanos",closure)
                             .put("observedAfterRequestMillis",SystemClock.elapsedRealtime()-videoOffAt)
                             .put("captureCallbacksAfterRequest",atRest-videoCaptureBaseline).put("decodedAudioAfterVideoOff",decoded.get()-videoAudioBaseline));videoStage=3;
+                    }
+                }
+                if(modulation) {
+                    String diagnostic=voice.state()+":"+voice.modulationStatus();
+                    if(!diagnostic.equals(processingDiagnostic)) {
+                        processingDiagnostic=diagnostic;
+                        JSONObject detail=new JSONObject().put("state",voice.state().name()).put("effective",voice.modulationStatus()).put("step",processingStep)
+                            .put("failureStage",voice.failureStage());
+                        try {detail.put("faults",voice.processingMetric(4)).put("maxBlockNanos",voice.processingMetric(8)).put("processed",voice.processingMetric(1));}
+                        catch(IllegalStateException disposed) {detail.put("processorDisposed",true);}
+                        write("synthetic-voice-processing-diagnostic.json",detail);
                     }
                 }
                 if(modulation && resumedEvidence && (!withVideo || videoStage==5)) {
