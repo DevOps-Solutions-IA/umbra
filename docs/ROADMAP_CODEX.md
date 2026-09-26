@@ -1,5 +1,20 @@
 # Backlog de finalización verificable
 
+## Accesos restaurados — estabilización 2026-09-26
+
+GitHub y descargas disponibles tras autorización del propietario; los bloqueos
+de publicación anteriores son históricos. KVM local sin permisos efectivos;
+usar CI. Video falla antes de revocar CAMERA, durante stopVideo. Causas de esa
+transición terminal y RFCOMM todavía bajo investigación. Ver
+[continuación](validation/2026-09-26-modulator-stabilization.md).
+
+## Continuación 2026-09-26 — CI incompleta
+
+HEAD `2d9ac6e`: modulación/voz R8/video R8 aprobados; pendientes de diagnóstico
+los fallos de RFCOMM connected en Verify y camera-permission-revoked en video
+debug. Wrong-fingerprint ya pasa. Mantener abiertos estos bloqueos y los de
+hardware; ver [recibo](validation/2026-09-26-modulator-diagnostics.md).
+
 ## Modulación local de voz — en curso, 2026-09-25
 
 PR #10 borrador dependiente de #9, rama `codex/local-voice-modulator`.

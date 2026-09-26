@@ -82,6 +82,10 @@ jobs:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
         with:
           persist-credentials: false
+      - name: Record Android checkout before any build or device test
+        run: |
+          mkdir -p android/app/build/reports
+          git rev-parse HEAD > android/app/build/reports/commit.txt
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, Node 24
         with:
           python-version: '3.12'
@@ -167,5 +171,5 @@ jobs:
             android/app/build/reports/device/
             android/app/build/reports/commit.txt
             android/app/build/reports/apk-sha256.txt
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7

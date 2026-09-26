@@ -67,7 +67,20 @@ public final class NearbyFixtureListener extends RunListener {
                         catch (Exception failure) { receiveFailure = failure; throw failure; }
                     }
                 }
-                public void status(String text) { /* Do not log envelopes or synthetic message contents. */ }
+                public void stage(BluetoothLink.Stage stage) { NearbyFixtureListener.this.status("nearbyHandshakeStage",stage.name()); }
+                public void status(String text) {
+                    // Test-only, fixed vocabulary. Never echo transport text or payloads.
+                    String stage=switch(text) {
+                        case "Bluetooth: esperando vinculación explícita", "Bluetooth: esperando contacto verificado" -> "LISTENING";
+                        case "Bluetooth: escucha finalizada" -> "LISTEN_ENDED";
+                        case "Bluetooth: conexión fallida" -> "CONNECT_FAILED";
+                        case "Bluetooth: enlace cerrado por tiempo límite" -> "TIMED_OUT";
+                        case "Bluetooth: enlace cerrado o paquete no aceptado" -> "CLOSED_OR_REJECTED";
+                        case "Clave del dispositivo comprobada · verifica el código del contacto", "Bluetooth: contacto verificado conectado" -> "CONNECTED";
+                        default -> "UNCLASSIFIED";
+                    };
+                    NearbyFixtureListener.this.status("nearbyTransportStage",stage);
+                }
             });
             if (dialer) link.connect(device, true); else link.listen(true);
             status("nearbyStage", "listening-or-connecting");

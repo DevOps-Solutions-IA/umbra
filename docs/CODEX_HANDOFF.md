@@ -1,5 +1,26 @@
 # Transferencia técnica a Codex
 
+## Accesos restaurados — estabilización 2026-09-26
+
+GitHub y descargas disponibles tras autorización del propietario; los bloqueos
+de publicación anteriores son históricos. KVM local sin permisos efectivos;
+usar CI. Video falla antes de revocar CAMERA, durante stopVideo. Causas de esa
+transición terminal y RFCOMM todavía bajo investigación. Ver
+[continuación](validation/2026-09-26-modulator-stabilization.md).
+
+## Continuación 2026-09-26 — CI incompleta
+
+HEAD publicado `2d9ac6e`: modulación y voz R8 SUCCESS; video R8 SUCCESS;
+video debug falla camera-permission-revoked; Verify falla handshake RFCOMM
+connected. Wrong-fingerprint pasa en ambas matrices. Los dos fallos restantes
+tienen causa no confirmada. Mejoras de diagnóstico en revisión; ver
+[recibo](validation/2026-09-26-modulator-diagnostics.md). No declarar todo verde.
+Los cambios de diagnóstico están locales y probados (142 pruebas de herramientas;
+javac del fixture), pero NO publicados: el conector requiere aprobación y la
+sesión la prohíbe. HEAD local/remoto conocido sigue en `2d9ac6e`. Parche de
+continuación: `/tmp/umbra-modulator-diagnostics.patch`. Se necesita restaurar la
+capacidad de publicación/descarga y ejecución de AVD, sin rebajar garantías.
+
 ## Modulación local de voz — en curso, 2026-09-25
 
 PR #10 borrador dependiente de #9, rama `codex/local-voice-modulator`.

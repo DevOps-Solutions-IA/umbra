@@ -334,6 +334,8 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         }
                     }
                     if(videoStage==2 && Files.exists(files.resolve("synthetic-voice-video-off.json"))) {
+                        Bundle beforeStop=new Bundle();beforeStop.putString("videoBeforeStop",voice.state().name()+":"+voice.failureStage()+":"+voice.videoStatus());
+                        InstrumentationRegistry.getInstrumentation().sendStatus(0,beforeStop);
                         videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();videoOffAt=SystemClock.elapsedRealtime();videoCaptureBaseline=videoCaptured.get();videoAudioBaseline=decoded.get();videoStage=6;
                     }
                     if(videoStage==6 && SystemClock.elapsedRealtime()-videoOffAt>=2000 && decoded.get()-videoAudioBaseline>=50) {
