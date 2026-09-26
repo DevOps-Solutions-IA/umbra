@@ -111,3 +111,18 @@ both factors. The latter measures three unlocks at production parameters and a
 5-ms sampled Java heap peak, not total/native peak RSS or a hardware benchmark.
 Measurements must be read from actual CI reports. No timing/memory value is assumed
 from RFC recommendations. No KDF runs merely to display the initial locked state.
+
+Storage corruption is also guarded below record AEAD: Vault overrides Android's
+default delete-and-reopen corruption handler and refuses fresh schema creation
+for an existing truncated/version-zero database. It does not automatically repair
+or delete such files. The key-cleanup timer uses the earlier of the configured
+interval and the original AccessGate authentication deadline; KDF time cannot
+extend it. A damaged file is distinct from an explicit future user-approved reset.
+
+The debug laboratory additionally uninstalls/reinstalls each target APK and
+restores only its bounded synthetic encrypted database. The correct password
+must then fail without deleted device keys; no aliases may be regenerated.
+This is a real package reinstall on an AVD, not recovery or a production export
+feature. The encrypted fixture stays transient in the host process, is never
+uploaded as evidence, and is deleted from the AVD after assertions. R8 performs
+force-stop and key-loss tests separately; no R8 reinstall claim is implied.

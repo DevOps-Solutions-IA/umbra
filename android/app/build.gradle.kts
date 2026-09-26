@@ -208,7 +208,7 @@ val verifyPasswordDistribution by tasks.registering {
 tasks.named("preBuild") { dependsOn(verifyPasswordDistribution) }
 dependencies {
     add(passwordDistribution.name, "org.bouncycastle:bcprov-jdk15to18:1.86")
-    implementation("org.bouncycastle:bcprov-jdk15to18:1.86")
+    implementation("org.bouncycastle:bcprov-jdk15to18:1.86") { isTransitive = false }
     add(voiceDistribution.name, voiceArtifact)
     add("connectedImplementation", voiceArtifact)
     add(relayIntegrationClasspath.name, "org.signal:libsignal-client:0.102.3")

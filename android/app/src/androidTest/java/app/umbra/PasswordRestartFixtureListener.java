@@ -40,9 +40,12 @@ public final class PasswordRestartFixtureListener extends RunListener {
             }
             fixture.vault.createPassword(password); fixture.gate.unlock(); fixture.vault.unlock(password);
             assertEquals(Vault.State.UNLOCKED, fixture.vault.getVaultState());
+            try (var checkpoint = fixture.vault.getWritableDatabase().rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null)) {
+                assertTrue(checkpoint.moveToFirst()); assertEquals(0, checkpoint.getInt(0));
+            }
             status("READY unlocked synthetic vault; awaiting actual force-stop");
             while (true) Thread.sleep(1000);
-        } else if (phase.equals("verify") || phase.equals("verify-migration")) {
+        } else if (phase.equals("verify") || phase.equals("verify-migration") || phase.equals("verify-reinstall")) {
             String name = new String(Files.readAllBytes(locator.toPath()), StandardCharsets.UTF_8);
             if (!name.matches("synthetic-password-[0-9a-f-]+\\.db")) throw new SecurityException("Invalid fixture path");
             File file = new File(context.getCacheDir(), name); assertTrue(file.exists());
@@ -55,6 +58,19 @@ public final class PasswordRestartFixtureListener extends RunListener {
             AccessGate gate = new AccessGate();
             try (Vault vault = new Vault(isolated, gate)) {
                 assertEquals(Vault.State.LOCKED, vault.getVaultState()); gate.unlock();
+                if (phase.equals("verify-reinstall")) {
+                    java.security.KeyStore keys = java.security.KeyStore.getInstance("AndroidKeyStore"); keys.load(null);
+                    assertFalse(keys.containsAlias("umbra.vault.v1")); assertFalse(keys.containsAlias("umbra.index.v2"));
+                    byte[] stored = Files.readAllBytes(file.toPath());
+                    assertThrows(SecurityException.class, () -> vault.unlock(password));
+                    assertEquals(Vault.State.KEY_UNAVAILABLE, vault.getVaultState());
+                    assertThrows(SecurityException.class, () -> Vault.prepareKey(isolated));
+                    assertArrayEquals(stored, Files.readAllBytes(file.toPath()));
+                    Bundle report = new Bundle(); report.putString("passwordReinstall", "PASS restored ciphertext and correct password cannot replace deleted device keys");
+                    InstrumentationRegistry.getInstrumentation().sendStatus(0, report);
+                    status("PASS actual uninstall/reinstall failed closed without recreating keys");
+                    java.util.Arrays.fill(password, (byte)0); return;
+                }
                 if (phase.equals("verify-migration")) {
                     assertFalse(vault.isPasswordConfigured());
                     try (var row = vault.getReadableDatabase().rawQuery("SELECT name FROM sqlite_master WHERE name='records_password'", null)) { assertFalse(row.moveToFirst()); }

@@ -21,7 +21,11 @@ import javax.crypto.SecretKeyFactory;
 public final class Vault extends SQLiteOpenHelper implements Records {
     private static final String AES_ALIAS = "umbra.vault.v1", INDEX_ALIAS = "umbra.index.v2";
     private static final long MAX_ENCRYPTED_BYTES = 64L * 1024 * 1024;
+    private static final android.database.DatabaseErrorHandler PRESERVE_CORRUPT = database -> {
+        throw new android.database.sqlite.SQLiteDatabaseCorruptException("Vault database damaged; automatic deletion refused");
+    };
     private final AccessGate gate;
+    private boolean initialCreationAllowed;
     private int transactionDepth;
     private boolean rollbackOnly;
     private final Runnable passwordInvalidation = this::forgetPasswordKey;
@@ -43,12 +47,16 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         byte[] old = passwordDataKey; passwordDataKey = null; passwordLease = null;
         PasswordEnvelope.erase(old); passwordState = State.LOCKED;
     }
-    public Vault(Context context, AccessGate gate) { super(context, "umbra.db", null, 2); this.gate = gate; this.databaseFile = context.getDatabasePath("umbra.db"); gate.onInvalidation(passwordInvalidation); }
+    public Vault(Context context, AccessGate gate) { super(context, "umbra.db", null, 2, PRESERVE_CORRUPT); this.gate = gate; this.databaseFile = context.getDatabasePath("umbra.db"); initialCreationAllowed = !databaseFile.exists(); gate.onInvalidation(passwordInvalidation); }
     private static void createTable(SQLiteDatabase db, String table) {
         // Table identifiers are internal constants, never user input.
         db.execSQL("CREATE TABLE " + table + "(bucket TEXT NOT NULL,k TEXT NOT NULL,nonce BLOB NOT NULL,value BLOB NOT NULL,PRIMARY KEY(bucket,k))");
     }
-    @Override public void onCreate(SQLiteDatabase db) { gate.requireUnlocked(); createTable(db, "records"); }
+    @Override public void onCreate(SQLiteDatabase db) {
+        gate.requireUnlocked();
+        if (!initialCreationAllowed) throw new IllegalStateException("Existing vault has no valid schema; automatic initialization refused");
+        createTable(db, "records"); initialCreationAllowed = false;
+    }
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion != 1 || newVersion != 2) throw new IllegalStateException("Explicit migration required");
         AccessGate.Lease lease = gate.enter();
@@ -100,7 +108,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
             // A v2 database with a missing HMAC key must not get a replacement index silently.
             java.io.File file = context.getDatabasePath("umbra.db");
             if (file.exists()) {
-                try (SQLiteDatabase db = SQLiteDatabase.openDatabase(file.getPath(), null, SQLiteDatabase.OPEN_READONLY)) {
+                try (SQLiteDatabase db = SQLiteDatabase.openDatabase(file.getPath(), null, SQLiteDatabase.OPEN_READONLY, PRESERVE_CORRUPT)) {
                     if (db.getVersion() >= 2) throw new SecurityException("La clave de índices no está disponible");
                 }
             }
@@ -317,6 +325,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
             byte[] envelope = protection();
             if (envelope == null) throw new SecurityException("Password enrollment required");
             clear = PasswordEnvelope.open(password, envelope, key(AES_ALIAS));
+            VaultCodec.index(key(INDEX_ALIAS), "meta", "identity"); // require the existing index key, never regenerate it
             final byte[] opened = clear;
             gate.commit(lease, () -> {
                 passwordDataKey = opened; passwordLease = lease; passwordState = State.UNLOCKED;
@@ -326,7 +335,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         } catch (Exception failure) {
             forgetPasswordKey();
             if (failure instanceof java.security.UnrecoverableKeyException) passwordState = State.KEY_UNAVAILABLE;
-            else if (failure instanceof IllegalStateException) passwordState = State.CORRUPT;
+            else if (failure instanceof IllegalStateException || failure instanceof android.database.sqlite.SQLiteDatabaseCorruptException) passwordState = State.CORRUPT;
             throw new SecurityException("Vault unlock failed");
         } finally { PasswordEnvelope.erase(clear); }
     }
@@ -364,9 +373,10 @@ public final class Vault extends SQLiteOpenHelper implements Records {
     private void scheduleAutoLock() {
         if (autoLockTimer != null) autoLockTimer.cancel(false);
         AccessGate.Lease scheduled = passwordLease;
+        long remaining = Math.min(java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(autoLockMillis), gate.remainingNanos(scheduled));
         autoLockTimer = TIMERS.schedule(() -> {
             synchronized (gate) { if (passwordLease == scheduled) gate.lock(); }
-        }, autoLockMillis, java.util.concurrent.TimeUnit.MILLISECONDS);
+        }, Math.max(0, remaining), java.util.concurrent.TimeUnit.NANOSECONDS);
     }
 
     @Override public synchronized void close() {

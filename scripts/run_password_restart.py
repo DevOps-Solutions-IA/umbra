@@ -8,8 +8,9 @@ import subprocess
 import time
 
 
-def verified_report(report: str, returncode: int) -> bool:
+def verified_report(report: str, returncode: int, require_reinstall: bool = False) -> bool:
     return (returncode == 0 and 'passwordRestart=PASS' in report
+            and (not require_reinstall or 'passwordReinstall=PASS' in report)
             and bool(re.search(r'^OK \(3 tests\)$', report, re.M))
             and 'INSTRUMENTATION_CODE: -1' in report
             and not re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', report)
@@ -23,7 +24,10 @@ def main():
     parser.add_argument('--log-dir', type=Path, required=True)
     parser.add_argument('--optimized', action='store_true')
     parser.add_argument('--migration', action='store_true')
+    parser.add_argument('--reinstall', action='store_true')
     args = parser.parse_args()
+    if args.reinstall and (args.optimized or args.migration):
+        parser.error('Actual reinstall probe uses only the isolated debug target')
     adb = [str(Path(os.environ['ANDROID_HOME']) / 'platform-tools/adb'), '-s', args.serial]
     def run(*values):
         return subprocess.check_output([*adb, *values], text=True, timeout=30)
@@ -57,11 +61,28 @@ def main():
                 run('shell', 'am', 'force-stop', package)
                 process.terminate()
                 process.wait(timeout=10)
+    if args.reinstall:
+        # Read only this named synthetic fixture; never archive the encrypted database.
+        locator = 'cache/synthetic-password-restart-path'
+        name = run('shell', 'run-as', package, 'cat', locator).strip()
+        if not re.fullmatch(r'synthetic-password-[0-9a-f-]+\.db', name):
+            raise RuntimeError('Invalid synthetic restart database path')
+        ciphertext = subprocess.check_output([*adb, 'exec-out', 'run-as', package, 'cat', 'cache/' + name], timeout=15)
+        if not 4096 <= len(ciphertext) <= 1024 * 1024:
+            raise RuntimeError('Unexpected synthetic database size')
+        run('uninstall', package)
+        app = Path(__file__).resolve().parents[1] / f'android/app/build/outputs/apk/{args.flavor}/debug/app-{args.flavor}-debug.apk'
+        subprocess.run([*adb, 'install', str(app)], check=True, timeout=180)
+        run('shell', 'run-as', package, 'mkdir', '-p', 'cache')
+        for target, content in [('cache/' + name, ciphertext), (locator, name.encode())]:
+            subprocess.run([*adb, 'shell', '-T', 'run-as', package, 'tee', target], input=content,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, check=True, timeout=15)
+        del ciphertext
     after = args.log_dir / (args.flavor + '-password-after-kill.log')
     with after.open('w') as stream:
-        result = subprocess.run([*command, 'verify-migration' if args.migration else 'verify', runner], stdout=stream, stderr=subprocess.STDOUT, timeout=60)
+        result = subprocess.run([*command, 'verify-reinstall' if args.reinstall else 'verify-migration' if args.migration else 'verify', runner], stdout=stream, stderr=subprocess.STDOUT, timeout=60)
     report = after.read_text()
-    if not verified_report(report, result.returncode):
+    if not verified_report(report, result.returncode, require_reinstall=args.reinstall):
         raise RuntimeError('Password restart verification failed: ' + str(after))
     print(f'{args.flavor}: actual process force-stop then Vault restart required both factors; Argon2 measured; lost key rejected; not death during commit')
 

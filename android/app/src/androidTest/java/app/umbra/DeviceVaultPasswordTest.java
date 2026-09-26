@@ -40,7 +40,14 @@ public class DeviceVaultPasswordTest {
         ownsKeys = true;
         KeyGenerator aes = KeyGenerator.getInstance("AES", "AndroidKeyStore");
         aes.init(new KeyGenParameterSpec.Builder("umbra.vault.v1", KeyProperties.PURPOSE_ENCRYPT | KeyProperties.PURPOSE_DECRYPT)
-            .setKeySize(256).setBlockModes("GCM").setEncryptionPaddings("NoPadding").build()); aes.generateKey();
+            .setKeySize(256).setBlockModes("GCM").setEncryptionPaddings("NoPadding").build());
+        var aesKey = aes.generateKey();
+        var info = (android.security.keystore.KeyInfo) javax.crypto.SecretKeyFactory.getInstance("AES", "AndroidKeyStore")
+            .getKeySpec(aesKey, android.security.keystore.KeyInfo.class);
+        android.os.Bundle capability = new android.os.Bundle();
+        capability.putString("vaultFixtureKeystoreSecurityLevel", Integer.toString(info.getSecurityLevel()));
+        capability.putString("vaultFixtureRequiresAuthentication", Boolean.toString(info.isUserAuthenticationRequired()));
+        InstrumentationRegistry.getInstrumentation().sendStatus(0, capability);
         KeyGenerator hmac = KeyGenerator.getInstance("HmacSHA256", "AndroidKeyStore");
         hmac.init(new KeyGenParameterSpec.Builder("umbra.index.v2", KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY)
             .setKeySize(256).setDigests("SHA-256").build()); hmac.generateKey();
@@ -90,6 +97,9 @@ public class DeviceVaultPasswordTest {
         assertEquals(Vault.State.LOCKED, vault.getVaultState());
         assertThrows(SecurityException.class, () -> vault.get("meta", "identity"));
         vault.unlock(next()); assertArrayEquals(new byte[]{9,8,7}, vault.get("session", "ratchet"));
+        vault.lock(); KeyStore keys = KeyStore.getInstance("AndroidKeyStore"); keys.load(null); keys.deleteEntry("umbra.index.v2");
+        gate.unlock(); assertThrows(SecurityException.class, () -> vault.unlock(next()));
+        assertEquals(Vault.State.KEY_UNAVAILABLE, vault.getVaultState());
     }
     @Test public void failedMigrationRollsBackAndLostKeyNeverReinitializes() throws Exception {
         SQLiteDatabase db = vault.getWritableDatabase();
@@ -173,6 +183,39 @@ public class DeviceVaultPasswordTest {
         recreated.sendText(bob.id(), "synthetic after rewrap", 3600);
         bob.receive(recreated.outbox().get(0).getJSONObject("envelope"));
         assertEquals(2, bob.messages(id).size());
+    }
+
+    @Test public void corruptOrTruncatedDatabaseIsNeverDeletedOrReinitialized() throws Exception {
+        vault.close();
+        byte[] damaged = new byte[4096]; java.util.Arrays.fill(damaged, (byte)0x55);
+        java.nio.file.Files.write(file.toPath(), damaged);
+        // Reproduce the old framework default on a disposable control file, never user data.
+        File control = new File(file.getParentFile(), "synthetic-default-handler-" + UUID.randomUUID() + ".db");
+        java.nio.file.Files.write(control.toPath(), damaged);
+        Context controlContext = new ContextWrapper(isolated) {
+            @Override public File getDatabasePath(String ignored) { return control; }
+        };
+        java.util.concurrent.atomic.AtomicBoolean reset = new java.util.concurrent.atomic.AtomicBoolean();
+        try (var oldDefault = new android.database.sqlite.SQLiteOpenHelper(controlContext, "control", null, 2) {
+            @Override public void onCreate(SQLiteDatabase db) { reset.set(true); db.execSQL("CREATE TABLE probe(value INTEGER)"); }
+            @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) { throw new AssertionError("Unexpected migration"); }
+        }) {
+            oldDefault.getWritableDatabase(); assertTrue("Default corruption handler silently recreates schema", reset.get());
+        } finally { SQLiteDatabase.deleteDatabase(control); }
+        gate.unlock(); vault = new Vault(isolated, gate);
+        assertThrows(android.database.sqlite.SQLiteDatabaseCorruptException.class, () -> vault.getReadableDatabase());
+        assertArrayEquals(damaged, java.nio.file.Files.readAllBytes(file.toPath()));
+        KeyStore keys = KeyStore.getInstance("AndroidKeyStore"); keys.load(null); keys.deleteEntry("umbra.index.v2");
+        assertThrows(android.database.sqlite.SQLiteDatabaseCorruptException.class, () -> Vault.prepareKey(isolated));
+        assertArrayEquals(damaged, java.nio.file.Files.readAllBytes(file.toPath()));
+        assertFalse(keys.containsAlias("umbra.index.v2"));
+        vault.close(); java.nio.file.Files.write(file.toPath(), new byte[0]);
+        gate.unlock(); vault = new Vault(isolated, gate);
+        assertThrows(IllegalStateException.class, () -> vault.getWritableDatabase());
+        try (SQLiteDatabase preserved = SQLiteDatabase.openDatabase(file.getPath(), null, SQLiteDatabase.OPEN_READONLY)) {
+            assertEquals(0, preserved.getVersion());
+            try (var row = preserved.rawQuery("SELECT name FROM sqlite_master WHERE name='records'", null)) { assertFalse(row.moveToFirst()); }
+        }
     }
 
 }

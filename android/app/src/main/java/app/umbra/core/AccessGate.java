@@ -34,6 +34,10 @@ public final class AccessGate {
     public synchronized Lease invalidateAuthorizations() {
         requireUnlocked(); invalidate(); epoch++; return new Lease(epoch);
     }
+    /** Remaining original authentication lifetime; never renews it. */
+    public synchronized long remainingNanos(Lease lease) {
+        check(lease); return duration - (clock.getAsLong() - openedAt);
+    }
     public synchronized Lease enter() { requireUnlocked(); return new Lease(epoch); }
     public synchronized void check(Lease lease) {
         requireUnlocked();

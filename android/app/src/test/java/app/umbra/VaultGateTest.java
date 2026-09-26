@@ -12,6 +12,7 @@ public class VaultGateTest {
         AtomicInteger erased = new AtomicInteger(); Runnable wipe = erased::incrementAndGet; gate.onInvalidation(wipe);
         gate.unlock(); var previous = gate.enter(); clock.set(90);
         var current = gate.invalidateAuthorizations();
+        assertEquals(10, gate.remainingNanos(current));
         assertThrows(SecurityException.class, () -> gate.check(previous)); gate.check(current);
         clock.set(100); assertThrows(SecurityException.class, () -> gate.check(current));
         assertEquals(3, erased.get());

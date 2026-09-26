@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def valid_report(text, code):
-    return (code == 0 and re.search(r'^OK \(8 tests\)$', text, re.M)
+    return (code == 0 and re.search(r'^OK \(9 tests\)$', text, re.M)
             and 'INSTRUMENTATION_CODE: -1' in text
             and not re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)
             and not any(x in text for x in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'Process crashed')))
@@ -55,7 +55,7 @@ def main():
             'app.umbra.DeviceVaultPasswordTest', package + '.test/androidx.test.runner.AndroidJUnitRunner'],
             stdout=stream, stderr=subprocess.STDOUT, timeout=180)
     if not valid_report(log.read_text(), result.returncode):
-        raise RuntimeError(f'Password instrumentation did not pass all eight cases: {log}')
+        raise RuntimeError(f'Password instrumentation did not pass all nine cases: {log}')
     command = ['python', str(ROOT / 'scripts/run_password_restart.py'), '--serial', args.serial,
                '--flavor', args.flavor, '--log-dir', str(args.reports)]
     if args.optimized:
@@ -63,6 +63,9 @@ def main():
     subprocess.run(command, check=True, timeout=150)
     command[command.index('--log-dir') + 1] = str(args.reports / 'interrupted-migration')
     subprocess.run([*command, '--migration'], check=True, timeout=150)
+    if not args.optimized:
+        command[command.index('--log-dir') + 1] = str(args.reports / 'actual-reinstall')
+        subprocess.run([*command, '--reinstall'], check=True, timeout=330)
     evidence['result'] = 'PASS'
     (args.reports / 'receipt.json').write_text(json.dumps(evidence, indent=2) + '\n')
 

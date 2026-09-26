@@ -92,3 +92,62 @@ checks rollback removed staging/protection, then restores its synthetic view to
 the original table. This is an actual uncommitted production migration killed by
 the host, with a test schema barrier; it is not death during SQLite fsync/commit.
 No production Vault/crypto relaxation accompanies this fixture correction.
+
+## Additional storage/lifetime review
+
+The original four-argument SQLiteOpenHelper constructor uses Android's default
+corruption handler, which deletes the damaged database and retries opening it.
+This conflicts with UMBRA's no-silent-reset requirement. Source inspection:
+https://github.com/aosp-mirror/platform_frameworks_base/blob/android15-release/core/java/android/database/DefaultDatabaseErrorHandler.java
+The new handler throws without deletion, including the read-only index-key probe;
+an existing zero-version/truncated file cannot invoke fresh Vault initialization.
+The ninth Android case reproduces default deletion/recreation on a separate
+synthetic control file, then requires Vault to preserve malformed bytes and
+refuse initialization of a truncated existing file. Android execution pending
+for this correction, not inferred from source inspection.
+
+The scheduled key cleanup now uses the earlier of the configured timeout and
+the original Android-authentication deadline, rather than retaining the DEK for
+a fresh full interval after KDF completion. A JVM boundary regression confirms
+that rotating authorization epochs preserves the remaining lifetime. BC runtime
+transitives are explicitly disabled (the reviewed artifact requires none).
+
+## Android password acceptance of d4711ab (before subsequent hardening)
+
+Run `36264314234`: debug and R8 SUCCESS. Both flavors each ran all 8 Vault cases,
+plus actual force-stop after unlock and during the staged migration. Every restart
+rejected device-only access and missing Keystore; original records survived the
+interrupted transaction. R8 target is `.vaultlab`, not the production APK.
+Checkout `f1da632db68b09bfac4427fcf18e3486446389ee`.
+Debug artifact `10913337216`, SHA256
+`cf6db65bcafb3296c43fd0c40af9f80960e262db5030dd372e02502f8341604f`;
+R8 artifact `10913780241`, SHA256
+`22f62fb75a114287b5d32cf2f7db5c2e7ef49c22fbdb590b43b9b79f532d8159`.
+
+Production-profile unlock samples (milliseconds): debug connected cold 1873,
+offline cold 2745; subsequent samples 503–538. R8 samples 295–342.
+Sampled Java heap peaks approximately 143 MB debug / 201 MB R8, including
+collectable Java allocations, not a live-object census/native RSS or a hardware
+memory guarantee. The 64 MiB KDF profile was not reduced. Physical calibration
+remains pending. These measurements do not validate later source changes.
+
+Other initial-run results retained: modulation `36263833428` SUCCESS. Focused
+regressions `36263833447`: debug video and RFCOMM SUCCESS; R8 failed all 9 cases
+before media at the owned-AVD direct UDP reachability precondition
+(`run_voice_integration.py:182`). No endpoint media fixture ran in those failures.
+Cause of unavailable UDP route is not established; do not remove the precondition
+or count those attempts as media passes. Artifact `10913321750` retains evidence.
+Verify `36263833523` ran 35 Android cases, failing only the now-corrected migration
+fault injection; repository/core/container jobs passed. Subsequent HEADs need
+independent full CI, including the new corruption/deadline corrections.
+
+The next candidate also adds a debug-only real uninstall/reinstall probe in both
+flavors. The host preserves only bounded synthetic ciphertext in transient memory,
+reinstalls the same APK and restores that ciphertext; correct password must fail
+because Keystore keys were deleted. No database/key material is uploaded. Test
+fixtures now report the security level and authentication requirement of the
+actual AndroidKeyStore key used, without labeling AVD results physical hardware.
+New local candidate: debug instrumented APKs compile, JVM 164/124 and 149 host
+checks pass. Android execution of the ninth corruption case and reinstall remains
+pending until this candidate's own CI finishes. Existing multimedia failures and
+superseded runs stay in their reports; they are not removed or reclassified green.

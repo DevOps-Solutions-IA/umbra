@@ -101,3 +101,12 @@ in finally, including exceptional paths. No algorithm is reimplemented. No
 provider is registered/replaced, so AndroidKeyStore and libsignal are unchanged.
 A bounded allocation failure rejects unlock, never falls back to a weaker KDF.
 The parameters deliberately retain the RFC profile in instrumented tests.
+
+### Audit correction: Android corruption handler
+
+The inherited default SQLiteOpenHelper error handler was destructive on malformed
+SQLite files, despite application-level record rejection. Replace it with a
+non-deleting handler in both Vault and prepareKey's read-only probe. Refuse onCreate
+for a database path that already existed, including truncated/version-zero files.
+A separate synthetic control reproduces Android's default; the production Vault
+must preserve damaged bytes and never silently create a replacement identity.
