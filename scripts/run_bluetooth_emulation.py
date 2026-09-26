@@ -110,11 +110,12 @@ def main() -> None:
         successful = True
         print(f'PASS: actual emulated Bluetooth RFCOMM on {devices}; both directions, host code comparison, authenticated device roster, encrypted location, text, attachment, duplicates and receipts. Not physical Bluetooth or Vault persistence.')
     finally:
-        exits=[{"role":role,"exitBeforeCleanup":process.poll(),"terminatedByHarness":process.poll() is None}
+        exits=[{"role":role,"exitBeforeCleanup":process.poll(),"terminationRequestedByHarness":False}
                for role,process in zip(('listener','dialer'),processes)]
         (args.log_dir/'process-exits.json').write_text(json.dumps({"successful":successful,"processes":exits},indent=2)+'\n')
-        for process in processes:
+        for row,process in zip(exits,processes):
             if process.poll() is None:
+                row['terminationRequestedByHarness']=True
                 process.terminate()
                 process.wait(timeout=10)
         for row,process in zip(exits,processes):row['exitAfterCleanup']=process.poll()

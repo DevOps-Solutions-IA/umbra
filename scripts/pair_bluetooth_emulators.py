@@ -63,6 +63,12 @@ def bonded(dump: str, address: str) -> bool:
     return False
 
 
+def discovering(dump: str) -> bool:
+    states=re.findall(r'^\s*Discovering: (true|false)\s*$',dump,re.MULTILINE)
+    if len(states)!=1:raise RuntimeError('Missing or ambiguous Bluetooth discovery state')
+    return states[0]=='true'
+
+
 class Pairing:
     def __init__(self, adb: str, serials: tuple[str, str], logs: Path, seconds: int):
         self.adb, self.serials, self.logs = adb, serials, logs
@@ -103,6 +109,21 @@ class Pairing:
             self.tap(serial, tree, 'Pair new device')
             time.sleep(0.25)
 
+    def leave_settings(self) -> None:
+        # AOSP PairingDetail may restart scanning while foreground. Bonding is
+        # not readiness for RFCOMM. Its onStop disables scanning; retain the
+        # original shared pairing deadline and require actual idle evidence.
+        for serial in self.serials:
+            self.command(serial,'shell','input','keyevent','KEYCODE_HOME')
+        while True:
+            active=[]
+            for serial in self.serials:
+                dump=self.command(serial,'shell','dumpsys','bluetooth_manager')
+                (self.logs/f'{serial}-bluetooth-idle.txt').write_text(dump,encoding='utf-8')
+                active.append(discovering(dump))
+            if not any(active):return
+            time.sleep(0.25)
+
     def run(self) -> dict[str, str]:
         for serial in self.serials:
             if self.command(serial, 'shell', 'getprop', 'ro.kernel.qemu').strip() != '1':
@@ -127,7 +148,9 @@ class Pairing:
             for serial, dump in zip(self.serials, dumps):
                 (self.logs / f'{serial}-bluetooth.txt').write_text(dump, encoding='utf-8')
             if bonded(dumps[0], address_b) and bonded(dumps[1], address_a):
+                self.leave_settings()
                 return {'serial_a': a, 'serial_b': b, 'address_a': address_a, 'address_b': address_b,
+                        'discovery': 'stopped-after-settings',
                         'pairing': 'confirmed-comparison' if verified else 'already-bonded'}
             trees = [self.ui(s) for s in self.serials]
             codes = [pairing_code(t) for t in trees]

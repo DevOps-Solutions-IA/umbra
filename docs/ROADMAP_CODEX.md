@@ -1,5 +1,16 @@
 # Backlog de finalización verificable
 
+## Estabilización comprobada parcialmente — 2026-09-26
+
+Carrera de video reproducida 3 veces debug y 3 R8 en 60bc42e/run36253121718.
+Corrección 69ec021: regresiones enfocadas R8 verdes (36253784224); debug bloqueó
+antes de media por ruta UDP del laboratorio, no se cuenta aprobado. Preparación
+RFCOMM corregida para salir de Settings y comprobar fin del descubrimiento;
+145 pruebas de herramientas pasan. Verify diagnóstico 8600654 verde, pero no
+valida el siguiente HEAD. Conservar ejecuciones y consultar la CI final en PR #10.
+[Pruebas, causas y límites](validation/2026-09-26-modulator-stabilization.md).
+No nuevas funcionalidades, merge, downgrade ni secretos.
+
 ## Accesos restaurados — estabilización 2026-09-26
 
 GitHub y descargas disponibles tras autorización del propietario; los bloqueos

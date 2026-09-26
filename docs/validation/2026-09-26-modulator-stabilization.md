@@ -105,3 +105,44 @@ comparison for residue effects without replacing the original suite. The host
 records each instrumentation process exit before/after cleanup and whether the
 host terminated it. This does not classify a terminated dialer as spontaneous
 failure or as successful enrollment.
+
+## First positive race validation; separate infrastructure failure
+
+Correction HEAD `69ec0216f3b116cf09020f3afe2c0ae65e295ccc`, checkout
+`b4e9c385d7531554a8e32ab24b8c4f8308acdfab`: focused run 36253784224 R8 SUCCESS
+(three forced stop interleavings and three ordinary permission revocations).
+Debug FAILURE: all six cases stopped at the UDP direct-route preflight before
+media, so no debug acceptance is claimed from that run. This is retained, not
+converted into a negative media test or replaced by the earlier red results.
+
+Diagnostic baseline 8600654 Verify 36252707341 completed four jobs SUCCESS;
+checkout `1f78397ddb9c01020941a67ee51adab091879a25`. Downloaded both RFCOMM
+logs show socket, hello, proof, authentication, verification, delivery and drain
+in connected and offline. A new pass alone does not prove the old race fixed.
+
+## Pairing readiness defect and correction
+
+The original failed artifact's emulator-5556-bluetooth.txt says Discovering:true
+and BTA_DM_SEARCH_ACTIVE at return from Android pairing. The passing diagnostic
+artifact says Discovering:false on both endpoints. The host returned immediately
+on observing bond records and left Settings in foreground; it neither stopped
+its scan lifecycle nor checked radio readiness. A deterministic orchestration
+regression reproduces that premature return (red), then passes after the fix.
+
+The corrected helper sends HOME on both previously validated synthetic AVDs,
+then requires one unambiguous Discovering:false observation per endpoint. It
+uses the existing overall pairing deadline, with no timeout extension. Saves
+separate before/after dumps. The RFCOMM fixture also rejects active discovery
+before starting its protocol. No pairing code, identity proof or safety-code
+comparison is omitted. No production Bluetooth protocol change for this fix.
+
+AOSP BluetoothPairingDetail stops scanning on lifecycle stop:
+https://android.googlesource.com/platform/packages/apps/Settings/+/refs/tags/android-13.0.0_r1/src/com/android/settings/bluetooth/BluetoothPairingDetail.java
+This source explains the lifecycle choice, not evidence that the historical
+handshake's exact failing native operation has been recovered. Its old logs
+omit that operation; active discovery is observed and the readiness defect is
+proved, but sole causation of that historical timeout remains uncertain.
+
+Local tooling now 145 PASS, including rejection of missing/ambiguous discovery
+and permission states. New positive RFCOMM and final whole-commit CI required;
+final results/checkouts/artifact receipts are maintained in the PR #10 status.

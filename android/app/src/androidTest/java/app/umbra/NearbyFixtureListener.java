@@ -44,6 +44,7 @@ public final class NearbyFixtureListener extends RunListener {
             boolean dialer = role.equals("dialer");
             BluetoothAdapter adapter = InstrumentationRegistry.getInstrumentation().getTargetContext().getSystemService(BluetoothManager.class).getAdapter();
             require(adapter != null && adapter.isEnabled(), "Bluetooth adapter must be enabled");
+            require(!adapter.isDiscovering(), "Leave Settings discovery before RFCOMM enrollment");
             BluetoothDevice device = adapter.getRemoteDevice(arguments.getString("address", ""));
             require(device.getBondState() == BluetoothDevice.BOND_BONDED, "Pair the synthetic devices in Android first");
             DeviceMemoryRecords records = new DeviceMemoryRecords();
