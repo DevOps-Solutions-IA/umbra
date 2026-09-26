@@ -18,6 +18,12 @@ Ver evidencia 2026-09-25-local-voice-modulator.md para comandos y hashes.
 Hardware, inteligibilidad física y medición cuantitativa de sincronía A/V no
 ejecutados; no confundir mediaLab R8 con el APK productivo exacto.
 
+CI posterior `63862cc`: Verify/voz/modulación SUCCESS; video R8 falló únicamente
+wrong-fingerprint (debug31/31, R830/31). Se conserva el fallo 36204852534.
+Corrección implementada: tick cancelado no sobrescribe el diagnóstico terminal;
+observación estable de 350 ms y tres repeticiones R8 enfocadas aprobadas. No se
+amplían motivos aceptados. Nueva CI completa requerida para el commit corrector.
+
 
 ## Estado actual de transferencia — 2026-09-22
 

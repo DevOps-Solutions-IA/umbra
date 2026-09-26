@@ -208,6 +208,13 @@ public final class VoiceEngineFixtureListener extends RunListener {
                 if(voice.state()==NativeVoiceSession.State.FAILED && !evidence) {
                     if(!expectedRejection) throw new AssertionError("Native authenticated voice failed before audio: "+voice.failureStage()+"; "+voice.negotiationDiagnostic()+"; captured="+captured.get()+", decoded="+decoded.get());
                     if(captured.get()!=0 || decoded.get()!=0 || videoCaptured.get()!=0) throw new AssertionError("Rejected TURN path captured or decoded audio");
+                    String terminalReason=voice.failureStage();
+                    // Observe actual scheduled teardown/callbacks after the terminal transition.
+                    // Cancellation must not rewrite a certificate rejection as a generic tick error.
+                    Thread.sleep(350);
+                    if(voice.state()!=NativeVoiceSession.State.FAILED || !terminalReason.equals(voice.failureStage()) ||
+                        captured.get()!=0 || decoded.get()!=0 || videoCaptured.get()!=0)
+                        throw new AssertionError("Terminal rejection changed during late-callback observation");
                     JSONObject rejected=new JSONObject().put("rejectedBeforeCapture",true);
                     if(configuration.optBoolean("incorrectFingerprint")) {
                         if(!java.util.Set.of("native-certificate-binding","native-connection-failed","native-connection-disconnected","authorization-cancelled").contains(voice.failureStage()))throw new AssertionError("Wrong-fingerprint test did not reach certificate rejection or native peer closure: "+voice.failureStage()+"; "+voice.negotiationDiagnostic());

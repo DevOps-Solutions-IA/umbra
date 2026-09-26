@@ -212,3 +212,40 @@ General Verify/voice/video regressions are still running at this receipt.
 The subsequent diagnostic/documentation commit requires its own final CI;
 its published HEAD, checkout, trees and run results will be recorded on PR #10.
 No earlier green validates that later commit automatically.
+
+## CI terminal-diagnostic regression, 2026-09-25
+
+HEAD `63862ccca5019662139e6a1f3cc69794bfe5ec07`, integration checkout
+`d0d353d6e4557f467c1660797ecd93ec326144d5`, common tree
+`26c71162c186bc89a511e6b937fd41cfbee968fe`:
+Verify 36204852624 four jobs SUCCESS; voice R8 36204852616 SUCCESS (15 receipts);
+modulation 36204852563 both matrices SUCCESS (eight ten-stage flows).
+Video 36204852534: debug 31/31 PASS, R8 **30/31 PASS, wrong-fingerprint FAIL**.
+That run remains a failed run, never a validation of the entire revision.
+
+The R8 assertion reported terminal reason `authorization-or-signaling` instead
+of certificate binding/peer closure. It asserted zero capture/decoding before
+checking the reason. The periodic `tick()` calls `check()` even after cancellation;
+`check()` throws, and the catch unconditionally overwrites the earlier failure.
+Unlike posted native callbacks, periodic tasks lacked a cancellation guard.
+The correction returns before polling a cancelled session and also from the
+catch when cancellation raced the operation. It does NOT accept the generic
+reason as proof of certificate rejection, bypass verification or extend deadlines.
+The real rejection fixture now observes an additional positive 350 ms window
+and requires stable FAILED/reason with zero audio/video capture or decoding.
+CI supplies the before-failure evidence; local focused R8 repetitions and a new
+full CI are required after this correction. No assertion of unauthorized media
+exposure is made from this diagnostic race.
+
+Additional source build 36202452752 SUCCESS in all four ABIs. Downloaded SHA256SUMS
+checked; all source.patch digests equal the adopted `.5` patch. The strict XML
+validator reports 83 executed TURN tests and 12 executed media tests, including
+the explicitly enabled upstream-named DISABLED case. No native artifact replacement.
+
+Post-correction local results: R8 mediaLab compile exit 0; three consecutive
+`run_voice_integration.py --optimized --video --scenario wrong-fingerprint`
+executions exit 0 on two Android35 AVDs. Each required at least one real native
+certificate-binding rejection, neither endpoint captured/decoded, and the added
+350 ms terminal-stability observation passed. This is three repeats of the same
+regression, not three distinct new tests. Tools suite 141 PASS; repository guard
+and five standalone DSP groups PASS. New full CI required for the published fix.

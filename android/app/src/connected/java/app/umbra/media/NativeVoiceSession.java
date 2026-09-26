@@ -205,6 +205,9 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         catch(RejectedExecutionException stopped) { if(!cancelled.get()) fail(); }
     }
     private void tick() {
+        // Fixed-delay tasks can already be queued when cancellation schedules disposal.
+        // They must not overwrite the original certificate/revocation failure.
+        if(cancelled.get()) return;
         try {
             JSONObject row=check();
             negotiationDiagnostic="gather="+pc.iceGatheringState()+", connection="+pc.connectionState()+", candidates="+candidates+", sent="+localSent+", remote="+remoteApplied;
@@ -277,7 +280,10 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
             long now=android.os.SystemClock.elapsedRealtime();
             if(videoStatus.equals("NEGOTIATING") && now>=videoNegotiationDeadline) {failureStage="video-negotiation-timeout";fail();}
             if(state!=State.ACTIVE && now>=negotiationDeadline || disconnectedAt>0 && now-disconnectedAt>=3000) { failureStage="negotiation-timeout"; fail(); }
-        } catch(Exception invalid) { failureStage="authorization-or-signaling"; fail(); }
+        } catch(Exception invalid) {
+            if(cancelled.get()) return;
+            failureStage="authorization-or-signaling"; fail();
+        }
     }
     private void inspect(RTCStatsReport report) {
         checkingStats=false;
