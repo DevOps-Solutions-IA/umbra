@@ -1,12 +1,29 @@
 <resources>
   <style name="Theme.Umbra" parent="android:style/Theme.Material.NoActionBar">
     <item name="android:fontFamily">sans</item>
-    <item name="android:colorAccent">#76E1CC</item>
+    <item name="android:colorAccent">@color/umbra_accent_primary</item>
+    <item name="android:colorPrimary">@color/umbra_background_primary</item>
+    <item name="android:colorBackground">@color/umbra_background_primary</item>
+    <item name="android:textColorPrimary">@color/umbra_text_primary</item>
+    <item name="android:textColorSecondary">@color/umbra_text_secondary</item>
     <item name="android:windowLightStatusBar">false</item>
     <item name="android:windowLightNavigationBar">false</item>
-    <item name="android:windowBackground">#0B1219</item>
-    <item name="android:navigationBarColor">#0B1219</item>
-    <item name="android:statusBarColor">#0B1219</item>
+    <item name="android:windowBackground">@color/umbra_background_primary</item>
+    <item name="android:navigationBarColor">@color/umbra_background_primary</item>
+    <item name="android:statusBarColor">@color/umbra_background_primary</item>
     <item name="android:windowActionModeOverlay">true</item>
+    <item name="android:alertDialogTheme">@style/Theme.Umbra.Dialog</item>
+  </style>
+  <style name="Theme.Umbra.Dialog" parent="android:style/Theme.Material.Dialog.Alert">
+    <item name="android:colorAccent">@color/umbra_accent_primary</item>
+    <item name="android:colorBackground">@color/umbra_surface</item>
+    <item name="android:textColorPrimary">@color/umbra_text_primary</item>
+    <item name="android:textColorSecondary">@color/umbra_text_secondary</item>
+  </style>
+  <style name="Theme.Umbra.Sheet" parent="android:style/Theme.Material.Dialog.NoActionBar">
+    <item name="android:windowBackground">@android:color/transparent</item>
+    <item name="android:windowIsFloating">false</item>
+    <item name="android:windowNoTitle">true</item>
+    <item name="android:backgroundDimEnabled">true</item>
   </style>
 </resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mirror of app.umbra.ui.design.UmbraColors used only by the window theme.
+     UiDesignTokensTest keeps both definitions identical. -->
+<resources>
+    <color name="umbra_background_primary">#FF0B0C10</color>
+    <color name="umbra_surface">#FF171A21</color>
+    <color name="umbra_accent_primary">#FF9A8CFF</color>
+    <color name="umbra_text_primary">#FFF3F4F7</color>
+    <color name="umbra_text_secondary">#FFAAB1BF</color>
+</resources>

@@ -1,0 +1,9 @@
+package app.umbra.ui.model;
+
+/** Android-free icon identifiers; the design layer maps each one to a vector drawable. */
+public enum Glyph {
+    BACK, CLOSE, CHECK, ADD, SEARCH, LOCK, CHAT, GROUP, PERSON, PERSON_ADD, CALL, CALL_END, VIDEO, VIDEO_OFF,
+    MIC, MIC_OFF, SPEAKER, VOICE, CAMERA_SWITCH, LOCATION, FILE, PHOTO, ATTACH, SEND, DEVICES, SETTINGS,
+    SHIELD, SHIELD_CHECK, WARNING, BLOCK, INFO, BLUETOOTH, CLOUD, CLOUD_OFF, QR, MORE, RETRY, TIMER, TRASH,
+    CHEVRON, STOP, EYE, EYE_OFF, BELL_OFF, REPLY
+}
