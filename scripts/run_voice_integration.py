@@ -42,6 +42,11 @@ def valid_stop(report):
             and report["lateCaptureCallbacks"]==0)
 
 
+def permission_granted(dump, name):
+    values=re.findall(r'^\s*'+re.escape(name)+r': granted=(true|false)(?:,|$)',dump,re.MULTILINE)
+    if len(values)!=1:raise ValueError("Missing or ambiguous runtime permission evidence")
+    return values[0]=='true'
+
 def valid_processing(value, expected, *, video=False):
     fields=("natural","modified","loud","settleMillis","observedMillis","videoFrames","step")
     if any(type(value.get(key)) is not int or value[key]<0 for key in fields):return False
@@ -77,7 +82,7 @@ def main():
     args=parser.parse_args()
     if args.turn_ipv6 and args.scenario in ("unauthorized-redirect","unreachable"):
         parser.error("IPv6 redirect/unreachable packet evidence is not implemented")
-    if (args.scenario.startswith("camera-") or args.scenario=="receive-only") and not args.video: parser.error("Camera cases require the explicit video suite")
+    if (args.scenario.startswith("camera-") or args.scenario in ("receive-only","video-stop-race")) and not args.video: parser.error("Camera cases require the explicit video suite")
     tls_rejection=args.turn_tls in ("wrong-name","expired","untrusted")
     if args.modulated_start and not args.modulation:parser.error("Initial mode acceptance requires --modulation")
     if args.modulation and (args.scenario not in ("audio","lock","device-revoked") or args.turn_tls or args.turn_ipv6):parser.error("Modulation acceptance uses the isolated positive UDP topology")
@@ -266,6 +271,8 @@ def main():
                             if (serial==args.b and value.get("capturedFrames")!=0) or (serial==args.a and value.get("capturedFrames",0)<20):raise RuntimeError("Receive-only camera isolation failed")
                         values.append(value)
                     video_evidence[result]=values
+                    # Preserve validated earlier phases even if a later stop/resume fails.
+                    (args.reports/"video-progress.json").write_text(json.dumps({"complete":result=="resumed","phases":video_evidence},indent=2)+"\n")
                 (args.reports/"video-evidence.json").write_text(json.dumps({"apkSha256":apk_hashes,"synthetic":True,"physicalCamera":False,"nativeCodecPipeline":True,"endpoints":2,"phases":video_evidence},indent=2)+"\n")
             if args.modulation:
                 processing=[]
@@ -298,15 +305,27 @@ def main():
                 for index,serial in enumerate((args.a,args.b)):
                     pid=run(serial,"shell","pidof",PACKAGE).stdout.decode().strip()
                     if not re.fullmatch(r"[0-9]+",pid): raise RuntimeError("Native audio process missing before planned termination")
-                    if args.scenario in ("force-stop","allocation-expiry"): run(serial,"shell","am","force-stop",PACKAGE)
-                    else: run(serial,"shell","pm","revoke",PACKAGE,"android.permission.CAMERA" if args.scenario=="camera-permission-revoked" else "android.permission.RECORD_AUDIO")
+                    permission="android.permission.CAMERA" if args.scenario=="camera-permission-revoked" else "android.permission.RECORD_AUDIO"
+                    revoking=args.scenario in ("permission-revoked","camera-permission-revoked")
+                    if revoking and not permission_granted(run(serial,"shell","dumpsys","package",PACKAGE).stdout.decode(),permission):
+                        raise RuntimeError("Permission was not granted before planned revocation")
+                    requested=time.monotonic_ns()
+                    if not revoking: run(serial,"shell","am","force-stop",PACKAGE)
+                    else:
+                        run(serial,"shell","pm","revoke",PACKAGE,permission)
+                        if permission_granted(run(serial,"shell","dumpsys","package",PACKAGE).stdout.decode(),permission):
+                            raise RuntimeError("Permission remained granted after revocation")
                     gone=time.monotonic()+10
                     while True:
                         probe=subprocess.run([adb,"-s",serial,"shell","pidof",PACKAGE],capture_output=True,timeout=5)
                         if probe.returncode==1 and not probe.stdout.strip(): break
                         if time.monotonic()>=gone: raise RuntimeError("Media process survived planned termination")
                         time.sleep(0.1)
-                    processes[serial].wait(timeout=15)
+                    exit_code=processes[serial].wait(timeout=15)
+                    (args.reports/f"termination-{index}.json").write_text(json.dumps({"scenario":args.scenario,
+                        "requestedMonotonicNanos":requested,"observedGoneMonotonicNanos":time.monotonic_ns(),
+                        "permissionBefore":True if revoking else None,"permissionAfter":False if revoking else None,
+                        "processAbsent":True,"instrumentationExitCode":exit_code},indent=2)+"\n")
                     # The BEFORE reports intentionally end abruptly. Do not classify them as successful JUnit runs.
                     report=args.reports/f"restart-{index}.log"
                     with report.open("w") as stream:

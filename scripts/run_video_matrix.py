@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 
-SCENARIOS=('audio','direct-blocked','expired-auth','allocation-expiry','invalid-auth','unreachable',
+SCENARIOS=('video-stop-race','audio','direct-blocked','expired-auth','allocation-expiry','invalid-auth','unreachable',
            'turn-loss','trust-loss','lock','credential-expiry','device-revoked','storage-failure',
            'force-stop','permission-revoked','unauthorized-redirect','wrong-fingerprint','receive-only','degraded-network','camera-denied','camera-permission-revoked')
 

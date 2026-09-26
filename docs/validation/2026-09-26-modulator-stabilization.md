@@ -65,3 +65,35 @@ Full local build_android.py --release passed on diagnostic sources (before the
 new rendezvous): debug/release both variants, JVM, lint, JNI/DEX/APK policy.
 149 backend and 105 pure-core scenarios passed. Existing Starlette httpx
 migration warning and MainActivity deprecated API notes remain visible.
+
+## Video race demonstrated on real media
+
+Published reproduction HEAD `60bc42e8a953aa05e01827ed07b74cd5e26c86d4`, checkout
+`48053b08410d0b89d0d7d35358a1509940525159`. Focused run 36253121718:
+all three debug and all three R8 video-stop-race repetitions FAIL with
+`Video-only cancellation terminated authorized audio: video-authorization`.
+The three ordinary camera-permission-revoked repetitions in EACH matrix PASS.
+Artifacts downloaded into /tmp/umbra-stop-race-red; no retry result replaced any
+failure. This demonstrates a native adapter cancellation race, without claiming
+that the older artifact recorded the exact internal interleaving.
+
+Cause: inspect checks videoStopped before entering activateVideo; a concurrent
+local/remote STOP can invalidate video while checkVideo waits for SQLite. The
+ordinary SecurityException was classified as fatal to the whole audio session,
+so the later stopVideo snapshot encountered a terminal Call unavailable.
+Correction: a specific VideoStopped cancellation, emitted only after audio lease
+revalidation, completes video teardown without failing audio. Other context,
+identity, generation and certificate failures retain their fatal handling.
+The same deterministic case is added to the complete video matrix as well as
+the focused three-repetition workflow. Positive execution of the fix pending.
+
+Additional failure retained: modulation run 36253121682 fails both matrices in
+its host UDP reachability probe BEFORE creating media. Its earlier diagnostic
+omitted tool exit/error classification. Add bounded exit/count/fixed-kind
+reporting, not acceptance of tool errors or a weakened network assertion.
+
+Additional evidence improvements: persist each validated video phase before the
+next action; revocation checks granted/denied explicitly and records host monotonic
+request/process-gone times and actual instrumentation exit. Tool regression is
+red (missing function) then green; full tools suite now 143 PASS. No claim these
+host observations measure the last camera callback or last network packet.

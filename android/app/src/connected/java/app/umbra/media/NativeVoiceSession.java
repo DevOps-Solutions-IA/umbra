@@ -365,6 +365,11 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
             }
             bindingStage="native-video-activation";
             if(validated && !videoChange.isEmpty() && !videoStopped && localSent && remoteApplied) activateVideo();
+        } catch(VideoStopped stopped) {
+            // The capture gate may close while a stats callback waits for SQLite.
+            // checkVideo has already revalidated the independent audio lease.
+            // Finish video teardown; a valid video-only STOP must not end audio.
+            stopVideoLocally();
         } catch(Exception invalid) {
             failureStage=bindingStage.equals("native-video-activation")?videoFailureStage:bindingStage;
             if(bindingStage.equals("native-video-activation") && Set.of("video-capture-initialize","video-capture-start").contains(videoFailureStage)) cameraFailed();
@@ -435,9 +440,12 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         if(videoSend && syntheticVideo==null && context.checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)
             throw new SecurityException("Camera permission revoked");
     }
+    private static final class VideoStopped extends SecurityException {}
     private void checkVideo() throws Exception {
         JSONObject row=check(),video=row.optJSONObject("video");
-        if(videoStopped || video==null || !video.getString("state").equals("CONFIRMED") ||
+        if(videoStopped || video!=null && video.getString("state").equals("STOPPED") &&
+            videoChange.equals(video.getString("change")) && generation==video.getInt("generation")) throw new VideoStopped();
+        if(video==null || !video.getString("state").equals("CONFIRMED") ||
             !videoChange.equals(video.getString("change")) || generation!=video.getInt("generation")) throw new SecurityException("Video authorization ended");
         if(videoSend && syntheticVideo==null && context.checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)
             throw new SecurityException("Camera permission revoked");
