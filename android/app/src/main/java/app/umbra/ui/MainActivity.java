@@ -949,6 +949,7 @@ public final class MainActivity extends Activity {
             @Override public void live(boolean live) { locationLive = live; fillLocationSheet(peer, sheet); }
             @Override public void precision(LocationShareDraft.Precision p) { locationPrecision = p; fillLocationSheet(peer, sheet); }
             @Override public void duration(int index) { locationDuration = index; fillLocationSheet(peer, sheet); }
+            @Override public void stopAll() { sheet.dismiss(); stopLocationSharing(); }
             @Override public void review(String lat, String lon) {
                 LocationShareDraft.Precision p = locationPrecision;
                 var mode = app.umbra.location.LocationPayload.Mode.valueOf(p.engineMode());

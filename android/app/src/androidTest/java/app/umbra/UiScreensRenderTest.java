@@ -280,10 +280,11 @@ public class UiScreensRenderTest {
         for (View x : all(devices)) if (x instanceof Button b && b.getText().toString().startsWith("Revocar")) assertEquals(FEATURES.available(Feature.DEVICE_REVOCATION), b.isEnabled());
         assertAccessible(devices);
         View location = render("09-location-sheet", ui -> Screen.of(null, DeviceScreens.locationSheet(ui, new DeviceScreens.LocationSheetState("Bruno", true, LocationShareDraft.Precision.APPROXIMATE, 1),
-            new DeviceScreens.LocationActions() { public void live(boolean l) {} public void precision(LocationShareDraft.Precision p) {} public void duration(int i) {} public void review(String a, String b) {} }), null));
+            new DeviceScreens.LocationActions() { public void live(boolean l) {} public void precision(LocationShareDraft.Precision p) {} public void duration(int i) {} public void review(String a, String b) {} public void stopAll() {} }), null));
         assertTrue(hasText(location, "Quién la recibirá"));
         assertTrue(hasText(location, "Durante cuánto tiempo"));
         assertTrue(hasText(location, "Con qué precisión"));
+        Button stopAll = button(location, "DETENER UBICACIÓN"); assertNotNull(stopAll); assertTrue(stopAll.isEnabled());
         View sharing = render("09b-location-stop", ui -> ChatScreens.direct(ui, chat(TrustLevel.VERIFIED, true), CHAT));
         Button stop = button(sharing, "DETENER UBICACIÓN"); assertNotNull(stop); assertTrue("stop needs no extra password", stop.isEnabled());
     }

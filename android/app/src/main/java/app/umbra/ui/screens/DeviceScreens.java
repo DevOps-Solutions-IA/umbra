@@ -57,7 +57,7 @@ public final class DeviceScreens {
 
     // ------------------------------------------------------------------ location sheet
     public record LocationSheetState(String alias, boolean live, LocationShareDraft.Precision precision, int durationIndex) {}
-    public interface LocationActions { void live(boolean live); void precision(LocationShareDraft.Precision p); void duration(int index); void review(String lat, String lon); }
+    public interface LocationActions { void live(boolean live); void precision(LocationShareDraft.Precision p); void duration(int index); void review(String lat, String lon); void stopAll(); }
 
     /** Precision, live/one-off, duration and a plain summary before the engine review. */
     public static LinearLayout locationSheet(Ui ui, LocationSheetState s, LocationActions a) {
@@ -100,6 +100,8 @@ public final class DeviceScreens {
         final EditText flat = lat, flon = lon;
         box.addView(ui.button(Ui.ButtonKind.PRIMARY, "Revisar y compartir", Glyph.LOCATION,
             () -> a.review(flat == null ? null : flat.getText().toString(), flon == null ? null : flon.getText().toString())));
+        box.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "DETENER UBICACIÓN", Glyph.STOP, a::stopAll));
+        box.addView(ui.text(UmbraType.CAPTION, "Detiene la captura y cancela las entregas de ubicación pendientes. No pide contraseña."));
         return box;
     }
 }
