@@ -49,15 +49,15 @@ public final class ChatScreens {
         ImageButton call = callsVisible ? ui.iconButton(Glyph.CALL, "Llamada de voz", a::voiceCall) : null;
         ImageButton video = callsVisible ? ui.iconButton(Glyph.VIDEO, "Videollamada", a::videoCall) : null;
         if (callsVisible && !s.trust().allowsCalls()) {
-            for (ImageButton b : new ImageButton[]{call, video}) { b.setEnabled(false); b.setAlpha(0.4f); b.setContentDescription(b.getContentDescription() + ". No disponible: " + s.trust().blockedReason()); }
+            for (ImageButton b : new ImageButton[]{call, video}) { b.setEnabled(false); b.setContentDescription(b.getContentDescription() + ". No disponible: " + s.trust().blockedReason()); }
         }
         top.addView(ui.topBar(a::back, title, call, video));
         if (s.voiceSessionActive())
             top.addView(ui.banner(Tone.SUCCESS, Glyph.MIC, "Llamada en curso", "Tu micrófono está autorizado para esta llamada.", "Volver a la llamada", a::openCall));
         switch (s.trust().level()) {
-            case IDENTITY_CHANGED -> top.addView(ui.banner(Tone.WARNING, Glyph.WARNING, "La identidad cambió", s.trust().explanation(), s.trust().primaryAction(), a::verify));
+            case IDENTITY_CHANGED -> top.addView(ui.banner(s.trust().tone(), s.trust().glyph(), "La identidad cambió", s.trust().explanation(), s.trust().primaryAction(), a::verify));
             case UNVERIFIED -> top.addView(ui.banner(Tone.WARNING, Glyph.SHIELD, "Contacto no verificado", "Comparen el código de seguridad antes de conversar. El envío está bloqueado.", "Verificar ahora", a::verify));
-            case BLOCKED -> top.addView(ui.banner(Tone.DANGER, Glyph.BLOCK, "Contacto bloqueado", s.trust().explanation(), "Desbloquear", a::unblock));
+            case BLOCKED -> top.addView(ui.banner(s.trust().tone(), s.trust().glyph(), "Contacto bloqueado", s.trust().explanation(), "Desbloquear", a::unblock));
             default -> {}
         }
         if (s.sharingLocation())
@@ -109,7 +109,7 @@ public final class ChatScreens {
         });
         ImageButton send = ui.iconButton(Glyph.SEND, "Enviar", () -> { String t = input.getText().toString(); if (!t.trim().isEmpty()) a.send(t); });
         send.setBackground(ui.shape(UmbraColors.ACCENT_STRONG, 24));
-        send.setImageDrawable(ui.icon(Glyph.SEND, UmbraColors.ON_ACCENT, 22));
+        send.setImageTintList(null); send.setImageDrawable(ui.icon(Glyph.SEND, UmbraColors.ON_ACCENT, 22));
         c.addView(send);
         input.setOnEditorActionListener((v, id, e) -> { if (id == EditorInfo.IME_ACTION_SEND) { send.performClick(); return true; } return false; });
         if (!enabled) { input.setEnabled(false); send.setEnabled(false); }

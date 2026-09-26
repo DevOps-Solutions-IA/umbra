@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- UMBRA icon set: original 24dp stroke glyphs (1.8 stroke, round caps/joins, 2dp padding), tinted at runtime. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+  <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" android:pathData="M11,21 H6 a1.5,1.5 0 0,1 -1.5,-1.5 v-15 A1.5,1.5 0 0,1 6,3 h8 a1.5,1.5 0 0,1 1.5,1.5 V11"/>
+  <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" android:pathData="M8.5,18 h2"/>
+  <path android:strokeColor="#FFFFFFFF" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000" android:pathData="M14,17 l2.2,2.2 4.3,-4.6"/>
+</vector>

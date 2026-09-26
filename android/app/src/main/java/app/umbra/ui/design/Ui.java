@@ -161,9 +161,28 @@ public final class Ui {
         b.setContentDescription(b.getText() + ". No disponible: " + reason);
         return b;
     }
+    /** Icon tint by state: normal TextSecondary, selected AccentMuted, disabled TextDisabled (still >= 3:1). */
+    public static ColorStateList iconTint() {
+        return new ColorStateList(new int[][]{{-android.R.attr.state_enabled}, {android.R.attr.state_selected}, {}},
+            new int[]{StateColors.DISABLED, StateColors.SELECTED, StateColors.NORMAL});
+    }
+    /**
+     * The UMBRA symbol (single source: @string/umbra_symbol_path via R.drawable.umbra_symbol).
+     * Use for lock, onboarding, About, invitations and QR panels; the launcher, splash and
+     * notification resources reference the same geometry.
+     */
+    public ImageView logo(int sizeDp, int color) {
+        ImageView v = new ImageView(context);
+        android.graphics.drawable.Drawable d = context.getDrawable(app.umbra.R.drawable.umbra_symbol).mutate();
+        d.setTint(color); v.setImageDrawable(d);
+        v.setContentDescription("UMBRA");
+        v.setLayoutParams(new LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp)));
+        return v;
+    }
     public ImageButton iconButton(Glyph glyph, String description, Runnable onClick) {
         ImageButton b = new ImageButton(context);
-        b.setImageDrawable(icon(glyph, UmbraColors.TEXT_PRIMARY, 24));
+        android.graphics.drawable.Drawable d = context.getDrawable(Icons.res(glyph)).mutate();
+        d.setBounds(0, 0, dp(24), dp(24)); b.setImageDrawable(d); b.setImageTintList(iconTint());
         b.setContentDescription(description);
         b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), null, shape(0xFFFFFFFF, 24)));
         b.setMinimumWidth(dp(TOUCH_MIN_DP)); b.setMinimumHeight(dp(TOUCH_MIN_DP));
@@ -182,9 +201,9 @@ public final class Ui {
         int bg = danger ? UmbraColors.DANGER : active ? UmbraColors.ACCENT_STRONG : UmbraColors.SURFACE_SOFT;
         GradientDrawable circle = new GradientDrawable(); circle.setShape(GradientDrawable.OVAL); circle.setColor(bg);
         b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), circle, null));
-        b.setImageDrawable(icon(glyph, fg, 26)); b.setScaleType(ImageView.ScaleType.CENTER);
+        b.setImageDrawable(icon(glyph, enabled ? fg : UmbraColors.TEXT_DISABLED, 26)); b.setScaleType(ImageView.ScaleType.CENTER);
         b.setContentDescription(label); b.setStateDescription(state);
-        b.setEnabled(enabled); if (!enabled) b.setAlpha(0.45f);
+        b.setEnabled(enabled);
         b.setFilterTouchesWhenObscured(true);
         if (onClick != null) b.setOnClickListener(v -> onClick.run());
         box.addView(b, new LinearLayout.LayoutParams(dp(danger ? 72 : 60), dp(danger ? 72 : 60)));
@@ -278,8 +297,8 @@ public final class Ui {
     }
     /** Connection indicator: connected (cloud), offline edition (bluetooth) or paused. */
     public TextView connectionChip(boolean offlineEdition, boolean networkPaused) {
-        if (offlineEdition) return chip(Tone.OFFLINE, Glyph.BLUETOOTH, "Modo offline · Bluetooth");
-        if (networkPaused) return chip(Tone.NEUTRAL, Glyph.CLOUD_OFF, "Internet en pausa");
+        if (offlineEdition) return chip(Tone.OFFLINE, Glyph.OFFLINE_BLUETOOTH, "Modo offline · Bluetooth");
+        if (networkPaused) return chip(Tone.NEUTRAL, Glyph.NETWORK_OFF, "Internet en pausa");
         return chip(Tone.ACCENT, Glyph.CLOUD, "Conectado · servidor privado");
     }
 
@@ -400,7 +419,7 @@ public final class Ui {
             boolean hidden = (e.getInputType() & InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0;
             e.setInputType(InputType.TYPE_CLASS_TEXT | (hidden ? InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD : InputType.TYPE_TEXT_VARIATION_PASSWORD));
             e.setTypeface(UmbraType.BODY.typeface()); e.setSelection(e.getText().length());
-            toggle.setImageDrawable(icon(hidden ? Glyph.EYE_OFF : Glyph.EYE, UmbraColors.TEXT_PRIMARY, 24));
+            toggle.setImageDrawable(icon(hidden ? Glyph.EYE_OFF : Glyph.EYE, UmbraColors.TEXT_SECONDARY, 24)); toggle.setImageTintList(iconTint());
             toggle.setContentDescription(hidden ? "Ocultar contraseña" : "Mostrar contraseña");
         });
         box.addView(toggle);
@@ -548,12 +567,12 @@ public final class Ui {
     /** Location card inside a conversation: who shares, precision, freshness, and a stop control if ours. */
     public LinearLayout locationCard(String title, String detail, boolean live, boolean outgoing, Runnable stop) {
         LinearLayout c = elevatedCard();
-        LinearLayout head = row(); head.addView(iconTile(Glyph.LOCATION, live ? Tone.ACCENT : Tone.NEUTRAL));
+        LinearLayout head = row(); head.addView(iconTile(live ? Glyph.LOCATION_LIVE : Glyph.LOCATION, live ? Tone.ACCENT : Tone.NEUTRAL));
         LinearLayout t = column(); t.setPadding(dp(12), 0, 0, 0);
         t.addView(text(UmbraType.LABEL, title)); t.addView(text(UmbraType.CAPTION, detail));
         head.addView(t, weight()); c.addView(head);
-        if (live) c.addView(chip(Tone.ACCENT, Glyph.TIMER, outgoing ? "Estás compartiendo en vivo" : "Ubicación en vivo"));
-        if (stop != null) c.addView(button(ButtonKind.DESTRUCTIVE, "DETENER UBICACIÓN", Glyph.STOP, stop));
+        if (live) c.addView(chip(Tone.ACCENT, Glyph.LOCATION_LIVE, outgoing ? "Estás compartiendo en vivo" : "Ubicación en vivo"));
+        if (stop != null) c.addView(button(ButtonKind.DESTRUCTIVE, "DETENER UBICACIÓN", Glyph.LOCATION_OFF, stop));
         c.setContentDescription(title + ". " + detail);
         return c;
     }

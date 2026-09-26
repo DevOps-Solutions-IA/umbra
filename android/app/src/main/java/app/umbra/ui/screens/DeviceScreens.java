@@ -29,11 +29,13 @@ public final class DeviceScreens {
             body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Solo este dispositivo", "Todavía no existe una lista firmada de dispositivos para tu identidad.", null, null));
         for (DeviceItem d : s.own()) {
             LinearLayout trailing = ui.column(); trailing.setGravity(Gravity.END);
-            trailing.addView(ui.chip(d.active() ? (d.current() ? Tone.ACCENT : Tone.SUCCESS) : Tone.DANGER, d.active() ? Glyph.CHECK : Glyph.BLOCK, d.current() ? "Este dispositivo" : d.active() ? "Autorizado" : "Revocado"));
-            LinearLayout row = ui.listRow(ui.iconTile(Glyph.DEVICES, d.current() ? Tone.ACCENT : Tone.NEUTRAL), d.title(), d.detail(), trailing, null);
+            Glyph state = d.current() ? Glyph.DEVICE_CURRENT : d.active() ? Glyph.DEVICE_AUTHORIZED : Glyph.DEVICE_REVOKED;
+            Tone tone = d.current() ? Tone.ACCENT : d.active() ? Tone.VERIFIED : Tone.BLOCKED;
+            trailing.addView(ui.chip(tone, state, d.current() ? "Este dispositivo" : d.active() ? "Autorizado" : "Revocado"));
+            LinearLayout row = ui.listRow(ui.iconTile(state, d.current() ? Tone.ACCENT : Tone.NEUTRAL), d.title(), d.detail(), trailing, null);
             body.addView(row);
             if (d.revocable()) {
-                Button revoke = ui.button(Ui.ButtonKind.DESTRUCTIVE, "Revocar " + d.title(), Glyph.BLOCK, () -> a.revoke(d));
+                Button revoke = ui.button(Ui.ButtonKind.DESTRUCTIVE, "Revocar " + d.title(), Glyph.DEVICE_REVOKED, () -> a.revoke(d));
                 body.addView(revoke);
                 if (!s.features().available(Feature.DEVICE_REVOCATION)) {
                     ui.disabled(revoke, "falta el flujo que comunica la revocación a tus contactos");
@@ -72,7 +74,7 @@ public final class DeviceScreens {
             RadioButton radio = new RadioButton(ui.context()); radio.setChecked(on); radio.setClickable(false);
             radio.setButtonTintList(android.content.res.ColorStateList.valueOf(UmbraColors.ACCENT_MUTED));
             radio.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            LinearLayout row = ui.listRow(radio, p.label, p.detail, null, () -> a.precision(p));
+            LinearLayout row = ui.listRow(radio, p.label, p.detail, ui.iconView(precisionGlyph(p), on ? UmbraColors.ACCENT_MUTED : UmbraColors.TEXT_SECONDARY, 24), () -> a.precision(p));
             row.setStateDescription(on ? "Seleccionado" : "No seleccionado");
             box.addView(row);
         }
@@ -100,8 +102,18 @@ public final class DeviceScreens {
         final EditText flat = lat, flon = lon;
         box.addView(ui.button(Ui.ButtonKind.PRIMARY, "Revisar y compartir", Glyph.LOCATION,
             () -> a.review(flat == null ? null : flat.getText().toString(), flon == null ? null : flon.getText().toString())));
-        box.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "DETENER UBICACIÓN", Glyph.STOP, a::stopAll));
+        box.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "DETENER UBICACIÓN", Glyph.LOCATION_OFF, a::stopAll));
         box.addView(ui.text(UmbraType.CAPTION, "Detiene la captura y cancela las entregas de ubicación pendientes. No pide contraseña."));
         return box;
+    }
+
+    /** Distinct glyph per precision so the options are not four identical pins. */
+    public static Glyph precisionGlyph(LocationShareDraft.Precision p) {
+        return switch (p) {
+            case PRECISE -> Glyph.LOCATION_PRECISE;
+            case APPROXIMATE -> Glyph.LOCATION_APPROX;
+            case ZONE -> Glyph.LOCATION_ZONE;
+            case MANUAL -> Glyph.LOCATION;
+        };
     }
 }

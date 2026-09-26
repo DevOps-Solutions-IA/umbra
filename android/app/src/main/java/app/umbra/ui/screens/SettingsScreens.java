@@ -54,7 +54,9 @@ public final class SettingsScreens {
         id.addView(ui.text(UmbraType.CAPTION, "Es pública: sirve para que tus contactos te identifiquen. No es una contraseña. UMBRA nunca muestra claves privadas."));
         body.addView(id);
         LinearLayout qr = ui.card();
-        qr.addView(ui.text(UmbraType.LABEL, "QR de invitación"));
+        LinearLayout qrHead = ui.row(); qrHead.addView(ui.logo(24, UmbraColors.ACCENT_MUTED));
+        TextView qrTitle = ui.text(UmbraType.LABEL, "QR de invitación"); qrTitle.setPadding(ui.dp(10), 0, 0, 0); qrHead.addView(qrTitle);
+        qr.addView(qrHead);
         qr.addView(ui.text(UmbraType.CAPTION, "Hoy las invitaciones se intercambian como archivo de un solo uso. Mostrarlas como QR requiere escaneo con cámara."));
         qr.addView(ui.pendingChip());
         body.addView(qr);
@@ -86,7 +88,9 @@ public final class SettingsScreens {
         body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Bloquear ahora", Glyph.LOCK, a::lockNow));
         body.addView(ui.sectionHeader("Próximas protecciones"));
         LinearLayout password = ui.card();
-        password.addView(ui.text(UmbraType.LABEL, "Contraseña personal de la bóveda"));
+        LinearLayout pwHead = ui.row(); pwHead.addView(ui.iconTile(Glyph.PASSWORD, Tone.NEUTRAL));
+        TextView pwTitle = ui.text(UmbraType.LABEL, "Contraseña personal de la bóveda"); pwTitle.setPadding(ui.dp(12), 0, 0, 0); pwHead.addView(pwTitle, Ui.weight());
+        password.addView(pwHead);
         password.addView(ui.text(UmbraType.CAPTION, "Añadirá una contraseña propia además del bloqueo de Android. No está activa y no se simula."));
         LinearLayout field = ui.passwordField("Contraseña personal", e -> { e.setEnabled(false); });
         field.setAlpha(0.5f); password.addView(field);
@@ -106,7 +110,7 @@ public final class SettingsScreens {
 
     private static void network(Ui ui, SettingsState s, SettingsActions a, LinearLayout body) {
         if (s.offlineEdition()) {
-            body.addView(ui.banner(Tone.OFFLINE, Glyph.BLUETOOTH, "Edición offline", "Esta versión se compila sin permiso de internet. Solo usa Bluetooth con teléfonos cercanos y no puede sincronizar con un servidor.", null, null));
+            body.addView(ui.banner(Tone.OFFLINE, Glyph.OFFLINE_BLUETOOTH, "Edición offline", "Esta versión se compila sin permiso de internet. Solo usa Bluetooth con teléfonos cercanos y no puede sincronizar con un servidor.", null, null));
             return;
         }
         LinearLayout state = ui.card();
@@ -141,14 +145,15 @@ public final class SettingsScreens {
 
     private static void about(Ui ui, SettingsState s, LinearLayout body) {
         LinearLayout v = ui.card();
-        v.addView(ui.heading(UmbraType.HEADING, "UMBRA " + s.version()));
+        v.addView(ui.logo(40, UmbraColors.ACCENT_MUTED));
+        v.addView(ui.heading(UmbraType.HEADING, "UMBRA " + s.version()), ui.margins(Ui.match(), 10, 0));
         v.addView(ui.text(UmbraType.CAPTION, "Versión de desarrollo. Pendiente de auditoría independiente. No usar todavía para secretos reales.", UmbraColors.WARNING_FG));
         body.addView(v);
         body.addView(ui.sectionHeader("Estado real de las funciones"));
         for (Feature f : Feature.values()) {
             FeatureAvailability.Status st = s.features().status(f);
             Tone tone = st == FeatureAvailability.Status.AVAILABLE ? Tone.SUCCESS : st == FeatureAvailability.Status.NOT_IN_FLAVOR ? Tone.OFFLINE : Tone.NEUTRAL;
-            Glyph g = st == FeatureAvailability.Status.AVAILABLE ? Glyph.CHECK : st == FeatureAvailability.Status.NOT_IN_FLAVOR ? Glyph.CLOUD_OFF : Glyph.TIMER;
+            Glyph g = st == FeatureAvailability.Status.AVAILABLE ? Glyph.CHECK : st == FeatureAvailability.Status.NOT_IN_FLAVOR ? Glyph.NETWORK_OFF : Glyph.TIMER;
             LinearLayout r = ui.column(); r.setPadding(ui.dp(4), ui.dp(8), ui.dp(4), ui.dp(8));
             r.addView(ui.text(UmbraType.LABEL, f.title));
             r.addView(ui.chip(tone, g, FeatureAvailability.label(st)));

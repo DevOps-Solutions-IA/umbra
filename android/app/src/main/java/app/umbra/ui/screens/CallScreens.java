@@ -153,12 +153,13 @@ public final class CallScreens {
             else if (i == 1 && m.selected() != ModulatorPresentation.Mode.MODULATED) a.modulated();
         }));
         LinearLayout st = ui.row(); st.setGravity(Gravity.TOP);
-        st.addView(ui.iconView(m.glyph(), Ui.toneColor(m.tone()), 20));
+        st.addView(ui.iconView(m.glyph(), app.umbra.ui.design.StateColors.modulator(m), 20));
         LinearLayout tx = ui.column(); tx.setPadding(ui.dp(10), 0, 0, 0);
         TextView head = ui.text(UmbraType.LABEL, m.headline(), m.tone() == Tone.NEUTRAL ? UmbraColors.TEXT_PRIMARY : Ui.toneColor(m.tone()));
         head.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         tx.addView(head); tx.addView(ui.text(UmbraType.CAPTION, m.detail()));
-        st.addView(tx, Ui.weight()); c.addView(st, ui.margins(Ui.match(), 6, 4));
+        st.addView(tx, Ui.weight()); st.setContentDescription(app.umbra.ui.design.StateColors.modulatorDescription(m) + ". " + m.detail());
+        c.addView(st, ui.margins(Ui.match(), 6, 4));
         if (m.state() == ModulatorPresentation.EngineState.ERROR_MUTED)
             c.addView(ui.button(Ui.ButtonKind.SECONDARY, "Reintentar modulación", Glyph.RETRY, a::retryModulation));
         c.addView(ui.text(UmbraType.CAPTION, ModulatorPresentation.DISCLAIMER, UmbraColors.TEXT_TERTIARY), ui.margins(Ui.match(), 6, 0));
@@ -186,4 +187,5 @@ public final class CallScreens {
         controls.addView(spaced(ui, ui.callControl(Glyph.CALL, "Responder", allowed ? null : "Contacto no verificado", true, false, allowed, a::answer)));
         return Screen.of(top, body, controls);
     }
+
 }

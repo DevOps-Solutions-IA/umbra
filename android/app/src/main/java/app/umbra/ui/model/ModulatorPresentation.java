@@ -6,6 +6,7 @@ import java.util.Locale;
  * Maps the REAL local voice-processor state reported by the media engine
  * ({@code NativeVoiceSession.modulationStatus()}: OFF, ENABLING, ON, DISABLING, ERROR_MUTED) to UI.
  *
+ * <p>The icon is always the voice-modulation glyph; its color and the headline carry the state.
  * <p>Invariants: "Modulada" is only shown as active when the engine reports ON; a failure is shown as
  * muted; mute always wins over modulation in the transmission indicator; no wording claims anonymity.
  */
@@ -33,10 +34,10 @@ public record ModulatorPresentation(EngineState state, Mode selected, boolean bu
         Mode selected; boolean busy; String headline, detail; Tone tone; Glyph glyph; boolean silenced;
         switch (s) {
             case ON -> { selected = Mode.MODULATED; busy = false; headline = "Voz modulada"; detail = "El motor confirma que la modificación local se está aplicando."; tone = Tone.ACCENT; glyph = Glyph.VOICE; silenced = false; }
-            case ENABLING -> { selected = Mode.NONE; busy = true; headline = "Activando modulación…"; detail = "Esperando que el motor confirme que el efecto se aplica. No se indica como modulada hasta entonces."; tone = Tone.NEUTRAL; glyph = Glyph.TIMER; silenced = false; }
-            case DISABLING -> { selected = Mode.NONE; busy = true; headline = "Desactivando modulación…"; detail = "Esperando confirmación del motor para volver a voz natural."; tone = Tone.NEUTRAL; glyph = Glyph.TIMER; silenced = false; }
-            case ERROR_MUTED -> { selected = Mode.NONE; busy = false; headline = "La modulación falló."; detail = "Tu micrófono permanece silenciado. Reintenta o confirma voz natural."; tone = Tone.DANGER; glyph = Glyph.MIC_OFF; silenced = true; }
-            default -> { selected = Mode.NATURAL; busy = false; headline = "Voz natural"; detail = "Se transmite tu voz sin modificar."; tone = Tone.NEUTRAL; glyph = Glyph.MIC; silenced = false; }
+            case ENABLING -> { selected = Mode.NONE; busy = true; headline = "Activando modulación…"; detail = "Esperando que el motor confirme que el efecto se aplica. No se indica como modulada hasta entonces."; tone = Tone.NEUTRAL; glyph = Glyph.VOICE; silenced = false; }
+            case DISABLING -> { selected = Mode.NONE; busy = true; headline = "Desactivando modulación…"; detail = "Esperando confirmación del motor para volver a voz natural."; tone = Tone.NEUTRAL; glyph = Glyph.VOICE; silenced = false; }
+            case ERROR_MUTED -> { selected = Mode.NONE; busy = false; headline = "La modulación falló."; detail = "Tu micrófono permanece silenciado. Reintenta o confirma voz natural."; tone = Tone.DANGER; glyph = Glyph.VOICE; silenced = true; }
+            default -> { selected = Mode.NATURAL; busy = false; headline = "Voz natural"; detail = "Se transmite tu voz sin modificar."; tone = Tone.NEUTRAL; glyph = Glyph.VOICE; silenced = false; }
         }
         String transmission;
         if (muted) transmission = "Micrófono silenciado · no se transmite audio";

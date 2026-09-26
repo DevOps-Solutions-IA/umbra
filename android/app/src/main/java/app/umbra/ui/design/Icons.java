@@ -54,6 +54,29 @@ public final class Icons {
             case EYE_OFF -> R.drawable.ic_eye_off;
             case BELL_OFF -> R.drawable.ic_bell_off;
             case REPLY -> R.drawable.ic_reply;
+            case UNLOCK -> R.drawable.ic_unlock;
+            case EMERGENCY_LOCK -> R.drawable.ic_emergency_lock;
+            case VAULT_LOCKED -> R.drawable.ic_vault_locked;
+            case VAULT_UNLOCKED -> R.drawable.ic_vault_unlocked;
+            case PASSWORD -> R.drawable.ic_password;
+            case CHANGE_PASSWORD -> R.drawable.ic_change_password;
+            case VERIFIED -> R.drawable.ic_verified;
+            case IDENTITY_CHANGED -> R.drawable.ic_identity_changed;
+            case PERSON_BLOCK -> R.drawable.ic_person_block;
+            case NETWORK_OFF -> R.drawable.ic_network_off;
+            case OFFLINE_BLUETOOTH -> R.drawable.ic_offline_bluetooth;
+            case CAMERA -> R.drawable.ic_camera;
+            case CONTACTS -> R.drawable.ic_contacts;
+            case LOCATION_PRECISE -> R.drawable.ic_location_precise;
+            case LOCATION_APPROX -> R.drawable.ic_location_approx;
+            case LOCATION_ZONE -> R.drawable.ic_location_zone;
+            case LOCATION_LIVE -> R.drawable.ic_location_live;
+            case LOCATION_OFF -> R.drawable.ic_location_off;
+            case DEVICE_CURRENT -> R.drawable.ic_device_current;
+            case DEVICE_AUTHORIZED -> R.drawable.ic_device_authorized;
+            case DEVICE_PENDING -> R.drawable.ic_device_pending;
+            case DEVICE_REVOKED -> R.drawable.ic_device_revoked;
+            case DEVICE_OFFLINE -> R.drawable.ic_device_offline;
         };
     }
 }

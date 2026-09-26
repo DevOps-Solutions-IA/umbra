@@ -47,7 +47,7 @@ public final class HomeScreens {
             top.addView(ui.banner(Tone.ACCENT, Glyph.CALL, "Llamada de " + s.incoming().alias(), "Responder no enciende tu micrófono ni tu cámara sin confirmación.",
                 "Ver llamada", () -> a.openIncoming(s.incoming().callId())));
         if (s.transportNotice() != null)
-            top.addView(ui.banner(Tone.WARNING, Glyph.CLOUD_OFF, s.transportNotice(), null, "Detalles", a::networkDetails));
+            top.addView(ui.banner(Tone.WARNING, Glyph.NETWORK_OFF, s.transportNotice(), null, "Detalles", a::networkDetails));
         top.addView(ui.segmented(new String[]{"Todos", "Personas", "Grupos"}, s.filter().ordinal(), null, i -> a.filter(Filter.values()[i])));
 
         if (s.loading()) return Screen.of(top, ui.skeleton(5), nav);
@@ -137,7 +137,7 @@ public final class HomeScreens {
 
     public static Screen nearby(Ui ui, NearbyState s, NearbyActions a, View nav) {
         LinearLayout top = ui.column();
-        top.addView(ui.topBar(null, ui.titleBlock("Cerca", ui.chip(Tone.OFFLINE, Glyph.BLUETOOTH, s.offlineEdition() ? "Modo offline · Bluetooth" : "Bluetooth · sin internet"))));
+        top.addView(ui.topBar(null, ui.titleBlock("Cerca", ui.chip(Tone.OFFLINE, s.offlineEdition() ? Glyph.OFFLINE_BLUETOOTH : Glyph.BLUETOOTH, s.offlineEdition() ? "Modo offline · Bluetooth" : "Bluetooth · sin internet"))));
         LinearLayout body = ui.column();
         LinearLayout status = ui.card();
         status.addView(ui.text(UmbraType.SECURITY_LABEL, "Estado del enlace"));
