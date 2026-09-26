@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- UMBRA brand: single source of truth for the symbol geometry (variant A, "monograma angular").
+     24x24 grid, filled shapes, no strokes, gradients or transparency. Every logo, launcher,
+     monochrome, notification and splash drawable references this path. -->
+<resources>
+    <string name="umbra_symbol_path" translatable="false">M3,4 L7.6,4 L7.6,13.3 L12,17.1 L16.4,13.3 L16.4,4 L21,4 L21,15.3 L12,21.6 L3,15.3 Z M9.9,4 L14.1,4 L12,7.6 Z</string>
+    <color name="umbra_symbol">#FFA0AD93</color>
+    <color name="umbra_launcher_background">#FF0E120F</color>
+</resources>

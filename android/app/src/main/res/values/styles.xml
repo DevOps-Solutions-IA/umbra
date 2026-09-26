@@ -13,6 +13,10 @@
     <item name="android:statusBarColor">@color/umbra_background_primary</item>
     <item name="android:windowActionModeOverlay">true</item>
     <item name="android:alertDialogTheme">@style/Theme.Umbra.Dialog</item>
+    <!-- Android 12+ system splash: symbol centered on BackgroundPrimary, no text or loader. -->
+    <item name="android:windowSplashScreenBackground">@color/umbra_launcher_background</item>
+    <item name="android:windowSplashScreenIconBackgroundColor">@color/umbra_launcher_background</item>
+    <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
   </style>
   <style name="Theme.Umbra.Dialog" parent="android:style/Theme.Material.Dialog.Alert">
     <item name="android:colorAccent">@color/umbra_accent_muted</item>
