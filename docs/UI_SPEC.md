@@ -14,17 +14,26 @@
 
 ## Sistema de diseño (`ui/design`)
 
+Paleta táctica oliva (2026-09-26): oscura, sobria, sin neón, menta ni azul eléctrico.
+
 | Token | Valor | Uso |
 |---|---|---|
-| backgroundPrimary | `#0B0C10` | fondo antracita |
-| backgroundSecondary | `#111319` | barras, bloques de código |
-| surface / surfaceElevated | `#171A21` / `#1F232C` | tarjetas, hojas |
-| accentPrimary | `#9A8CFF` violeta | acciones principales, voz modulada |
-| accentSecondary | `#5AB0FF` azul | grupos, modo offline/Bluetooth |
-| textPrimary / textSecondary | `#F3F4F7` / `#AAB1BF` | texto |
-| verified (success) | `#5FD39B` | + escudo con check |
-| warning (no verificado / identidad cambió) | `#F4B860` | + escudo / triángulo |
-| blocked (danger) | `#FF7B7B` | + icono de bloqueo |
+| backgroundPrimary / Secondary / Tertiary | `#0E120F` / `#141A16` / `#1A211C` | fondo, barras, bloques de código, modo offline |
+| surface / surfaceElevated / surfaceSoft | `#1B231D` / `#222C24` / `#2A342C` | tarjetas, burbuja entrante, controles |
+| borderSubtle / borderDefault | `#313A33` / `#404A41` | bordes y divisores |
+| accentPrimary | `#6F7F62` | bordes de acción, foco |
+| accentStrong | `#55634B` | botón principal, segmento seleccionado (texto `#F1F3EE`, 5.7:1) |
+| accentSecondary | `#879676` | modo offline/Bluetooth, grupos |
+| accentMuted | `#A0AD93` | texto e iconos de acento |
+| textPrimary / Secondary / Muted / Disabled | `#F1F3EE` / `#C4CBBF` / `#8E968B` / `#697166` | texto |
+| success / verified | `#6E8B63` / `#7E9472` | + escudo con check |
+| warning (no verificado) | `#B39A62` | + escudo |
+| identityChanged | `#C0A269` | + triángulo |
+| danger / blocked | `#A35D57` / `#7B4D4D` | + icono de bloqueo; colgar |
+
+Los tonos de estado oscuros (success, danger, blocked, verified) se usan como relleno y borde;
+para texto e iconos se usan variantes `*_FG` derivadas del mismo tono (p. ej. danger `#BE928C`,
+verified `#8FA285`), con contenedores oscuros derivados, para mantener 4.5:1.
 
 Todos los pares texto/superficie superan 4.5:1 (probado en `UiDesignTokensTest`). Tipografía
 en sp: Display 32, Title 22, Heading 17, Body 16, Caption 13, SecurityLabel 12 (mayúsculas),

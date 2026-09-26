@@ -22,7 +22,7 @@ public final class EntryScreens {
         body.setPadding(ui.dp(8), ui.dp(56), ui.dp(8), ui.dp(24));
         LinearLayout mark = ui.iconTile(Glyph.LOCK, Tone.ACCENT);
         mark.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(72), ui.dp(72)));
-        mark.setBackground(ui.shape(UmbraColors.ACCENT_PRIMARY_CONTAINER, 24));
+        mark.setBackground(ui.outlined(UmbraColors.ACCENT_CONTAINER, UmbraColors.BORDER_DEFAULT, 24));
         body.addView(mark);
         TextView brand = ui.heading(UmbraType.DISPLAY, "UMBRA"); brand.setLetterSpacing(0.18f); brand.setGravity(Gravity.CENTER);
         body.addView(brand, ui.margins(Ui.match(), 20, 0));
@@ -45,7 +45,7 @@ public final class EntryScreens {
         }
         TextView foot = ui.text(UmbraType.CAPTION, "Sin número de teléfono · Sin correo · Sin agenda compartida"); foot.setGravity(Gravity.CENTER);
         body.addView(foot, ui.margins(Ui.match(), 18, 4));
-        TextView dev = ui.text(UmbraType.CAPTION, "Versión de desarrollo. No auditada para uso sensible.", UmbraColors.WARNING); dev.setGravity(Gravity.CENTER);
+        TextView dev = ui.text(UmbraType.CAPTION, "Versión de desarrollo. No auditada para uso sensible.", UmbraColors.WARNING_FG); dev.setGravity(Gravity.CENTER);
         body.addView(dev);
         return Screen.of(null, body, null);
     }

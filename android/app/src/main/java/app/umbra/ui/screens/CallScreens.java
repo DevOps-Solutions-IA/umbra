@@ -118,7 +118,7 @@ public final class CallScreens {
         LinearLayout local = ui.column(); local.setGravity(Gravity.CENTER);
         local.setBackground(ui.outlined(UmbraColors.SURFACE_ELEVATED, UmbraColors.OUTLINE, 14));
         boolean cam = v != null && v.cameraTransmitting();
-        local.addView(ui.iconView(cam ? Glyph.VIDEO : Glyph.VIDEO_OFF, cam ? UmbraColors.ACCENT_PRIMARY : UmbraColors.TEXT_TERTIARY, 22));
+        local.addView(ui.iconView(cam ? Glyph.VIDEO : Glyph.VIDEO_OFF, cam ? UmbraColors.ACCENT_MUTED : UmbraColors.TEXT_TERTIARY, 22));
         TextView lt = ui.text(UmbraType.CAPTION, cam ? "Tu cámara" : "Cámara apagada"); lt.setGravity(Gravity.CENTER); local.addView(lt);
         local.setContentDescription(cam ? "Vista previa: tu cámara está transmitiendo" : "Vista previa: tu cámara no transmite");
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ui.dp(92), ui.dp(120), Gravity.TOP | Gravity.END);

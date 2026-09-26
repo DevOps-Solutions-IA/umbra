@@ -70,7 +70,7 @@ public final class DeviceScreens {
             if (s.live() && p == LocationShareDraft.Precision.MANUAL) continue;
             boolean on = p == s.precision();
             RadioButton radio = new RadioButton(ui.context()); radio.setChecked(on); radio.setClickable(false);
-            radio.setButtonTintList(android.content.res.ColorStateList.valueOf(UmbraColors.ACCENT_PRIMARY));
+            radio.setButtonTintList(android.content.res.ColorStateList.valueOf(UmbraColors.ACCENT_MUTED));
             radio.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             LinearLayout row = ui.listRow(radio, p.label, p.detail, null, () -> a.precision(p));
             row.setStateDescription(on ? "Seleccionado" : "No seleccionado");

@@ -108,7 +108,7 @@ public final class ChatScreens {
             public void afterTextChanged(android.text.Editable e) {}
         });
         ImageButton send = ui.iconButton(Glyph.SEND, "Enviar", () -> { String t = input.getText().toString(); if (!t.trim().isEmpty()) a.send(t); });
-        send.setBackground(ui.shape(UmbraColors.ACCENT_PRIMARY, 24));
+        send.setBackground(ui.shape(UmbraColors.ACCENT_STRONG, 24));
         send.setImageDrawable(ui.icon(Glyph.SEND, UmbraColors.ON_ACCENT, 22));
         c.addView(send);
         input.setOnEditorActionListener((v, id, e) -> { if (id == EditorInfo.IME_ACTION_SEND) { send.performClick(); return true; } return false; });
@@ -209,7 +209,7 @@ public final class ChatScreens {
                 for (Contact c : s.contacts()) {
                     boolean allowed = c.trust() == TrustLevel.VERIFIED, on = s.selected().contains(c.id());
                     CheckBox box = new CheckBox(ui.context()); box.setChecked(on); box.setEnabled(allowed);
-                    box.setButtonTintList(android.content.res.ColorStateList.valueOf(UmbraColors.ACCENT_PRIMARY));
+                    box.setButtonTintList(android.content.res.ColorStateList.valueOf(UmbraColors.ACCENT_MUTED));
                     box.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); box.setClickable(false);
                     LinearLayout row = ui.listRow(ui.avatar(c.alias(), false, 44), c.alias(),
                         allowed ? TrustPresentation.of(c.trust()).label() : TrustPresentation.of(c.trust()).label() + " · no se puede agregar", box, allowed ? () -> a.toggle(c.id()) : null);

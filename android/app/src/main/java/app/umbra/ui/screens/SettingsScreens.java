@@ -96,7 +96,7 @@ public final class SettingsScreens {
         body.addView(EntryScreens.privateStartup(ui, PrivateStartupState.UNAVAILABLE));
         body.addView(ui.sectionHeader("Zona de riesgo"));
         body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Destruir identidad y datos locales", Glyph.TRASH, a::destroyIdentity));
-        body.addView(ui.text(UmbraType.CAPTION, "Irreversible. No borra copias exportadas ni garantiza el borrado físico de la memoria.", UmbraColors.WARNING));
+        body.addView(ui.text(UmbraType.CAPTION, "Irreversible. No borra copias exportadas ni garantiza el borrado físico de la memoria.", UmbraColors.WARNING_FG));
     }
 
     private static void notifications(Ui ui, SettingsState s, LinearLayout body) {
@@ -142,7 +142,7 @@ public final class SettingsScreens {
     private static void about(Ui ui, SettingsState s, LinearLayout body) {
         LinearLayout v = ui.card();
         v.addView(ui.heading(UmbraType.HEADING, "UMBRA " + s.version()));
-        v.addView(ui.text(UmbraType.CAPTION, "Versión de desarrollo. Pendiente de auditoría independiente. No usar todavía para secretos reales.", UmbraColors.WARNING));
+        v.addView(ui.text(UmbraType.CAPTION, "Versión de desarrollo. Pendiente de auditoría independiente. No usar todavía para secretos reales.", UmbraColors.WARNING_FG));
         body.addView(v);
         body.addView(ui.sectionHeader("Estado real de las funciones"));
         for (Feature f : Feature.values()) {

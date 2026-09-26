@@ -40,24 +40,46 @@ public final class Ui {
     public int dp(float value) { return Math.round(value * density); }
 
     // ---------------------------------------------------------------- tones
+    /** Readable text/icon color for a tone (>= 4.5:1 on surfaces and on its container). */
     public static int toneColor(Tone tone) {
         return switch (tone) {
             case NEUTRAL -> UmbraColors.TEXT_SECONDARY;
-            case ACCENT -> UmbraColors.ACCENT_PRIMARY;
-            case SUCCESS -> UmbraColors.SUCCESS;
-            case WARNING -> UmbraColors.WARNING;
-            case DANGER -> UmbraColors.DANGER;
-            case OFFLINE -> UmbraColors.OFFLINE;
+            case ACCENT -> UmbraColors.ACCENT_MUTED;
+            case SUCCESS -> UmbraColors.SUCCESS_FG;
+            case WARNING -> UmbraColors.WARNING_FG;
+            case DANGER -> UmbraColors.DANGER_FG;
+            case OFFLINE -> UmbraColors.OFFLINE_FG;
+            case VERIFIED -> UmbraColors.VERIFIED_FG;
+            case IDENTITY -> UmbraColors.IDENTITY_CHANGED_FG;
+            case BLOCKED -> UmbraColors.BLOCKED_FG;
         };
     }
+    /** Dark background behind tone-colored content (banners, chips). */
     public static int toneContainer(Tone tone) {
         return switch (tone) {
             case NEUTRAL -> UmbraColors.SURFACE_ELEVATED;
-            case ACCENT -> UmbraColors.ACCENT_PRIMARY_CONTAINER;
+            case ACCENT -> UmbraColors.ACCENT_CONTAINER;
             case SUCCESS -> UmbraColors.SUCCESS_CONTAINER;
             case WARNING -> UmbraColors.WARNING_CONTAINER;
             case DANGER -> UmbraColors.DANGER_CONTAINER;
             case OFFLINE -> UmbraColors.OFFLINE_CONTAINER;
+            case VERIFIED -> UmbraColors.VERIFIED_CONTAINER;
+            case IDENTITY -> UmbraColors.IDENTITY_CHANGED_CONTAINER;
+            case BLOCKED -> UmbraColors.BLOCKED_CONTAINER;
+        };
+    }
+    /** Palette base color of a tone, used for borders and outlines. */
+    public static int toneBase(Tone tone) {
+        return switch (tone) {
+            case NEUTRAL -> UmbraColors.BORDER_DEFAULT;
+            case ACCENT -> UmbraColors.ACCENT_PRIMARY;
+            case SUCCESS -> UmbraColors.SUCCESS;
+            case WARNING -> UmbraColors.WARNING;
+            case DANGER -> UmbraColors.DANGER;
+            case OFFLINE -> UmbraColors.ACCENT_SECONDARY;
+            case VERIFIED -> UmbraColors.VERIFIED;
+            case IDENTITY -> UmbraColors.IDENTITY_CHANGED;
+            case BLOCKED -> UmbraColors.BLOCKED;
         };
     }
 
@@ -116,10 +138,10 @@ public final class Ui {
         b.setText(label); b.setAllCaps(false); UmbraType.LABEL.apply(b);
         int fg, bg; Drawable background;
         switch (kind) {
-            case PRIMARY -> { fg = UmbraColors.ON_ACCENT; bg = UmbraColors.ACCENT_PRIMARY; background = shape(bg, 14); }
-            case DESTRUCTIVE -> { fg = UmbraColors.DANGER; bg = UmbraColors.DANGER_CONTAINER; background = outlined(bg, UmbraColors.DANGER, 14); }
-            case GHOST -> { fg = UmbraColors.ACCENT_PRIMARY; bg = 0x00000000; background = shape(bg, 14); }
-            default -> { fg = UmbraColors.TEXT_PRIMARY; bg = UmbraColors.SURFACE_ELEVATED; background = outlined(bg, UmbraColors.OUTLINE, 14); }
+            case PRIMARY -> { fg = UmbraColors.ON_ACCENT; bg = UmbraColors.ACCENT_STRONG; background = outlined(bg, UmbraColors.ACCENT_PRIMARY, 14); }
+            case DESTRUCTIVE -> { fg = UmbraColors.DANGER_FG; bg = UmbraColors.DANGER_CONTAINER; background = outlined(bg, UmbraColors.DANGER, 14); }
+            case GHOST -> { fg = UmbraColors.ACCENT_MUTED; bg = 0x00000000; background = shape(bg, 14); }
+            default -> { fg = UmbraColors.TEXT_PRIMARY; bg = UmbraColors.SURFACE_ELEVATED; background = outlined(bg, UmbraColors.BORDER_DEFAULT, 14); }
         }
         b.setTextColor(fg);
         b.setBackground(pressable(background, 14));
@@ -157,7 +179,7 @@ public final class Ui {
         LinearLayout box = column(); box.setGravity(Gravity.CENTER_HORIZONTAL);
         ImageButton b = new ImageButton(context);
         int fg = danger ? UmbraColors.ON_DANGER : active ? UmbraColors.ON_ACCENT : UmbraColors.TEXT_PRIMARY;
-        int bg = danger ? UmbraColors.DANGER : active ? UmbraColors.ACCENT_PRIMARY : UmbraColors.SURFACE_ELEVATED;
+        int bg = danger ? UmbraColors.DANGER : active ? UmbraColors.ACCENT_STRONG : UmbraColors.SURFACE_SOFT;
         GradientDrawable circle = new GradientDrawable(); circle.setShape(GradientDrawable.OVAL); circle.setColor(bg);
         b.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), circle, null));
         b.setImageDrawable(icon(glyph, fg, 26)); b.setScaleType(ImageView.ScaleType.CENTER);
@@ -186,7 +208,7 @@ public final class Ui {
     /** Status banner: icon + title + optional body + optional action. Announced politely when shown. */
     public LinearLayout banner(Tone tone, Glyph glyph, String title, String body, String action, Runnable onAction) {
         LinearLayout b = row(); b.setGravity(Gravity.TOP);
-        b.setBackground(outlined(toneContainer(tone), toneColor(tone) & 0x66FFFFFF, 16));
+        b.setBackground(outlined(toneContainer(tone), toneBase(tone), 16));
         b.setPadding(dp(14), dp(12), dp(14), dp(12));
         ImageView i = iconView(glyph, toneColor(tone), 22);
         LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(dp(22), dp(22)); ip.topMargin = dp(1); b.addView(i, ip);
@@ -221,7 +243,7 @@ public final class Ui {
     public TextView badge(int count) {
         TextView b = text(UmbraType.CAPTION, count > 99 ? "99+" : String.valueOf(count), UmbraColors.ON_ACCENT);
         b.setTypeface(UmbraType.LABEL.typeface()); b.setGravity(Gravity.CENTER);
-        b.setBackground(shape(UmbraColors.ACCENT_PRIMARY, 100)); b.setMinWidth(dp(22)); b.setPadding(dp(6), dp(1), dp(6), dp(1));
+        b.setBackground(shape(UmbraColors.ACCENT_STRONG, 100)); b.setMinWidth(dp(22)); b.setPadding(dp(6), dp(1), dp(6), dp(1));
         b.setContentDescription(count == 1 ? "1 mensaje sin leer" : count + " mensajes sin leer");
         return b;
     }
@@ -229,11 +251,12 @@ public final class Ui {
     /** Circle for people, rounded square with a group glyph for groups: distinguishable without color. */
     public FrameLayout avatar(String name, boolean group, int sizeDp) {
         FrameLayout f = new FrameLayout(context);
-        TextView initial = text(UmbraType.HEADING, Fingerprints.initial(name), group ? UmbraColors.ACCENT_SECONDARY : UmbraColors.ACCENT_PRIMARY);
+        TextView initial = text(UmbraType.HEADING, Fingerprints.initial(name), group ? UmbraColors.ACCENT_SECONDARY : UmbraColors.ACCENT_MUTED);
         initial.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, sizeDp * 0.42f); // Decorative; name is read by the row.
         initial.setGravity(Gravity.CENTER);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(group ? UmbraColors.ACCENT_SECONDARY_CONTAINER : UmbraColors.ACCENT_PRIMARY_CONTAINER);
+        bg.setColor(group ? UmbraColors.BACKGROUND_TERTIARY : UmbraColors.SURFACE_SOFT);
+        if (group) bg.setStroke(dp(1), UmbraColors.BORDER_DEFAULT);
         if (group) bg.setCornerRadius(dp(sizeDp * 0.3f)); else bg.setShape(GradientDrawable.OVAL);
         initial.setBackground(bg);
         f.addView(initial, new FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp)));
@@ -295,7 +318,7 @@ public final class Ui {
     public LinearLayout emptyState(Glyph glyph, String title, String body, String action, Runnable onAction) {
         LinearLayout e = column(); e.setGravity(Gravity.CENTER_HORIZONTAL); e.setPadding(dp(12), dp(40), dp(12), dp(24));
         LinearLayout tile = iconTile(glyph, Tone.ACCENT); tile.setLayoutParams(new LinearLayout.LayoutParams(dp(64), dp(64)));
-        tile.setBackground(shape(UmbraColors.ACCENT_PRIMARY_CONTAINER, 22)); e.addView(tile);
+        tile.setBackground(outlined(UmbraColors.ACCENT_CONTAINER, UmbraColors.BORDER_SUBTLE, 22)); e.addView(tile);
         TextView t = heading(UmbraType.TITLE, title); t.setGravity(Gravity.CENTER); e.addView(t, margins(match(), 18, 6));
         TextView b = text(UmbraType.BODY_SECONDARY, body); b.setGravity(Gravity.CENTER); e.addView(b, match());
         if (action != null) e.addView(button(ButtonKind.PRIMARY, action, Glyph.ADD, onAction));
@@ -388,13 +411,13 @@ public final class Ui {
 
     /** Two-or-more option control with radio semantics; the selection is also spoken. */
     public LinearLayout segmented(String[] options, int selected, boolean[] enabled, IntConsumer onSelect) {
-        LinearLayout box = row(); box.setBackground(shape(UmbraColors.BACKGROUND_SECONDARY, 16)); box.setPadding(dp(4), dp(4), dp(4), dp(4));
+        LinearLayout box = row(); box.setBackground(outlined(UmbraColors.BACKGROUND_SECONDARY, UmbraColors.BORDER_SUBTLE, 16)); box.setPadding(dp(4), dp(4), dp(4), dp(4));
         for (int i = 0; i < options.length; i++) {
             final int index = i;
             Button b = new Button(context); b.setText(options[i]); b.setAllCaps(false); UmbraType.LABEL.apply(b);
             boolean on = i == selected;
             b.setTextColor(on ? UmbraColors.ON_ACCENT : UmbraColors.TEXT_PRIMARY);
-            b.setBackground(pressable(shape(on ? UmbraColors.ACCENT_PRIMARY : 0x00000000, 12), 12));
+            b.setBackground(pressable(shape(on ? UmbraColors.ACCENT_STRONG : 0x00000000, 12), 12));
             b.setStateListAnimator(null); b.setMinHeight(dp(TOUCH_MIN_DP)); b.setMinimumHeight(dp(TOUCH_MIN_DP));
             b.setSelected(on); b.setStateDescription(on ? "Seleccionado" : "No seleccionado");
             b.setAccessibilityDelegate(new View.AccessibilityDelegate() {
@@ -425,8 +448,8 @@ public final class Ui {
         r.addView(texts, weight());
         Switch s = new Switch(context); s.setChecked(checked); s.setContentDescription(title);
         s.setMinWidth(dp(TOUCH_MIN_DP)); s.setMinHeight(dp(TOUCH_MIN_DP));
-        s.setThumbTintList(ColorStateList.valueOf(checked ? UmbraColors.ACCENT_PRIMARY : UmbraColors.TEXT_SECONDARY));
-        s.setTrackTintList(ColorStateList.valueOf(checked ? UmbraColors.ACCENT_PRIMARY_CONTAINER : UmbraColors.SURFACE_ELEVATED));
+        s.setThumbTintList(ColorStateList.valueOf(checked ? UmbraColors.ACCENT_MUTED : UmbraColors.TEXT_SECONDARY));
+        s.setTrackTintList(ColorStateList.valueOf(checked ? UmbraColors.ACCENT_STRONG : UmbraColors.SURFACE_SOFT));
         s.setFilterTouchesWhenObscured(true);
         if (pendingNote != null || onChange == null) { s.setEnabled(false); s.setAlpha(0.6f); }
         else s.setOnCheckedChangeListener((v, value) -> onChange.accept(value));
@@ -459,8 +482,8 @@ public final class Ui {
             final int index = i; boolean on = i == selected; NavItem item = items.get(i);
             LinearLayout cell = column(); cell.setGravity(Gravity.CENTER); cell.setMinimumHeight(dp(56));
             LinearLayout pill = row(); pill.setGravity(Gravity.CENTER); pill.setPadding(dp(16), dp(4), dp(16), dp(4));
-            if (on) pill.setBackground(shape(UmbraColors.ACCENT_PRIMARY_CONTAINER, 100));
-            pill.addView(iconView(item.glyph(), on ? UmbraColors.ACCENT_PRIMARY : UmbraColors.TEXT_SECONDARY, 22));
+            if (on) pill.setBackground(shape(UmbraColors.SURFACE_SOFT, 100));
+            pill.addView(iconView(item.glyph(), on ? UmbraColors.ACCENT_MUTED : UmbraColors.TEXT_SECONDARY, 22));
             cell.addView(pill);
             TextView l = text(UmbraType.CAPTION, item.label(), on ? UmbraColors.TEXT_PRIMARY : UmbraColors.TEXT_SECONDARY);
             if (on) l.setTypeface(UmbraType.LABEL.typeface());
@@ -488,7 +511,7 @@ public final class Ui {
         LinearLayout b = column();
         b.setBackground(shape(m.outgoing() ? UmbraColors.BUBBLE_OUTGOING : UmbraColors.BUBBLE_INCOMING, 18));
         b.setPadding(dp(14), dp(10), dp(14), dp(8));
-        if (m.sender() != null && !m.outgoing()) b.addView(text(UmbraType.CAPTION, m.sender(), UmbraColors.ACCENT_SECONDARY));
+        if (m.sender() != null && !m.outgoing()) b.addView(text(UmbraType.CAPTION, m.sender(), UmbraColors.ACCENT_MUTED));
         StringBuilder spoken = new StringBuilder(m.outgoing() ? "Enviado" : m.sender() != null ? m.sender() : "Recibido");
         switch (m.kind()) {
             case FILE, IMAGE -> {

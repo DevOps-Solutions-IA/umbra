@@ -43,7 +43,7 @@ public final class SecureDialogs {
             .setNegativeButton("Cancelar", null)
             .setPositiveButton(confirmLabel, (d, w) -> onConfirm.run()).create();
         show(dialog, track);
-        if (destructive) dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(UmbraColors.DANGER);
+        if (destructive) dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(UmbraColors.DANGER_FG);
         return dialog;
     }
 

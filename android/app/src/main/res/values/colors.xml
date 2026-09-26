@@ -2,9 +2,10 @@
 <!-- Mirror of app.umbra.ui.design.UmbraColors used only by the window theme.
      UiDesignTokensTest keeps both definitions identical. -->
 <resources>
-    <color name="umbra_background_primary">#FF0B0C10</color>
-    <color name="umbra_surface">#FF171A21</color>
-    <color name="umbra_accent_primary">#FF9A8CFF</color>
-    <color name="umbra_text_primary">#FFF3F4F7</color>
-    <color name="umbra_text_secondary">#FFAAB1BF</color>
+    <color name="umbra_background_primary">#FF0E120F</color>
+    <color name="umbra_surface">#FF1B231D</color>
+    <color name="umbra_accent_primary">#FF6F7F62</color>
+    <color name="umbra_accent_muted">#FFA0AD93</color>
+    <color name="umbra_text_primary">#FFF1F3EE</color>
+    <color name="umbra_text_secondary">#FFC4CBBF</color>
 </resources>

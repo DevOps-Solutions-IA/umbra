@@ -157,7 +157,7 @@ public final class HomeScreens {
         body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Desconectar Bluetooth", Glyph.CLOSE, a::disconnect));
         body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Después de conectar",
             "El contacto aparece en Chats como no verificado. Comparen el código de seguridad en ambos teléfonos antes de enviar.", null, null));
-        body.addView(ui.text(UmbraType.CAPTION, "El alcance depende de los teléfonos y del entorno. No es una red de malla ni una conexión a distancia.", UmbraColors.WARNING));
+        body.addView(ui.text(UmbraType.CAPTION, "El alcance depende de los teléfonos y del entorno. No es una red de malla ni una conexión a distancia.", UmbraColors.WARNING_FG));
         return Screen.of(top, body, nav);
     }
 

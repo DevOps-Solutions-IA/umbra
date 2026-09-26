@@ -126,7 +126,7 @@ public final class SecurityScreens {
             case MANUAL -> {
                 panel.addView(ui.text(UmbraType.LABEL, "Comparación manual"));
                 panel.addView(ui.text(UmbraType.CAPTION, "Escribe el código completo que ve la otra persona. UMBRA lo compara con el tuyo; solo si coincide se marca como verificado."));
-                if (level == TrustLevel.BLOCKED) panel.addView(ui.text(UmbraType.CAPTION, "Desbloquea el contacto para verificarlo.", UmbraColors.WARNING));
+                if (level == TrustLevel.BLOCKED) panel.addView(ui.text(UmbraType.CAPTION, "Desbloquea el contacto para verificarlo.", UmbraColors.WARNING_FG));
                 else {
                     EditText entered = ui.field("Código de la otra persona");
                     entered.setSingleLine(false); entered.setMaxLines(4);

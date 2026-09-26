@@ -1,7 +1,7 @@
 <resources>
   <style name="Theme.Umbra" parent="android:style/Theme.Material.NoActionBar">
     <item name="android:fontFamily">sans</item>
-    <item name="android:colorAccent">@color/umbra_accent_primary</item>
+    <item name="android:colorAccent">@color/umbra_accent_muted</item>
     <item name="android:colorPrimary">@color/umbra_background_primary</item>
     <item name="android:colorBackground">@color/umbra_background_primary</item>
     <item name="android:textColorPrimary">@color/umbra_text_primary</item>
@@ -15,7 +15,7 @@
     <item name="android:alertDialogTheme">@style/Theme.Umbra.Dialog</item>
   </style>
   <style name="Theme.Umbra.Dialog" parent="android:style/Theme.Material.Dialog.Alert">
-    <item name="android:colorAccent">@color/umbra_accent_primary</item>
+    <item name="android:colorAccent">@color/umbra_accent_muted</item>
     <item name="android:colorBackground">@color/umbra_surface</item>
     <item name="android:textColorPrimary">@color/umbra_text_primary</item>
     <item name="android:textColorSecondary">@color/umbra_text_secondary</item>
