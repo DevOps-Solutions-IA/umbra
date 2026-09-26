@@ -1,36 +1,51 @@
 # UMBRA — símbolo, app icon e iconografía
 
+Símbolo oficial: **C3 «Cheurón»** (Variante C refinada).
+
 Estado 2026-09-26: recursos implementados y verificados estáticamente; las capturas Android reales
 salen de la CI (`UiScreensRenderTest`, archivos `21-*`, `22-*`, `23-*`). Los PNG de esta carpeta son
 maquetas renderizadas en un navegador desde los mismos XML, **no capturas de Android**.
 
-## Tres propuestas (se conservan para revisión)
+## Decisión vigente (2026-09-26): Variante C refinada → **C3 «Cheurón»**
 
-| Variante | Idea | Archivo |
-|---|---|---|
-| **A — Monograma angular (seleccionada)** | U angular con base en punta y muesca central en V (trazo medio de la M); sugiere U/M/A sin escribir letras | `umbra-symbol-a.svg` |
-| B — Umbra · eclipse | Media corona (cuenco de sombra) que contiene un disco | `umbra-symbol-b.svg` |
-| C — Minimal táctico | Dos columnas y una cuña central, estilo plantilla | `umbra-symbol-c.svg` |
+El propietario eligió la Variante C (minimal táctico) como identidad. Se hicieron tres ajustes
+geométricos del mismo concepto —dos columnas y una cuña central, simétricos— para corregir que
+la C original se fundía a 16 px y se leía como «M» o «II»:
 
-Comparación a 16/20/24/32/48 px, en blanco/negro, oliva y con cinco máscaras: `umbra-symbol-proposals.png`.
+| Refinamiento | Ajuste | Resultado | Archivo |
+|---|---|---|---|
+| C1 — Cuña suspendida | Columnas de 3.5, cuña ancha separada del borde superior, huecos 2.3 | Sin vértice de «M», pero a 16 px la cuña queda en un punto y se lee «H»/«I·I» | `umbra-symbol-c1.svg` |
+| C2 — Techos biselados | Bisel exterior de 45° en las columnas, cuña larga anclada arriba | La silueta sigue siendo una «M» redondeada a 16–24 px | `umbra-symbol-c2.svg` |
+| **C3 — Cheurón (seleccionado)** | Columnas de 4.2 con base biselada a 45° hacia el centro, hoja central de 4.0 con punta a 45°, huecos de 2.6 | La base de las tres piezas forma un cheurón; ni «M» (la cuña no es un vértice corto), ni «II»/«H» (la hoja es tan ancha como las columnas) | `umbra-symbol-c3.svg` |
 
-### Por qué A
+Comparación (16/20/24/32/48/72 px, render real de 16 px ampliado ×6, 512 px, negro, claro,
+#879676, círculo, squircle, cuadrado redondeado): `umbra-symbol-c-refinements.png`.
 
-- **24dp:** es la silueta con más área rellena y la única cuya forma exterior se reconoce a 16px.
-  B pierde el hueco entre disco y corona por debajo de 20px y puede leerse como un ojo o una cara;
-  C se lee como letras («M»/«II») y sus columnas se funden a 16px.
-- **Máscaras:** A queda compacta (su punto más lejano está a ~30dp del centro, dentro del radio de
-  33dp de la zona segura) y no se corta en círculo, squircle, cuadrado redondeado, gota ni cuadrado.
-- **Monocromo:** es una sola forma rellena sin detalles finos, válida para icono temático y notificación.
-- **Riesgo a revisar (decisión humana):** la base en punta puede recordar a un emblema/chevron.
-  No es un escudo cerrado ni usa candados, armas o insignias, pero conviene validarlo con usuarios.
+### Por qué C3
+
+- **16dp:** los dos huecos miden 2.6 unidades (1.7 px a 16 px) y la hoja 4.0 (2.7 px): en el render
+  de 16 px sin suavizado siguen abiertos; en C1 la cuña cae a ~2 px y desaparece, y C2 se funde.
+- **No es una letra:** las tres piezas tienen el mismo peso óptico y terminan en un cheurón común;
+  no hay vértice superior (M), ni barras finas con hueco dominante (II), ni travesaño (H).
+- **Máscaras:** a escala ×2.6 su punto más lejano queda a 30.2dp del centro (zona segura: 33dp);
+  no se corta en círculo, squircle, cuadrado redondeado, gota ni cuadrado.
+- **Monocromo:** tres formas rellenas sin detalles finos; válido para icono temático y notificación.
+- **A revisar por una persona:** el cheurón puede evocar una insignia; no incluye armas, escudo cerrado
+  ni rangos, pero conviene validarlo con usuarios.
+
+### Propuestas anteriores (solo documentación, no activas en recursos)
+
+- A — Monograma angular: `umbra-symbol-a.svg` (descartada; fue la primera implementación).
+- B — Umbra · eclipse: `umbra-symbol-b.svg` (descartada).
+- C — Minimal táctico original: `umbra-symbol-c.svg` (sustituido por C3).
+- Hoja de las tres propuestas iniciales: `umbra-symbol-proposals.png`.
 
 ## Implementación Android (única fuente de verdad)
 
 - Geometría: `res/values/brand.xml` → `@string/umbra_symbol_path` (rejilla 24×24, rellena, sin trazos,
   degradados ni transparencias). Colores `@color/umbra_symbol` (#A0AD93) y `@color/umbra_launcher_background` (#0E120F).
 - `drawable/umbra_symbol.xml`: logo interno (24dp, se tiñe desde el sistema de diseño con `Ui.logo()`).
-- `drawable/ic_launcher_foreground.xml`: capa frontal adaptativa de 108dp (escala ×2.4, centrado).
+- `drawable/ic_launcher_foreground.xml`: capa frontal adaptativa de 108dp (escala ×2.6, centrado).
 - `mipmap-anydpi-v26/ic_launcher.xml` y `ic_launcher_round.xml`: fondo, frente y **monochrome** separados.
 - `drawable/ic_notification_umbra.xml`: silueta blanca 24dp. Preparado: esta versión no publica notificaciones.
 - Splash Android 12+: `windowSplashScreenBackground` #0E120F + `windowSplashScreenAnimatedIcon` = capa frontal.

@@ -16,6 +16,7 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 import static org.junit.Assert.*;
 
+
 /**
  * Static checks of the branding and icon resources (not a render): launcher/adaptive/monochrome,
  * notification and splash wiring, one source of truth for the symbol, the 24dp icon grid, resolvable
@@ -92,6 +93,26 @@ public class UiIconResourcesTest {
         for (double[] p : PathPoints.of(path)) max = Math.max(max, Math.hypot(tx + s * p[0] - 54, ty + s * p[1] - 54));
         assertTrue("symbol reaches " + max + "dp from center; safe zone radius is 33dp", max <= 33.0);
         assertTrue("symbol too small for recognition", max >= 24.0);
+        // Variant C3 (minimal táctico): exactly three filled pieces, symmetric, centered, with gaps that
+        // stay open at 16dp (>= 2.4 units = 1.6px) and a central blade wide enough to read (>= 3.6 units).
+        List<double[]> boxes = new ArrayList<>();
+        for (String piece : path.split("(?=M)")) {
+            if (piece.isBlank()) continue;
+            double minX = 99, maxX = -99, minY = 99, maxY = -99;
+            for (double[] p : PathPoints.of(piece)) { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]); }
+            boxes.add(new double[]{minX, maxX, minY, maxY});
+        }
+        assertEquals("three strokes", 3, boxes.size());
+        boxes.sort(Comparator.comparingDouble(b -> b[0]));
+        for (int i = 1; i < boxes.size(); i++) assertTrue("gap closes at 16dp", boxes.get(i)[0] - boxes.get(i - 1)[1] >= 2.4);
+        assertTrue("central blade too thin", boxes.get(1)[1] - boxes.get(1)[0] >= 3.6);
+        assertClose("horizontal symmetry", 24.0, boxes.get(0)[0] + boxes.get(2)[1], 1e-6);
+        assertClose("columns mirror", boxes.get(0)[1] - boxes.get(0)[0], boxes.get(2)[1] - boxes.get(2)[0], 1e-6);
+        double top = Math.min(boxes.get(0)[2], boxes.get(1)[2]), bottom = Math.max(boxes.get(1)[3], boxes.get(0)[3]);
+        assertClose("vertically centered", 12.0, (top + bottom) / 2, 0.1);
+        // The discarded proposals must not remain in production resources.
+        for (String discarded : new String[]{"L7.6,13.3 L12,17.1", "A9.5,9.5 0 0,0 21.5,10", "M3.5,3.5 L7.6,3.5 L7.6,20.5"})
+            for (Path p : files(SRC, ".xml")) assertFalse(p + " still contains a discarded symbol", Files.readString(p).contains(discarded));
         String styles = Files.readString(RES.resolve("values/styles.xml"));
         assertTrue(styles.contains("windowSplashScreenAnimatedIcon\">@drawable/ic_launcher_foreground"));
         assertTrue(styles.contains("windowSplashScreenBackground\">@color/umbra_launcher_background"));
@@ -192,6 +213,7 @@ public class UiIconResourcesTest {
         }
     }
 
+    private static void assertClose(String m, double e, double a, double d) { assertTrue(m + ": " + e + " vs " + a, Math.abs(e - a) <= d); }
     /** Minimal SVG path walker: endpoints, control points and sampled arcs (absolute coordinates). */
     static final class PathPoints {
         static List<double[]> of(String d) {
