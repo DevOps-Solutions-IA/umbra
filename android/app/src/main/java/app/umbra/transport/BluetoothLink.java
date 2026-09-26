@@ -14,7 +14,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /** Bounded RFCOMM transport. Pairing is explicit; reconnects require known verified identity keys. */
 @SuppressLint("MissingPermission")
 public final class BluetoothLink implements AutoCloseable {
+    public enum Stage { CONNECTING, SOCKET_CONNECTED, HELLO_SENT, HELLO_RECEIVED, PROOF_SENT, AUTHENTICATED }
     public interface Listener {
+        default void stage(Stage stage) {}
         String ownId() throws Exception;
         JSONObject ownCard() throws Exception;
         String acceptCard(JSONObject card) throws Exception;
@@ -103,7 +105,9 @@ public final class BluetoothLink implements AutoCloseable {
                 if (closed.get() || epoch != expectedEpoch || socket != null) { active.close(); return; }
                 socket = active; started = lastFrame = System.nanoTime();
             }
+            listener.stage(Stage.CONNECTING);
             if (dialer) { adapter.cancelDiscovery(); active.connect(); }
+            listener.stage(Stage.SOCKET_CONNECTED);
             if (active.getRemoteDevice().getBondState() != BluetoothDevice.BOND_BONDED)
                 throw new SecurityException("Paired device required");
             String local = Wire.identity(listener.ownId()); byte[] nonce = Bytes.random(32);
@@ -111,7 +115,9 @@ public final class BluetoothLink implements AutoCloseable {
                 .put("nonce", Bytes.b64(nonce)).put("role", dialer ? "dialer" : "listener").put("enroll", enroll);
             if (enroll) hello.put("card", listener.ownCard()); // Never sent automatically on ordinary reconnect.
             write(active, hello);
+            listener.stage(Stage.HELLO_SENT);
             JSONObject remoteHello = Wire.parse(Framing.read(active.getInputStream(), 20_000), 20_000);
+            listener.stage(Stage.HELLO_RECEIVED);
             Wire.fields(remoteHello, enroll ? new String[]{"kind", "v", "id", "nonce", "role", "enroll", "card"}
                 : new String[]{"kind", "v", "id", "nonce", "role", "enroll"});
             if (!"hello".equals(Wire.string(remoteHello, "kind", 16)) || Wire.integer(remoteHello, "v") != 2 ||
@@ -126,6 +132,7 @@ public final class BluetoothLink implements AutoCloseable {
                 throw new SecurityException("Contact identity substitution");
             byte[] proof = listener.prove(dialer, remote, nonce, otherNonce);
             write(active, new JSONObject().put("kind", "proof").put("signature", Bytes.b64(proof)));
+            listener.stage(Stage.PROOF_SENT);
             JSONObject remoteProof = Wire.parse(Framing.read(active.getInputStream(), 512), 512);
             Wire.fields(remoteProof, "kind", "signature");
             if (!"proof".equals(Wire.string(remoteProof, "kind", 16))) throw new SecurityException("Missing identity proof");
@@ -134,6 +141,7 @@ public final class BluetoothLink implements AutoCloseable {
                 if (closed.get() || socket != active || epoch != expectedEpoch || System.nanoTime() - started > TimeUnit.SECONDS.toNanos(20))
                     throw new IOException("Handshake no longer active");
                 peer = remote; lastFrame = System.nanoTime();
+                listener.stage(Stage.AUTHENTICATED);
             }
             listener.status(enroll ? "Clave del dispositivo comprobada · verifica el código del contacto" : "Bluetooth: contacto verificado conectado");
             long window = System.nanoTime(); int frames = 0;

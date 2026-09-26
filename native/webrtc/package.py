@@ -8,9 +8,9 @@ from pathlib import Path
 import zipfile
 
 SOURCE='73cb8180f7258ee292878d6edd05177f41883962'
-BUILDER='d4cb521b25171c3d3cfe385ba0de63688dbf9586'
+BUILDER='2040a2c92dd8e0408556fb13a3230b50292dc46b'
 DEPOT='ca054941f756b50e1a3d83727270d879bec1f331'
-PATCH='8bf805bd8b4b7142ccee7988e31abe75fc1cb412b470718ec08545d2de1fab48'
+PATCH='41df998e0088d3bf675c77547e87b10a5f825038b5297119946cd7d14cf02017'
 ABIS={'arm64-v8a':183,'armeabi-v7a':40,'x86':3,'x86_64':62}
 
 def digest(data): return hashlib.sha256(data).hexdigest()
@@ -62,11 +62,12 @@ def combine(root,output):
         provenance[abi]={'inputHashes':checks,'args':args,'dependencies':(folder/'dependencies.txt').read_text()}
     combined['AndroidManifest.xml']=common[0];combined['classes.jar']=normalized(common[1])
     combined['assets/umbra-webrtc/LICENSE']=(folder/'LICENSE').read_bytes()
+    combined['assets/umbra-webrtc/LICENSE-VOICE-MODULATOR']=(Path(__file__).parent/'voice-modulator/LICENSE').read_bytes()
     combined['assets/umbra-webrtc/PATENTS']=(folder/'PATENTS').read_bytes()
-    receipt={'sourceRevision':SOURCE,'builderCommit':BUILDER,'depotRevision':DEPOT,'sourcePatchSha256':PATCH,'sourceBuildRun':35634570646,'abiBuilds':provenance}
+    receipt={'sourceRevision':SOURCE,'builderCommit':BUILDER,'depotRevision':DEPOT,'sourcePatchSha256':PATCH,'sourceBuildRun':36187887900,'abiBuilds':provenance}
     output.parent.mkdir(parents=True,exist_ok=True)
     output.write_bytes(normalized(combined))
-    pin={**receipt,'coordinate':'app.umbra:webrtc-source:150.7871.01-umbra.3','aarSha256':digest(output.read_bytes()),'entries':{name:digest(data) for name,data in sorted(combined.items())}}
+    pin={**receipt,'coordinate':'app.umbra:webrtc-source:150.7871.01-umbra.5','aarSha256':digest(output.read_bytes()),'entries':{name:digest(data) for name,data in sorted(combined.items())}}
     output.with_suffix('.json').write_text(json.dumps(pin,indent=2)+'\n')
     print('Combined four reviewed ABI builds; SHA256 '+pin['aarSha256'])
 

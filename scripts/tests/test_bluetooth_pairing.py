@@ -53,3 +53,27 @@ class PairingTests(unittest.TestCase):
             with patch.object(flow, 'command') as command:
                 self.assertFalse(flow.tap('emulator-5554', [row, row], 'same'))
                 command.assert_not_called()
+
+    def test_bonding_does_not_return_with_settings_discovery_still_active(self):
+        with tempfile.TemporaryDirectory() as folder:
+            serials=('emulator-5554','emulator-5556');addresses=('BB:BB:BB:00:00:01','BB:BB:BB:00:00:02')
+            flow=pairing.Pairing('adb',serials,Path(folder),60);homes=[];idle_checked=[]
+            def command(serial,*args):
+                if args[:2]==('shell','getprop'):return '1'
+                if args==('shell','input','keyevent','KEYCODE_HOME'):homes.append(serial);return ''
+                if args==('shell','dumpsys','bluetooth_manager'):
+                    idle=serial in homes
+                    if idle:idle_checked.append(serial)
+                    return '  Discovering: '+('false' if idle else 'true')+'\n  Bonded devices:\n    '+addresses[1-serials.index(serial)]+' [ DUAL ] synthetic\n\n'
+                return ''
+            with patch.object(flow,'command',side_effect=command),patch.object(flow,'discovery',side_effect=[(a,'synthetic') for a in addresses]):
+                result=flow.run()
+            self.assertEqual(list(serials),homes)
+            self.assertEqual(list(serials),idle_checked)
+            self.assertEqual('stopped-after-settings',result['discovery'])
+
+    def test_discovery_readiness_requires_unambiguous_observation(self):
+        self.assertTrue(pairing.discovering('  Discovering: true\n'))
+        self.assertFalse(pairing.discovering('  Discovering: false\n'))
+        for dump in ('','Discovering: unknown','Discovering: false\nDiscovering: true'):
+            with self.assertRaises(RuntimeError):pairing.discovering(dump)

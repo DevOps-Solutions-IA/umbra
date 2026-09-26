@@ -8,6 +8,17 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 import run_video_matrix as matrix
 
 class VideoMatrixTest(unittest.TestCase):
+    def test_failure_summary_exposes_locations_not_credentials_or_pcm(self):
+        with tempfile.TemporaryDirectory() as root:
+            report=Path(root);(report/'sample').mkdir()
+            (report/'sample-driver.log').write_text('  File "/runner/scripts/run_voice_integration.py", line 219, in main\nRuntimeError: synthetic-secret-do-not-echo\n')
+            (report/'sample'/'engine-voice-a.log').write_text('java.lang.AssertionError: synthetic-secret-do-not-echo\n\tat app.umbra.media.VoiceEngineFixtureListener.testRunStarted(VoiceEngineFixtureListener.java:210)\n')
+            result=matrix.failure_summary(report,'sample')
+            self.assertEqual(['run_voice_integration.py:219'],result['driverLocations'])
+            self.assertEqual(['VoiceEngineFixtureListener.java:210'],result['aLocations'])
+            self.assertEqual([],result['bLocations'])
+            self.assertNotIn('synthetic-secret',str(result))
+
     def test_runs_later_independent_cases_without_hiding_an_earlier_failure(self):
         with tempfile.TemporaryDirectory() as root:
             commands=[('failure',[sys.executable,'-c','raise SystemExit(7)']),('success',[sys.executable,'-c','pass'])]

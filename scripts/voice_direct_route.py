@@ -32,7 +32,8 @@ def probe_udp(adb: str, sender: str, receiver: str, address: str) -> bool:
         if sent.returncode not in (0,1,124): raise RuntimeError('AVD UDP probe tool failed')
         received,diagnostic=listener.communicate(timeout=7)
         if listener.returncode not in (0,124) or diagnostic:
-            raise RuntimeError('AVD UDP probe receiver failed')
+            kind='timeout' if b'timeout' in diagnostic.lower() else ('refused' if b'refused' in diagnostic.lower() else 'other' if diagnostic else 'none')
+            raise RuntimeError(f'AVD UDP probe receiver failed: exit={listener.returncode}, diagnostic={kind}, receivedBytes={len(received)}')
         return received==challenge
     finally:
         if listener.poll() is None:

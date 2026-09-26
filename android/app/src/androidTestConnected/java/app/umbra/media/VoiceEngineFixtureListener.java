@@ -39,13 +39,25 @@ public final class VoiceEngineFixtureListener extends RunListener {
         }
     }
     private long nextPoll;
-    private void pump(RelayClient relay,Engine engine) throws Exception {
+    private int expiredDeliveriesRejected;
+    private void pump(RelayClient relay,Engine engine) throws Exception { pump(relay,engine,null,null,false,Long.MAX_VALUE); }
+    private void pump(RelayClient relay,Engine engine,String callId,NativeVoiceSession voice,boolean expiryExpected,long credentialExpiry) throws Exception {
         for(JSONObject q:engine.outbox()) {
             // Match production scheduling. A successful upload is not a request
             // to repost the same immutable envelope on every 100 ms fixture tick.
             if(q.optLong("nextRelay",0)>Bytes.now()) continue;
             var envelope=q.getJSONObject("envelope");
-            relay.sendAuthorized(engine,engine.contact(q.getString("peer")).getJSONObject("card"),envelope);
+            try { relay.sendAuthorized(engine,engine.contact(q.getString("peer")).getJSONObject("card"),envelope); }
+            catch(SecurityException rejected) {
+                // Cancellation can occur after outbox enumeration and before the transport guard.
+                // Assert this exact expected expiry rejection; never mark it sent, retry it, or
+                // accept identity/storage/other-session errors as successful cancellation evidence.
+                ExpiredDeliveryAssertion.check(rejected,expiryExpected && Bytes.now()>=credentialExpiry,voice!=null &&
+                    (voice.state()==NativeVoiceSession.State.FAILED || voice.state()==NativeVoiceSession.State.ENDED),
+                    callId,q.optString("callSession"));
+                expiredDeliveriesRejected++;
+                return; // Native closure must still pass the measured callback-quiescence checks.
+            }
             engine.transported(envelope.getString("id"),true);
         }
         long now=SystemClock.elapsedRealtime();
@@ -102,6 +114,8 @@ public final class VoiceEngineFixtureListener extends RunListener {
         boolean caller=configuration.getString("role").equals("A");
         boolean expectedRejection=configuration.optBoolean("expectedRejection");
         boolean withVideo=configuration.optBoolean("video");
+        boolean modulation=configuration.optBoolean("modulation");
+        boolean initialModulation=configuration.optBoolean("initialModulation");
         boolean oneWay=configuration.optBoolean("receiveOnlyCallee");
         var original=HttpsURLConnection.getDefaultSSLSocketFactory();
         var cert=java.security.cert.CertificateFactory.getInstance("X.509").generateCertificate(new java.io.ByteArrayInputStream(Bytes.utf8(configuration.getString("certificate"))));
@@ -123,7 +137,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
             write("synthetic-voice-ready.json",new JSONObject().put("ready",true));
             waitFor("synthetic-voice-start.json",SystemClock.elapsedRealtime()+20_000);
             String id=caller?engine.calls().invite(engine.calls().reviewInvite(peer,NetworkPolicy.RELAY_ONLY),true):null;
-            long deadline=SystemClock.elapsedRealtime()+70_000; boolean accepted=false;
+            long deadline=SystemClock.elapsedRealtime()+(modulation?140_000:70_000); boolean accepted=false;
             while(SystemClock.elapsedRealtime()<deadline) {
                 pump(relay,engine);
                 if(id==null) for(JSONObject row:engine.calls().sessions()) {
@@ -144,7 +158,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
             var consent=engine.calls().reviewMedia(id,REVISION);
             var lease=engine.calls().prepareMedia(consent,true);
             NativeVoiceSession.initialize(context);
-            AtomicInteger decoded=new AtomicInteger(),captured=new AtomicInteger();
+            AtomicInteger decoded=new AtomicInteger(),captured=new AtomicInteger(),modified=new AtomicInteger(),loud=new AtomicInteger(),playbackSamples=new AtomicInteger(),playbackRate=new AtomicInteger();
             long[] sample={0}; long[] nextFrame={0}; int inputTone=caller?1000:2000,expectedTone=caller?2000:1000;
             var adm=JavaAudioDeviceModule.builder(context).setSampleRate(48000)
                 .setUseHardwareAcousticEchoCanceler(false).setUseHardwareNoiseSuppressor(false)
@@ -154,9 +168,19 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     while(buffer.remaining()>=2*channels) { short value=(short)(12000*Math.sin(2*Math.PI*inputTone*sample[0]++/rate)); for(int c=0;c<channels;c++) buffer.putShort(value); }
                     captured.incrementAndGet(); return System.nanoTime();
                 }).setPlaybackSamplesReadyCallback(samples->{
+                    playbackSamples.set(samples.getData().length/(2*samples.getChannelCount()));playbackRate.set(samples.getSampleRate());
                     byte[] data=samples.getData(); int channels=samples.getChannelCount(),count=data.length/(2*channels); double re=0,im=0,energy=0;
                     for(int i=0;i<count;i++) { int pos=i*2*channels;short value=(short)((data[pos]&255)|(data[pos+1]<<8));double phase=2*Math.PI*expectedTone*i/samples.getSampleRate();re+=value*Math.cos(phase);im+=value*Math.sin(phase);energy+=(double)value*value; }
                     if(count>0 && energy/count>100000 && 2*(re*re+im*im)/(count*energy)>0.55) decoded.incrementAndGet();
+                    if(count>0 && energy/count>100000) {
+                        loud.incrementAndGet();double[] bands=new double[2];
+                        for(int band=0;band<2;++band) {
+                            double br=0,bi=0;int frequency=expectedTone+(band==0?-100:100);
+                            for(int i=0;i<count;i++) {int pos=i*2*channels;short value=(short)((data[pos]&255)|(data[pos+1]<<8));double phase=2*Math.PI*frequency*i/samples.getSampleRate();br+=value*Math.cos(phase);bi+=value*Math.sin(phase);}
+                            bands[band]=2*(br*br+bi*bi)/(count*energy);
+                        }
+                        if(bands[0]>0.12 && bands[1]>0.12 && bands[0]+bands[1]>0.55 && 2*(re*re+im*im)/(count*energy)<0.10)modified.incrementAndGet();
+                    }
                 }).createAudioDeviceModule();
             adm.setAudioRecordEnabled(false);
             JSONObject credential=configuration.getJSONObject("turn");
@@ -177,22 +201,38 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     } catch(Exception rejected) {return false;}
                 }; // Native SSLPostConnectionCheck independently verifies host/IP identity; SECURE remains configured.
             }
-            NativeVoiceSession.DescriptionPublisher hostile=configuration.optBoolean("incorrectFingerprint")?
-                (generation,role,sdp,fingerprint)->lease.description(generation,role,sdp,Bytes.sha256(Bytes.utf8(fingerprint))):null;
-            voice=new NativeVoiceSession(context,lease,turn,adm,false,verifier,hostile);
+            var nativeWorker=new java.util.concurrent.atomic.AtomicReference<Thread>();
+            NativeVoiceSession.DescriptionPublisher hostile=(generation,role,sdp,fingerprint)->{
+                nativeWorker.set(Thread.currentThread());
+                lease.description(generation,role,sdp,configuration.optBoolean("incorrectFingerprint")?Bytes.sha256(Bytes.utf8(fingerprint)):fingerprint);
+            };
+            voice=new NativeVoiceSession(context,lease,turn,adm,false,verifier,hostile,caller&&initialModulation);
             AtomicInteger videoCaptured=new AtomicInteger();
             SyntheticVideoCapturer.Decoded videoDecoded=new SyntheticVideoCapturer.Decoded(caller);
             if(withVideo) { voice.syntheticVideo(()->new SyntheticVideoCapturer(caller,videoCaptured));voice.setRemoteVideoSink(videoDecoded); }
             int videoStage=0,videoAudioBaseline=0,videoFrameBaseline=0,videoCaptureBaseline=0;long videoOffAt=0,videoOffRequestedNanos=0;
             boolean videoRequested=false,videoAccepted=false;
             boolean evidence=false,muting=false,mutedEvidence=false,resuming=false,resumedEvidence=false,terminationApplied=false;
+            boolean initialProcessingEvidence=false,initialNatural=false;
             boolean cameraDeniedChecked=false,cameraDeniedEvidence=false;int cameraDeniedBaseline=0;
+            int processingStep=0,processingNatural=0,processingModified=0,processingLoud=0,processingVideo=0;
+            long processingAt=0,processingWindow=0;String processingExpected="",processingDiagnostic="";
             long muteAt=0; int quietBaseline=-1,resumeBaseline=0;
             while(SystemClock.elapsedRealtime()<deadline) {
-                pump(relay,engine);
+                boolean expiryExpected=evidence &&
+                    Files.exists(files.resolve("synthetic-voice-loss.json")) &&
+                    read("synthetic-voice-loss.json").optString("action").equals("credential-expiry");
+                pump(relay,engine,id,voice,expiryExpected,credential.getLong("expires"));
                 if(voice.state()==NativeVoiceSession.State.FAILED && !evidence) {
                     if(!expectedRejection) throw new AssertionError("Native authenticated voice failed before audio: "+voice.failureStage()+"; "+voice.negotiationDiagnostic()+"; captured="+captured.get()+", decoded="+decoded.get());
                     if(captured.get()!=0 || decoded.get()!=0 || videoCaptured.get()!=0) throw new AssertionError("Rejected TURN path captured or decoded audio");
+                    String terminalReason=voice.failureStage();
+                    // Observe actual scheduled teardown/callbacks after the terminal transition.
+                    // Cancellation must not rewrite a certificate rejection as a generic tick error.
+                    Thread.sleep(350);
+                    if(voice.state()!=NativeVoiceSession.State.FAILED || !terminalReason.equals(voice.failureStage()) ||
+                        captured.get()!=0 || decoded.get()!=0 || videoCaptured.get()!=0)
+                        throw new AssertionError("Terminal rejection changed during late-callback observation");
                     JSONObject rejected=new JSONObject().put("rejectedBeforeCapture",true);
                     if(configuration.optBoolean("incorrectFingerprint")) {
                         if(!java.util.Set.of("native-certificate-binding","native-connection-failed","native-connection-disconnected","authorization-cancelled").contains(voice.failureStage()))throw new AssertionError("Wrong-fingerprint test did not reach certificate rejection or native peer closure: "+voice.failureStage()+"; "+voice.negotiationDiagnostic());
@@ -251,9 +291,19 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         for(JSONObject row:new Engine(db,SystemClock::elapsedRealtime).calls().sessions())
                             if(!app.umbra.calls.CallPayload.TERMINAL.contains(row.getString("state"))) throw new AssertionError("SQLite rollback revived voice");
                     }
-                    write("synthetic-voice-lost.json",new JSONObject().put("failedClosed",true).put("nativeCaptureQuietAfterMillis",quietAfter).put("nativeCaptureObservedMillis",observedFor).put("lateCaptureCallbacks",lateCaptureCallbacks));waitFor("synthetic-voice-stop.json",deadline);break;
+                    write("synthetic-voice-lost.json",new JSONObject().put("failedClosed",true).put("nativeCaptureQuietAfterMillis",quietAfter).put("nativeCaptureObservedMillis",observedFor).put("lateCaptureCallbacks",lateCaptureCallbacks).put("expiredDeliveriesRejected",expiredDeliveriesRejected));waitFor("synthetic-voice-stop.json",deadline);break;
                 }
-                if(!evidence && decoded.get()>=100 && captured.get()>=100 && voice.receivedAudioPackets()>=50 && voice.state()==NativeVoiceSession.State.ACTIVE) {
+                if(initialModulation && !initialProcessingEvidence && voice.state()==NativeVoiceSession.State.ACTIVE && (caller?decoded.get():modified.get())>=100) {
+                    if(!caller && decoded.get()!=0)throw new AssertionError("Natural voice escaped initial MODULATED selection");
+                    if(caller && !voice.modulationStatus().equals("ON"))throw new AssertionError("Initial mode not effective: "+voice.modulationStatus()+", faults="+voice.processingMetric(4)+", processed="+voice.processingMetric(1)+", modulated="+voice.processingMetric(2));
+                    write("synthetic-voice-initial-processing.json",new JSONObject().put("natural",decoded.get()).put("modified",modified.get()).put("effective",voice.modulationStatus()));
+                    initialProcessingEvidence=true;
+                }
+                if(initialModulation && initialProcessingEvidence && !initialNatural && Files.exists(files.resolve("synthetic-voice-initial-natural.json"))) {
+                    if(caller)voice.modulation(false,true); // Explicit synthetic owner consent from host.
+                    initialNatural=true;
+                }
+                if(!evidence && (!initialModulation || initialNatural) && decoded.get()>=100 && captured.get()>=100 && voice.receivedAudioPackets()>=50 && voice.state()==NativeVoiceSession.State.ACTIVE) {
                     auditNativeDescriptions(engine.calls().session(id),credential.getJSONArray("urls").getString(0),credential.optString("relayAddress"));
                     write("synthetic-voice-audio.json",new JSONObject().put("sdpAddressAudit",true).put("decodedBuffers",decoded.get()).put("capturedBuffers",captured.get()).put("verifiedNativeTransport",true).put("receivedAudioPackets",voice.receivedAudioPackets()).put("codec",voice.audioCodec()).put("nativeRelayProtocol",voice.nativeRelayProtocol())); evidence=true;
                 }
@@ -302,7 +352,26 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         }
                     }
                     if(videoStage==2 && Files.exists(files.resolve("synthetic-voice-video-off.json"))) {
-                        videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();videoOffAt=SystemClock.elapsedRealtime();videoCaptureBaseline=videoCaptured.get();videoAudioBaseline=decoded.get();videoStage=6;
+                        Bundle beforeStop=new Bundle();beforeStop.putString("videoBeforeStop",voice.state().name()+":"+voice.failureStage()+":"+voice.videoStatus());
+                        InstrumentationRegistry.getInstrumentation().sendStatus(0,beforeStop);
+                        if(configuration.optBoolean("stopVideoRace")) {
+                            final NativeVoiceSession activeVoice=voice;
+                            var entered=new java.util.concurrent.CountDownLatch(1);
+                            var resume=new java.util.concurrent.CountDownLatch(1);
+                            db.beforeTransaction=()->{
+                                if(Thread.currentThread()!=nativeWorker.get() || !activeVoice.videoActivationStage().equals("video-authorization"))return;
+                                db.beforeTransaction=null;entered.countDown();
+                                try {if(!resume.await(3,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("Video race release missing");}
+                                catch(InterruptedException e){Thread.currentThread().interrupt();throw new AssertionError(e);}
+                            };
+                            try {
+                                if(!entered.await(2,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("Native activation rendezvous not reached");
+                                videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();
+                            } finally {db.beforeTransaction=null;resume.countDown();}
+                            Thread.sleep(350);
+                            if(voice.state()!=NativeVoiceSession.State.ACTIVE)throw new AssertionError("Video-only cancellation terminated authorized audio: "+voice.failureStage());
+                        } else {videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();}
+                        videoOffAt=SystemClock.elapsedRealtime();videoCaptureBaseline=videoCaptured.get();videoAudioBaseline=decoded.get();videoStage=6;
                     }
                     if(videoStage==6 && SystemClock.elapsedRealtime()-videoOffAt>=2000 && decoded.get()-videoAudioBaseline>=50) {
                         int atRest=videoCaptured.get();Thread.sleep(500);
@@ -322,6 +391,60 @@ public final class VoiceEngineFixtureListener extends RunListener {
                             .put("captureCallbacksAfterRequest",atRest-videoCaptureBaseline).put("decodedAudioAfterVideoOff",decoded.get()-videoAudioBaseline));videoStage=3;
                     }
                 }
+                if(modulation) {
+                    String diagnostic=voice.state()+":"+voice.modulationStatus();
+                    if(!diagnostic.equals(processingDiagnostic)) {
+                        processingDiagnostic=diagnostic;
+                        JSONObject detail=new JSONObject().put("state",voice.state().name()).put("effective",voice.modulationStatus()).put("step",processingStep)
+                            .put("failureStage",voice.failureStage());
+                        try {detail.put("faults",voice.processingMetric(4)).put("maxBlockNanos",voice.processingMetric(8)).put("processed",voice.processingMetric(1));}
+                        catch(IllegalStateException disposed) {detail.put("processorDisposed",true);}
+                        write("synthetic-voice-processing-diagnostic.json",detail);
+                    }
+                }
+                if(modulation && resumedEvidence && (!withVideo || videoStage==5)) {
+                    String command="synthetic-voice-processing-"+processingStep+".json";
+                    if(processingAt==0 && Files.exists(files.resolve(command))) {
+                        JSONObject action=read(command);processingExpected=action.getString("expected");
+                        if(caller) {
+                            switch(action.getString("action")) {
+                                case "on", "retry" -> voice.modulation(true,false);
+                                case "off" -> voice.modulation(false,true);
+                                case "unconfirmed-off" -> {
+                                    try {voice.modulation(false,false);throw new AssertionError("Natural voice bypassed confirmation");}
+                                    catch(SecurityException expected) { /* Required local confirmation. */ }
+                                }
+                                case "mute" -> voice.mute(true);
+                                case "unmute" -> voice.mute(false);
+                                case "fault" -> voice.invalidateProcessing();
+                                default -> throw new AssertionError("Unknown synthetic processing action");
+                            }
+                        }
+                        processingAt=SystemClock.elapsedRealtime();processingWindow=0;
+                    }
+                    if(processingAt!=0) {
+                        long now=SystemClock.elapsedRealtime();
+                        if(processingWindow==0 && now-processingAt>=1200) {
+                            if(now-processingAt>2500)throw new AssertionError("Processing transition observation began too late");
+                            processingWindow=now;processingNatural=decoded.get();processingModified=modified.get();processingLoud=loud.get();processingVideo=videoDecoded.frames.get();
+                        }
+                        if(processingWindow!=0 && now-processingWindow>=2000) {
+                            if(now-processingWindow>3500)throw new AssertionError("Processing observation window overran");
+                            int natural=decoded.get()-processingNatural,changed=modified.get()-processingModified,energy=loud.get()-processingLoud;
+                            String expected=caller?"natural":processingExpected;
+                            if(expected.equals("natural") && (natural<40 || changed>3) ||
+                               expected.equals("modified") && (changed<40 || natural>3) ||
+                               expected.equals("quiet") && (natural>3 || changed>3 || energy>3))
+                                throw new AssertionError("Remote processing mismatch step="+processingStep+", expected="+expected+", natural="+natural+", modified="+changed+", loud="+energy+", effective="+voice.modulationStatus());
+                            if(withVideo && videoDecoded.frames.get()-processingVideo<5)throw new AssertionError("Video stopped during local modulation");
+                            JSONObject result=new JSONObject().put("step",processingStep).put("natural",natural).put("modified",changed).put("loud",energy)
+                                .put("settleMillis",processingWindow-processingAt).put("observedMillis",now-processingWindow).put("effective",voice.modulationStatus())
+                                .put("videoFrames",videoDecoded.frames.get()-processingVideo).put("playbackSamplesPerCallback",playbackSamples.get()).put("playbackRate",playbackRate.get()).put("processPssKiB",android.os.Debug.getPss()).put("nativeHeapAllocatedBytes",android.os.Debug.getNativeHeapAllocatedSize());
+                            JSONArray metrics=new JSONArray();for(int index=0;index<34;index++)metrics.put(voice.processingMetric(index));result.put("metrics",metrics);
+                            write("synthetic-voice-processing-result-"+processingStep+".json",result);processingStep++;processingAt=0;
+                        }
+                    }
+                }
                 if(!expectedRejection && voice.state()==NativeVoiceSession.State.ACTIVE) {
                     try {
                         JSONObject current=engine.calls().session(id);
@@ -339,6 +462,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                 Thread.sleep(100);
             }
             if(withVideo && !expectedRejection && videoStage!=5)throw new AssertionError("Missing decoded bidirectional video/off/reactivation evidence; stage="+videoStage+", native="+voice.videoStatus()+", failure="+voice.failureStage()+", sourceFrames="+videoCaptured.get()+", sinkFrames="+voice.decodedVideoFrames()+", validPatterns="+videoDecoded.frames.get()+", phaseMask="+videoDecoded.phases.get()+", counters="+voice.videoStats());
+            if(modulation && processingStep!=10)throw new AssertionError("Incomplete remote modulation sequence");
             if(!evidence || (!expectedRejection && !resumedEvidence)) throw new AssertionError("Missing native audio or mute/unmute evidence");
             voice.close(); pump(relay,engine);
             Bundle status=new Bundle(); status.putString("engineVoice",expectedRejection?"PASS invalid TURN rejected before capture":"PASS independent Android Engine/SQLite/Signal/HTTPS + native TURN decoded synthetic peer audio");

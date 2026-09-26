@@ -62,6 +62,8 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     private volatile String audioCodec="",videoStats="{}",nativeRelayProtocol="";
     private volatile boolean muted, endDeliveryFailed, mediaAuthorized;
     private PeerConnectionFactory factory;
+    private volatile UmbraVoiceProcessor voiceProcessor;
+    private volatile boolean requestedModulation;
     private PeerConnection pc;
     private List<RtpTransceiver> mediaTransceivers=List.of();
     private AudioSource source;
@@ -81,6 +83,9 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     private final long negotiationDeadline=android.os.SystemClock.elapsedRealtime()+30_000;
 
     public static NativeVoiceSession open(Context context,CallService.MediaLease authorization,TurnConfiguration turn) throws Exception {
+        return open(context,authorization,turn,false);
+    }
+    public static NativeVoiceSession open(Context context,CallService.MediaLease authorization,TurnConfiguration turn,boolean modulated) throws Exception {
         try {
             authorization.snapshot(); turn.check();
             NativeDistributionPolicy.requireAuthorizedTurnDestinations();
@@ -99,7 +104,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
                     public void onWebRtcAudioTrackStartError(JavaAudioDeviceModule.AudioTrackStartErrorCode code,String ignored) { failure.get().run(); }
                     public void onWebRtcAudioTrackError(String ignored) { failure.get().run(); }
                 }).createAudioDeviceModule();
-            NativeVoiceSession voice=new NativeVoiceSession(context,authorization,turn,adm,true);
+            NativeVoiceSession voice=new NativeVoiceSession(context,authorization,turn,adm,true,null,null,modulated);
             failure.set(voice::cancelLocally);
             if(initializationFailure.get()) { voice.close(); throw new IllegalStateException("Android audio initialization failed"); }
             return voice;
@@ -119,6 +124,10 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     /** A hostile description publisher can only be supplied by the separate test APK. */
     NativeVoiceSession(Context context,CallService.MediaLease authorization,TurnConfiguration turn,
                        JavaAudioDeviceModule adm,boolean requireMicrophone,SSLCertificateVerifier labVerifier,DescriptionPublisher labPublisher) throws Exception {
+        this(context,authorization,turn,adm,requireMicrophone,labVerifier,labPublisher,false);
+    }
+    NativeVoiceSession(Context context,CallService.MediaLease authorization,TurnConfiguration turn,
+                       JavaAudioDeviceModule adm,boolean requireMicrophone,SSLCertificateVerifier labVerifier,DescriptionPublisher labPublisher,boolean modulated) throws Exception {
         if(requireMicrophone && labVerifier!=null)throw new SecurityException("Laboratory trust cannot be used by the production audio entry");
         if(requireMicrophone && labPublisher!=null)throw new SecurityException("Production signaling publisher cannot be replaced");
         this.context=context.getApplicationContext(); this.authorization=Objects.requireNonNull(authorization);
@@ -134,7 +143,8 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
             authorization.attach(this::invalidate);
             authorization.attachVideoCancellation(this::invalidateVideo);
             if(requireMicrophone) route=new VoiceAudioRoute(context,this::cancelLocally);
-            factory=PeerConnectionFactory.builder().setAudioDeviceModule(adm)
+            requestedModulation=modulated;voiceProcessor=new UmbraVoiceProcessor(modulated);
+            factory=PeerConnectionFactory.builder().setAudioDeviceModule(adm).setAudioProcessingFactory(voiceProcessor)
                 .setVideoEncoderFactory(new SoftwareVideoEncoderFactory())
                 .setVideoDecoderFactory(new SoftwareVideoDecoderFactory()).createPeerConnectionFactory();
             var rtc=turn.nativeConfiguration(authorization.configurationRevision(),NetworkPolicy.RELAY_ONLY,generation);
@@ -172,6 +182,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     }
     public State state() { return state; }
     public String failureStage() { return failureStage; }
+    String videoActivationStage() { return videoFailureStage; }
     public String negotiationDiagnostic() { return negotiationDiagnostic+", pair="+pairDiagnostic+", stats="+statsDiagnostic; }
     public long receivedAudioPackets() { return receivedAudioPackets; }
     public String audioCodec() { return audioCodec; }
@@ -195,6 +206,9 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         catch(RejectedExecutionException stopped) { if(!cancelled.get()) fail(); }
     }
     private void tick() {
+        // Fixed-delay tasks can already be queued when cancellation schedules disposal.
+        // They must not overwrite the original certificate/revocation failure.
+        if(cancelled.get()) return;
         try {
             JSONObject row=check();
             negotiationDiagnostic="gather="+pc.iceGatheringState()+", connection="+pc.connectionState()+", candidates="+candidates+", sent="+localSent+", remote="+remoteApplied;
@@ -267,7 +281,10 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
             long now=android.os.SystemClock.elapsedRealtime();
             if(videoStatus.equals("NEGOTIATING") && now>=videoNegotiationDeadline) {failureStage="video-negotiation-timeout";fail();}
             if(state!=State.ACTIVE && now>=negotiationDeadline || disconnectedAt>0 && now-disconnectedAt>=3000) { failureStage="negotiation-timeout"; fail(); }
-        } catch(Exception invalid) { failureStage="authorization-or-signaling"; fail(); }
+        } catch(Exception invalid) {
+            if(cancelled.get()) return;
+            failureStage="authorization-or-signaling"; fail();
+        }
     }
     private void inspect(RTCStatsReport report) {
         checkingStats=false;
@@ -333,6 +350,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
                 check();
                 synchronized(audioGate) {
                     if(cancelled.get()) throw new SecurityException("Media cancelled during activation");
+                    voiceProcessor.mute(muted);voiceProcessor.authorize(true);
                     mediaAuthorized=true; adm.setMicrophoneMute(muted);
                 }
                 // JNI can synchronously call error callbacks on another thread. Never hold
@@ -347,6 +365,11 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
             }
             bindingStage="native-video-activation";
             if(validated && !videoChange.isEmpty() && !videoStopped && localSent && remoteApplied) activateVideo();
+        } catch(VideoStopped stopped) {
+            // The capture gate may close while a stats callback waits for SQLite.
+            // checkVideo has already revalidated the independent audio lease.
+            // Finish video teardown; a valid video-only STOP must not end audio.
+            stopVideoLocally();
         } catch(Exception invalid) {
             failureStage=bindingStage.equals("native-video-activation")?videoFailureStage:bindingStage;
             if(bindingStage.equals("native-video-activation") && Set.of("video-capture-initialize","video-capture-start").contains(videoFailureStage)) cameraFailed();
@@ -417,9 +440,12 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         if(videoSend && syntheticVideo==null && context.checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)
             throw new SecurityException("Camera permission revoked");
     }
+    private static final class VideoStopped extends SecurityException {}
     private void checkVideo() throws Exception {
         JSONObject row=check(),video=row.optJSONObject("video");
-        if(videoStopped || video==null || !video.getString("state").equals("CONFIRMED") ||
+        if(videoStopped || video!=null && video.getString("state").equals("STOPPED") &&
+            videoChange.equals(video.getString("change")) && generation==video.getInt("generation")) throw new VideoStopped();
+        if(video==null || !video.getString("state").equals("CONFIRMED") ||
             !videoChange.equals(video.getString("change")) || generation!=video.getInt("generation")) throw new SecurityException("Video authorization ended");
         if(videoSend && syntheticVideo==null && context.checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED)
             throw new SecurityException("Camera permission revoked");
@@ -498,13 +524,36 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         check(); if(route==null) throw new IllegalStateException("Synthetic endpoint has no physical audio route"); return route.available();
     }
     public void selectCommunicationDevice(int id) throws Exception {
-        check(); if(route==null) throw new IllegalStateException("Synthetic endpoint has no physical audio route"); route.select(id);
+        check(); if(route==null) throw new IllegalStateException("Synthetic endpoint has no physical audio route"); if(voiceProcessor.requested())voiceProcessor.invalidate(); route.select(id);
     }
+    /** Local-only control, never called by signaling. Confirmation does not unmute. */
+    public void modulation(boolean requested,boolean naturalConfirmed) throws Exception {
+        check();
+        synchronized(audioGate) {
+            if(cancelled.get())throw new SecurityException("Media cancelled during processing change");
+            if(!voiceProcessor.request(requested,naturalConfirmed))throw new SecurityException("Natural voice requires explicit confirmation");
+            requestedModulation=requested;
+        }
+    }
+    public String modulationStatus() {
+        UmbraVoiceProcessor processor=voiceProcessor;
+        if(processor==null)return "ERROR_MUTED";
+        return switch(processor.status()) {
+            case UmbraVoiceProcessor.OFF -> "OFF";
+            case UmbraVoiceProcessor.ENABLING -> "ENABLING";
+            case UmbraVoiceProcessor.ON -> "ON";
+            case UmbraVoiceProcessor.DISABLING -> "DISABLING";
+            default -> "ERROR_MUTED";
+        };
+    }
+    public boolean modulationRequested() {return requestedModulation;}
+    long processingMetric(int index) {return voiceProcessor.metric(index);}
+    void invalidateProcessing() {voiceProcessor.invalidate();}
     public void mute(boolean value) throws Exception {
         check();
         synchronized(audioGate) {
             if(cancelled.get()) throw new SecurityException("Media cancelled during mute change");
-            muted=value; adm.setMicrophoneMute(value);
+            voiceProcessor.mute(value);muted=value; adm.setMicrophoneMute(value);
         }
         post(()->{ try { check(); if(track!=null) track.setEnabled(state==State.ACTIVE&&!value); } catch(Exception invalid) { fail(); } });
     }
@@ -512,6 +561,8 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         synchronized(audioGate) {
             if(!cancelled.compareAndSet(false,true)) return;
             mediaAuthorized=false;videoStopped=true;
+            UmbraVoiceProcessor processing=voiceProcessor;
+            if(processing!=null) {processing.authorize(false);processing.invalidate();}
             NativeVideoCapture capture=videoCapture;
             if(capture!=null) {
                 capture.invalidate();
@@ -545,7 +596,8 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         release(this::releaseVideo);
         release(()->{if(pc!=null) pc.close();}); release(()->{if(pc!=null) pc.dispose();});
         release(()->{if(track!=null) track.dispose();}); release(()->{if(source!=null) source.dispose();});
-        release(()->{if(factory!=null) factory.dispose();}); release(adm::release);
+        release(()->{if(factory!=null) factory.dispose();});
+        release(()->{if(voiceProcessor!=null) voiceProcessor.close();}); release(adm::release);
         release(()->{if(route!=null) route.close();}); release(turn::close);
         watchdog.shutdown();worker.shutdown();
         // An unavailable store must not keep the watchdog alive after native cleanup.

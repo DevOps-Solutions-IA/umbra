@@ -1,0 +1,144 @@
+name: Focused media regressions
+"on":
+  pull_request:
+    paths: ['android/**', 'scripts/**', '.github/workflows/media-regressions.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: focused-media-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  video:
+    strategy:
+      fail-fast: false
+      matrix:
+        optimized: [false, true]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Start evidence before toolchain installation
+        run: |
+          mkdir -p android/app/build/reports/video-media
+          git rev-parse HEAD > android/app/build/reports/video-media/commit.txt
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Install the project SDK and isolated AVD image
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platforms;android-36" "build-tools;35.0.0" "emulator" "system-images;android-35;default;x86_64" 2>&1 | tee android/app/build/reports/video-media/sdk-install.log
+      - run: python -m pip install -r relay/requirements-test.lock
+      - name: Build actual debug or isolated optimized target
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.optimized }}" = true ]; then
+            gradle -p android --no-daemon -PumbraMediaLab=true :app:assembleConnectedMediaLab :app:assembleConnectedMediaLabAndroidTest
+          else
+            gradle -p android --no-daemon :app:assembleConnectedDebug :app:assembleConnectedDebugAndroidTest
+          fi
+      - name: Two AVD native video and voice over authorized TURN
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -c /dev/kvm
+          sudo chgrp "$(id -gn)" /dev/kvm
+          sudo chmod g+rw /dev/kvm
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y tcpdump
+          export UMBRA_DEVICE_REPORTS=android/app/build/reports/video-media
+          export UMBRA_SYNTHETIC_CAMERA=emulated
+          mkdir -p "$UMBRA_DEVICE_REPORTS"
+          git rev-parse HEAD > "$UMBRA_DEVICE_REPORTS/commit.txt"
+          source scripts/ci_emulator.sh
+          umbra_start_avd umbra-video-a 5554
+          umbra_start_avd umbra-video-b 5556
+          options=()
+          if [ "${{ matrix.optimized }}" = true ]; then options+=(--optimized); fi
+          python scripts/run_media_regressions.py --a emulator-5554 --b emulator-5556 "${options[@]}" --reports "$UMBRA_DEVICE_REPORTS"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: focused-media-evidence-r8-${{ matrix.optimized }}-${{ github.sha }}
+          path: |
+            android/app/build/reports/video-media/
+            android/app/build/outputs/mapping/connectedMediaLab/
+            android/app/build/outputs/mapping/connectedMediaLabAndroidTest/
+          if-no-files-found: error
+          retention-days: 7
+  nearby:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          persist-credentials: false
+      - name: Start evidence before toolchain installation
+        run: |
+          mkdir -p android/app/build/reports/nearby-focused
+          git rev-parse HEAD > android/app/build/reports/nearby-focused/commit.txt
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2
+        with:
+          gradle-version: '8.13'
+          cache-disabled: true
+      - name: Install the project SDK and isolated AVD image
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdkmanager "platforms;android-36" "build-tools;35.0.0" "emulator" "system-images;android-35;default;x86_64" 2>&1 | tee android/app/build/reports/nearby-focused/sdk-install.log
+      - name: Build actual debug or isolated optimized target
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle -p android --no-daemon :app:assembleConnectedDebug :app:assembleConnectedDebugAndroidTest :app:assembleOfflineDebug :app:assembleOfflineDebugAndroidTest
+      - name: Repeated real RFCOMM enrollment and delivery
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -c /dev/kvm
+          sudo chgrp "$(id -gn)" /dev/kvm
+          sudo chmod g+rw /dev/kvm
+          export UMBRA_DEVICE_REPORTS=android/app/build/reports/nearby-focused
+          mkdir -p "$UMBRA_DEVICE_REPORTS"
+          git rev-parse HEAD > "$UMBRA_DEVICE_REPORTS/commit.txt"
+          source scripts/ci_emulator.sh
+          umbra_start_avd umbra-video-a 5554
+          umbra_start_avd umbra-video-b 5556
+          python scripts/pair_bluetooth_emulators.py --serial-a emulator-5554 --serial-b emulator-5556 --log-dir "$UMBRA_DEVICE_REPORTS/pairing"
+          python scripts/run_nearby_regressions.py --pairing "$UMBRA_DEVICE_REPORTS/pairing/pairing.json" --reports "$UMBRA_DEVICE_REPORTS"
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        if: always()
+        with:
+          name: nearby-focused-evidence-${{ github.sha }}
+          path: |
+            android/app/build/reports/nearby-focused/
+          if-no-files-found: error
+          retention-days: 7

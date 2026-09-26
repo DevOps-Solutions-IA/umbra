@@ -3,8 +3,8 @@ import java.security.MessageDigest
 plugins { id("com.android.application") }
 val relayIntegrationClasspath by configurations.creating
 val voiceDistribution by configurations.creating { isTransitive = false }
-val voiceArtifact = files(rootProject.file("vendor/webrtc-150.7871.01-umbra.3.aar"))
-val voiceArtifactSha256 = "5743b0e47574a7d8bad047b00fdef8f49e56e41c944a12542282e2b91ccf9433"
+val voiceArtifact = files(rootProject.file("vendor/webrtc-150.7871.01-umbra.5.aar"))
+val voiceArtifactSha256 = "25f2abebc99e2e109cff83a428080408843fda51a9cdadb5c081d694c92b7620"
 val mediaLabReferences = layout.buildDirectory.file("generated/mediaLab/references.pro")
 val verifyVoiceDistribution by tasks.registering {
     inputs.files(voiceDistribution)
@@ -103,7 +103,7 @@ if (providers.gradleProperty("umbraMediaLab").orNull == "true") {
         archiveFileName.set("media-fixture-references.jar")
         destinationDirectory.set(layout.buildDirectory.dir("generated/mediaLab"))
         from(layout.buildDirectory.dir("intermediates/javac/connectedMediaLabAndroidTest/compileConnectedMediaLabAndroidTestJavaWithJavac/classes")) {
-            include("app/umbra/media/VideoSurfaceLifecycleTest*.class", "app/umbra/media/CameraProviderFixtureListener*.class", "app/umbra/media/SyntheticVideoCapturer*.class", "app/umbra/media/VoiceEngineFixtureListener*.class", "app/umbra/media/VoiceRestartFixtureListener*.class",
+            include("app/umbra/media/ExpiredDeliveryAssertion.class", "app/umbra/media/VideoSurfaceLifecycleTest*.class", "app/umbra/media/CameraProviderFixtureListener*.class", "app/umbra/media/SyntheticVideoCapturer*.class", "app/umbra/media/VoiceEngineFixtureListener*.class", "app/umbra/media/VoiceRestartFixtureListener*.class",
                 "app/umbra/lab/SqliteDeviceRecords*.class", "app/umbra/DeviceSignalTest*.class", "app/umbra/DeviceMemoryRecords*.class")
         }
     }

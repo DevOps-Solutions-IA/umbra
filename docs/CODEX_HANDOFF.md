@@ -1,5 +1,74 @@
 # Transferencia técnica a Codex
 
+## Continuación tras CI completa de d9dd2f3 — 2026-09-26
+
+Verify (cuatro jobs), voz R8, modulación debug/R8 y las 18 regresiones
+focalizadas pasaron. Video R8 pasó 32 casos; debug pasó 31 y falló en
+credential-expiry: el arnés abortó ante el rechazo correcto de una escritura
+cancelada. Se añade una aserción estricta de ese rechazo, sin autorizar el envío
+ni alterar la caducidad, y tres repeticiones reales por configuración. Los
+resultados siguientes requieren CI nueva; los fallos anteriores se conservan.
+146 pruebas de herramientas locales pasan. Detalles y artefactos históricos en
+[la evidencia](validation/2026-09-26-modulator-stabilization.md); estado vigente
+y recibos finales en la PR #10, que sigue abierta en borrador.
+
+## Estabilización comprobada parcialmente — 2026-09-26
+
+Carrera de video reproducida 3 veces debug y 3 R8 en 60bc42e/run36253121718.
+Corrección 69ec021: regresiones enfocadas R8 verdes (36253784224); debug bloqueó
+antes de media por ruta UDP del laboratorio, no se cuenta aprobado. Preparación
+RFCOMM corregida para salir de Settings y comprobar fin del descubrimiento;
+145 pruebas de herramientas pasan. Verify diagnóstico 8600654 verde, pero no
+valida el siguiente HEAD. Conservar ejecuciones y consultar la CI final en PR #10.
+[Pruebas, causas y límites](validation/2026-09-26-modulator-stabilization.md).
+No nuevas funcionalidades, merge, downgrade ni secretos.
+
+## Accesos restaurados — estabilización 2026-09-26
+
+GitHub y descargas disponibles tras autorización del propietario; los bloqueos
+de publicación anteriores son históricos. KVM local sin permisos efectivos;
+usar CI. Video falla antes de revocar CAMERA, durante stopVideo. Causas de esa
+transición terminal y RFCOMM todavía bajo investigación. Ver
+[continuación](validation/2026-09-26-modulator-stabilization.md).
+
+## Continuación 2026-09-26 — CI incompleta
+
+HEAD publicado `2d9ac6e`: modulación y voz R8 SUCCESS; video R8 SUCCESS;
+video debug falla camera-permission-revoked; Verify falla handshake RFCOMM
+connected. Wrong-fingerprint pasa en ambas matrices. Los dos fallos restantes
+tienen causa no confirmada. Mejoras de diagnóstico en revisión; ver
+[recibo](validation/2026-09-26-modulator-diagnostics.md). No declarar todo verde.
+Los cambios de diagnóstico están locales y probados (142 pruebas de herramientas;
+javac del fixture), pero NO publicados: el conector requiere aprobación y la
+sesión la prohíbe. HEAD local/remoto conocido sigue en `2d9ac6e`. Parche de
+continuación: `/tmp/umbra-modulator-diagnostics.patch`. Se necesita restaurar la
+capacidad de publicación/descarga y ejecución de AVD, sin rebajar garantías.
+
+## Modulación local de voz — en curso, 2026-09-25
+
+PR #10 borrador dependiente de #9, rama `codex/local-voice-modulator`.
+Base #9 verificada: `26d7326a8b2a43ee9533284d20896727ad8bb3ce`; no se modifica
+su rama. DSP por llamada después de AEC/NS/ganancia, antes de Opus; modos natural
+y timbre modulado a 100 Hz, error silenciado sin fallback. No anonimización
+biométrica. Build nativo 36187887900: cuatro ABI, 83 TURN + 12 política multimedia;
+AAR `.5` corrige preparación de formato antes del primer audio admitido.
+Ocho recorridos reales `.5` debug/R8 aprobados en CI 36202456119 para
+HEAD `383fc37`, checkout `7839081`, árbol común `064b1089`. También se ejecutaron
+localmente los cuatro casos por configuración: voz inicial, video, lock y
+revocación. Un fallo local sin audio no se reprodujo; causa no confirmada,
+diagnóstico de laboratorio añadido sin reducir umbrales. Verify/voz/video
+completos y CI del siguiente commit siguen pendientes en este recibo.
+Ver evidencia 2026-09-25-local-voice-modulator.md para comandos y hashes.
+Hardware, inteligibilidad física y medición cuantitativa de sincronía A/V no
+ejecutados; no confundir mediaLab R8 con el APK productivo exacto.
+
+CI posterior `63862cc`: Verify/voz/modulación SUCCESS; video R8 falló únicamente
+wrong-fingerprint (debug31/31, R830/31). Se conserva el fallo 36204852534.
+Corrección implementada: tick cancelado no sobrescribe el diagnóstico terminal;
+observación estable de 350 ms y tres repeticiones R8 enfocadas aprobadas. No se
+amplían motivos aceptados. Nueva CI completa requerida para el commit corrector.
+
+
 ## Estado actual de transferencia — 2026-09-22
 
 PR #9 sigue OPEN/DRAFT hacia `codex/turn-voice-core`. Código `171324bf` probado

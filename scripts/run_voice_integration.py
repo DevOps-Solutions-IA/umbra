@@ -33,13 +33,33 @@ def valid_audio(value):
             and value.get("codec")=="audio/opus" and value.get("sdpAddressAudit") is True)
 
 
-def valid_stop(report):
-    return (set(report)=={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks"}
+def valid_stop(report, *, expected_expiry=False):
+    return (set(report)=={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"}
             and report["failedClosed"] is True
-            and all(type(report[key]) is int for key in ("nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks"))
+            and all(type(report[key]) is int for key in ("nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"))
             and 1000<=report["nativeCaptureQuietAfterMillis"]<=2000
             and 500<=report["nativeCaptureObservedMillis"]<=1500
-            and report["lateCaptureCallbacks"]==0)
+            and report["lateCaptureCallbacks"]==0
+            and 0<=report["expiredDeliveriesRejected"]<=(1 if expected_expiry else 0))
+
+
+def permission_granted(dump, name):
+    values=re.findall(r'^\s*'+re.escape(name)+r': granted=(true|false)(?:,|$)',dump,re.MULTILINE)
+    if len(values)!=1:raise ValueError("Missing or ambiguous runtime permission evidence")
+    return values[0]=='true'
+
+def valid_processing(value, expected, *, video=False):
+    fields=("natural","modified","loud","settleMillis","observedMillis","videoFrames","step")
+    if any(type(value.get(key)) is not int or value[key]<0 for key in fields):return False
+    if not 1200<=value["settleMillis"]<=2500 or not 2000<=value["observedMillis"]<=3500:return False
+    if video and value["videoFrames"]<5:return False
+    metrics=value.get("metrics")
+    if not isinstance(metrics,list) or len(metrics)!=34 or any(type(n) is not int or n<0 for n in metrics):return False
+    if metrics[0]<100 or metrics[1]<100:return False
+    if expected=="natural":return value["natural"]>=40 and value["modified"]<=3
+    if expected=="modified":return value["modified"]>=40 and value["natural"]<=3
+    if expected=="quiet":return max(value["natural"],value["modified"],value["loud"])<=3
+    return False
 
 
 def valid_report(report):
@@ -55,14 +75,18 @@ def main():
     parser.add_argument("--reports",type=Path,required=True)
     parser.add_argument("--turn-tls",choices=("valid","wrong-name","expired","untrusted"),help="Use only the isolated TURN/TLS endpoint; test CA stays in instrumentation")
     parser.add_argument("--turn-ipv6",action="store_true",help="IPv6 AVD-to-TURN leg with the native allocator's IPv4 relay allocation")
+    parser.add_argument("--modulated-start",action="store_true",help="Select MODULATED before opening capture; reject any initial remote natural-tone block")
+    parser.add_argument("--modulation",action="store_true",help="Prove remote local-voice modulation with real native capture/Opus, never a preview")
     parser.add_argument("--video",action="store_true",help="Require decoded remote synthetic images, video off with audio, and freshly consented reactivation")
     parser.add_argument("--optimized",action="store_true",help="Run the isolated non-debuggable R8 mediaLab APK on rooted AOSP AVDs")
-    parser.add_argument("--scenario",choices=("audio","expired-auth","allocation-expiry","invalid-auth","unreachable","turn-loss","trust-loss","lock","credential-expiry","direct-blocked","force-stop","permission-revoked","device-revoked","storage-failure","unauthorized-redirect","wrong-fingerprint","receive-only","degraded-network","camera-denied","camera-permission-revoked"),default="audio")
+    parser.add_argument("--scenario",choices=("audio","expired-auth","allocation-expiry","invalid-auth","unreachable","turn-loss","trust-loss","lock","credential-expiry","direct-blocked","force-stop","permission-revoked","device-revoked","storage-failure","unauthorized-redirect","wrong-fingerprint","receive-only","degraded-network","camera-denied","camera-permission-revoked","video-stop-race"),default="audio")
     args=parser.parse_args()
     if args.turn_ipv6 and args.scenario in ("unauthorized-redirect","unreachable"):
         parser.error("IPv6 redirect/unreachable packet evidence is not implemented")
-    if (args.scenario.startswith("camera-") or args.scenario=="receive-only") and not args.video: parser.error("Camera cases require the explicit video suite")
+    if (args.scenario.startswith("camera-") or args.scenario in ("receive-only","video-stop-race")) and not args.video: parser.error("Camera cases require the explicit video suite")
     tls_rejection=args.turn_tls in ("wrong-name","expired","untrusted")
+    if args.modulated_start and not args.modulation:parser.error("Initial mode acceptance requires --modulation")
+    if args.modulation and (args.scenario not in ("audio","lock","device-revoked") or args.turn_tls or args.turn_ipv6):parser.error("Modulation acceptance uses the isolated positive UDP topology")
     rejection=args.scenario in ("expired-auth","invalid-auth","unreachable","unauthorized-redirect","wrong-fingerprint") or tls_rejection
     optimized_evidence=inspect_optimized_media() if args.optimized else None
     PACKAGE="app.umbra.privatechat.medialab" if args.optimized else "app.umbra.privatechat.dev"
@@ -120,7 +144,8 @@ def main():
             run(serial,"shell","pm","grant",PACKAGE,"android.permission.CAMERA" if args.scenario=="camera-permission-revoked" else "android.permission.RECORD_AUDIO")
         if args.scenario=="camera-denied":run(serial,"shell","pm","revoke",PACKAGE,"android.permission.CAMERA")
         # Explicit names only, confined to this disposable debug UID.
-        for suffix in ("public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied"):
+        run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-")])
+        for suffix in ("public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
             run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
     args.reports.mkdir(parents=True,exist_ok=True)
     if optimized_evidence:
@@ -175,20 +200,25 @@ def main():
                     credentials["expires"]=int(time.time())+180
                 if args.scenario=="invalid-auth": credentials["password"]="synthetic-invalid-credential"
                 if args.scenario=="unreachable": credentials["urls"]=[value.replace(":5349",":5348") if args.turn_tls else value.replace(":3478",":3479") for value in credentials["urls"]]
-                write(serial,"synthetic-voice-engine.json",{"video":args.video and args.scenario!="camera-denied","cameraDenied":args.scenario=="camera-denied","receiveOnlyCallee":args.scenario=="receive-only","incorrectFingerprint":args.scenario=="wrong-fingerprint","expectedRejection":rejection,"role":"A" if index==0 else "B","base":relay["base"],
+                write(serial,"synthetic-voice-engine.json",{"stopVideoRace":args.scenario=="video-stop-race","initialModulation":args.modulated_start,"modulation":args.modulation,"video":args.video and args.scenario!="camera-denied","cameraDenied":args.scenario=="camera-denied","receiveOnlyCallee":args.scenario=="receive-only","incorrectFingerprint":args.scenario=="wrong-fingerprint","expectedRejection":rejection,"role":"A" if index==0 else "B","base":relay["base"],
                     "certificate":relay["certificate"],"invitation":relay["invitations"][index],"turn":credentials})
                 stream=(args.reports/("engine-voice-a.log" if index==0 else "engine-voice-b.log")).open("w")
                 streams.append(stream)
                 processes[serial]=subprocess.Popen([adb,"-s",serial,"shell","am","instrument","-w","-r",
                     "-e","class","app.umbra.DeviceSignalTest","-e","listener","app.umbra.media.VoiceEngineFixtureListener",
                     PACKAGE+".test/androidx.test.runner.AndroidJUnitRunner"],stdout=stream,stderr=subprocess.STDOUT)
-            deadline=time.monotonic()+90
+            deadline=time.monotonic()+(160 if args.modulation else 90)
             a=read(args.a,"synthetic-voice-public.json",processes[args.a],deadline)
             b=read(args.b,"synthetic-voice-public.json",processes[args.b],deadline)
             write(args.a,"synthetic-voice-peer.json",b); write(args.b,"synthetic-voice-peer.json",a)
             for serial in (args.a,args.b):
                 if read(serial,"synthetic-voice-ready.json",processes[serial],deadline)!={"ready":True}: raise RuntimeError("Identity preparation failed")
             for serial in (args.a,args.b): write(serial,"synthetic-voice-start.json",{"consent":True})
+            initial_processing=[]
+            if args.modulated_start:
+                initial_processing=[read(serial,"synthetic-voice-initial-processing.json",processes[serial],deadline) for serial in (args.a,args.b)]
+                if initial_processing[0].get("effective")!="ON" or initial_processing[0].get("natural",0)<100 or initial_processing[1].get("natural")!=0 or initial_processing[1].get("modified",0)<100:raise RuntimeError("Initial modulation leaked or lacked decoded transformed audio")
+                for serial in (args.a,args.b):write(serial,"synthetic-voice-initial-natural.json",{"naturalVoiceExplicitlyConfirmed":True})
             evidence=[]
             stop_evidence=[]
             for serial in (args.a,args.b):
@@ -242,14 +272,32 @@ def main():
                             if (serial==args.b and value.get("capturedFrames")!=0) or (serial==args.a and value.get("capturedFrames",0)<20):raise RuntimeError("Receive-only camera isolation failed")
                         values.append(value)
                     video_evidence[result]=values
+                    # Preserve validated earlier phases even if a later stop/resume fails.
+                    (args.reports/"video-progress.json").write_text(json.dumps({"complete":result=="resumed","phases":video_evidence},indent=2)+"\n")
                 (args.reports/"video-evidence.json").write_text(json.dumps({"apkSha256":apk_hashes,"synthetic":True,"physicalCamera":False,"nativeCodecPipeline":True,"endpoints":2,"phases":video_evidence},indent=2)+"\n")
+            if args.modulation:
+                processing=[]
+                steps=(("on","modified","ON"),("mute","quiet",None),("off","quiet","DISABLING"),
+                       ("on","quiet","ENABLING"),("unmute","modified","ON"),("unconfirmed-off","modified","ON"),
+                       ("off","natural","OFF"),("on","modified","ON"),("fault","quiet","ERROR_MUTED"),("retry","modified","ON"))
+                for index,(action,expected,effective) in enumerate(steps):
+                    for serial in (args.a,args.b):write(serial,f"synthetic-voice-processing-{index}.json",{"action":action,"expected":expected})
+                    results=[read(serial,f"synthetic-voice-processing-result-{index}.json",processes[serial],deadline) for serial in (args.a,args.b)]
+                    if not valid_processing(results[0],"natural",video=args.video) or not valid_processing(results[1],expected,video=args.video):raise RuntimeError("Missing bounded decoded modulation evidence")
+                    if any(value.get("step")!=index for value in results):raise RuntimeError("Replayed processing evidence")
+                    if effective is not None and results[0].get("effective")!=effective:raise RuntimeError("Native processor did not confirm expected effective mode")
+                    if results[1].get("effective")!="OFF":raise RuntimeError("Remote control changed independent peer processing")
+                    processing.append({"action":action,"expectedRemote":expected,"results":results})
+                (args.reports/"voice-processing.json").write_text(json.dumps({"apkSha256":apk_hashes,"synthetic":True,"optimized":args.optimized,"video":args.video,"initialProcessing":initial_processing,"stages":processing},indent=2)+"\n")
             if args.scenario in ("turn-loss","trust-loss","lock","credential-expiry","device-revoked","storage-failure"):
                 for serial in (args.a,args.b): write(serial,"synthetic-voice-loss.json",{"action":args.scenario})
                 if args.scenario=="turn-loss":
                     docker("stop","--time","0",turn.name)
                 for serial in (args.a,args.b):
                     stopped=read(serial,"synthetic-voice-lost.json",processes[serial],deadline)
-                    if not valid_stop(stopped):
+                    closure_keys=("failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected")
+                    (args.reports/f"closure-observation-{serial}.json").write_text(json.dumps({key:stopped.get(key) for key in closure_keys},indent=2)+"\n")
+                    if not valid_stop(stopped,expected_expiry=args.scenario=="credential-expiry"):
                         raise RuntimeError("Native media did not stop for scenario: "+args.scenario)
                     stop_evidence.append(stopped)
             if args.scenario in ("allocation-expiry","force-stop","permission-revoked","camera-permission-revoked"):
@@ -260,15 +308,27 @@ def main():
                 for index,serial in enumerate((args.a,args.b)):
                     pid=run(serial,"shell","pidof",PACKAGE).stdout.decode().strip()
                     if not re.fullmatch(r"[0-9]+",pid): raise RuntimeError("Native audio process missing before planned termination")
-                    if args.scenario in ("force-stop","allocation-expiry"): run(serial,"shell","am","force-stop",PACKAGE)
-                    else: run(serial,"shell","pm","revoke",PACKAGE,"android.permission.CAMERA" if args.scenario=="camera-permission-revoked" else "android.permission.RECORD_AUDIO")
+                    permission="android.permission.CAMERA" if args.scenario=="camera-permission-revoked" else "android.permission.RECORD_AUDIO"
+                    revoking=args.scenario in ("permission-revoked","camera-permission-revoked")
+                    if revoking and not permission_granted(run(serial,"shell","dumpsys","package",PACKAGE).stdout.decode(),permission):
+                        raise RuntimeError("Permission was not granted before planned revocation")
+                    requested=time.monotonic_ns()
+                    if not revoking: run(serial,"shell","am","force-stop",PACKAGE)
+                    else:
+                        run(serial,"shell","pm","revoke",PACKAGE,permission)
+                        if permission_granted(run(serial,"shell","dumpsys","package",PACKAGE).stdout.decode(),permission):
+                            raise RuntimeError("Permission remained granted after revocation")
                     gone=time.monotonic()+10
                     while True:
                         probe=subprocess.run([adb,"-s",serial,"shell","pidof",PACKAGE],capture_output=True,timeout=5)
                         if probe.returncode==1 and not probe.stdout.strip(): break
                         if time.monotonic()>=gone: raise RuntimeError("Media process survived planned termination")
                         time.sleep(0.1)
-                    processes[serial].wait(timeout=15)
+                    exit_code=processes[serial].wait(timeout=15)
+                    (args.reports/f"termination-{index}.json").write_text(json.dumps({"scenario":args.scenario,
+                        "requestedMonotonicNanos":requested,"observedGoneMonotonicNanos":time.monotonic_ns(),
+                        "permissionBefore":True if revoking else None,"permissionAfter":False if revoking else None,
+                        "processAbsent":True,"instrumentationExitCode":exit_code},indent=2)+"\n")
                     # The BEFORE reports intentionally end abruptly. Do not classify them as successful JUnit runs.
                     report=args.reports/f"restart-{index}.log"
                     with report.open("w") as stream:
@@ -349,11 +409,21 @@ def main():
             for serial,process in processes.items():
                 try: run(serial,"shell","am","force-stop",PACKAGE)
                 except Exception as failure: errors.append(failure)
+                if args.modulation:
+                    try:
+                        diagnostic=subprocess.run(command_for(serial,("shell","run-as",PACKAGE,"cat","files/synthetic-voice-processing-diagnostic.json")),capture_output=True,timeout=15)
+                        if diagnostic.returncode==0:
+                            detail=json.loads(diagnostic.stdout)
+                            if not isinstance(detail,dict) or not set(detail)<= {"state","effective","step","failureStage","faults","maxBlockNanos","processed","processorDisposed"}:raise RuntimeError("Unexpected processing diagnostic")
+                            (args.reports/("processing-diagnostic-"+serial+".json")).write_text(json.dumps(detail,indent=2)+"\n")
+                    except Exception as failure: errors.append(failure)
                 try:
                     if process.poll() is None: process.terminate()
                     process.wait(timeout=15)
                 except Exception as failure: errors.append(failure)
-                for suffix in ("engine","public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied"):
+                try: run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-")])
+                except Exception as failure: errors.append(failure)
+                for suffix in ("engine","public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
                     try: run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
                     except Exception as failure: errors.append(failure)
                 # These exact files belong solely to this named synthetic fixture, including failed runs.
