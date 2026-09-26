@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 import re
@@ -109,10 +110,15 @@ def main() -> None:
         successful = True
         print(f'PASS: actual emulated Bluetooth RFCOMM on {devices}; both directions, host code comparison, authenticated device roster, encrypted location, text, attachment, duplicates and receipts. Not physical Bluetooth or Vault persistence.')
     finally:
+        exits=[{"role":role,"exitBeforeCleanup":process.poll(),"terminatedByHarness":process.poll() is None}
+               for role,process in zip(('listener','dialer'),processes)]
+        (args.log_dir/'process-exits.json').write_text(json.dumps({"successful":successful,"processes":exits},indent=2)+'\n')
         for process in processes:
             if process.poll() is None:
                 process.terminate()
                 process.wait(timeout=10)
+        for row,process in zip(exits,processes):row['exitAfterCleanup']=process.poll()
+        (args.log_dir/'process-exits.json').write_text(json.dumps({"successful":successful,"processes":exits},indent=2)+'\n')
         for stream in streams:
             stream.close()
         if not successful:

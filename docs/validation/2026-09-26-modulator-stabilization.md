@@ -97,3 +97,11 @@ next action; revocation checks granted/denied explicitly and records host monoto
 request/process-gone times and actual instrumentation exit. Tool regression is
 red (missing function) then green; full tools suite now 143 PASS. No claim these
 host observations measure the last camera callback or last network packet.
+
+Focused RFCOMM runner added: three repetitions per flavor on independent bonded
+AVDs, all results retained and any failure fatal. It starts fresh AVDs separately
+from the full Verify sequence (which runs voice scenarios first), allowing a
+comparison for residue effects without replacing the original suite. The host
+records each instrumentation process exit before/after cleanup and whether the
+host terminated it. This does not classify a terminated dialer as spontaneous
+failure or as successful enrollment.
