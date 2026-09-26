@@ -1,3 +1,13 @@
+# Sin publicar — interfaz Android (rama `claude/android-ui-foundation`)
+
+- Sistema de diseño propio (tokens semánticos, tipografía en sp, iconos, componentes) y
+  navegación inferior Chats/Llamadas/Cerca/Ajustes; la edición offline no muestra llamadas.
+- Pantallas de bloqueo, onboarding, chats 1:1, grupos (preparado, sin motor), contacto,
+  verificación, dispositivos, ubicación, llamada, modulador, video, ajustes y errores.
+- Estados de seguridad tomados del motor; funciones sin motor marcadas «UI preparada · Backend
+  pendiente». Pruebas JVM de presentación e instrumentadas de renderizado con datos sintéticos.
+- Validación: ver `docs/validation/2026-09-26-android-ui-foundation.md` (CI pendiente).
+
 # Cambios — 0.2.0-dev
 
 Fecha de la entrega: 18 de septiembre de 2026. Base: código UMBRA 0.1.0-dev recuperado del ZIP anterior.
