@@ -126,3 +126,12 @@ This is a real package reinstall on an AVD, not recovery or a production export
 feature. The encrypted fixture stays transient in the host process, is never
 uploaded as evidence, and is deleted from the AVD after assertions. R8 performs
 force-stop and key-loss tests separately; no R8 reinstall claim is implied.
+
+## Logging regression guard
+
+`check_source_policy.py` rejects direct Android/Java logging sinks in the password
+envelope, Vault, VaultCodec and SignalStore production sources. Missing protected
+sources also fail. The guard reports paths only, never a matched value. A host
+regression injects synthetic logging calls to verify rejection. This narrow
+source check complements review; it is not whole-program data-flow analysis and
+does not prove secrecy in a compromised runtime.

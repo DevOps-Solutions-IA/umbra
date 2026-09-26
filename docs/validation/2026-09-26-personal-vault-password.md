@@ -1,7 +1,9 @@
 # Personal vault password — 2026-09-26
 
-Status: PARTIAL, implementation and local validation in progress. No final CI
-or hardware acceptance claimed by this initial entry.
+Chronological evidence: entries below identify the exact revision executed.
+Initial status was PARTIAL; later results do not erase earlier failures. Final
+acceptance and current CI are also tracked in draft PR #11. No physical hardware
+acceptance is claimed.
 
 Base reverified with Git and GitHub: PR #10 OPEN/DRAFT,
 `codex/local-voice-modulator` at `6b0a844aa0a97d4984d04a58330621f37c5291d1`.
@@ -188,3 +190,27 @@ the cause of the UDP listener failure. A bounded escaped diagnostic of this
 specific synthetic toybox command is added next; it does not relax the route
 precondition, add retries or change network/privacy policy. Other current runs
 must finish and each final HEAD needs its own acceptance.
+
+## Follow-up source policy and regression status
+
+A narrow direct-logging guard now covers Vault/password/Signal storage; its
+regression checks missing files and injected synthetic sinks without echoing
+matched content. Full local tools: 151 passed; test_local exited 0. These source
+checks are not added to cryptographic behavior totals.
+
+Run `36265376597` (8f204ea) completed: repository-guard, relay-and-core and
+relay-container SUCCESS; Android FAILED at the same owned-AVD UDP preflight
+before its voice scenario. This was not a password test failure. Artifact
+`10914412464`, SHA256
+`a09ab7ed2c1042e0b668fbff6334da9fc35c252a622a053112e6558d814e9ce3`.
+Focused `36265376586`: debug failed at that preflight, R8 and nearby passed.
+Modulation `36265376595` passed both jobs. Its pending voice/video runs were
+superseded by GitHub concurrency, not counted as executed acceptance.
+
+Diagnostic-only revision `8fff7b15e68a8bb53fc1a51cd1d2da4f5f24fdd6` has password
+run `36265952619` SUCCESS both jobs, and modulation `36265952613` SUCCESS both
+jobs. This does not establish the unresolved preflight cause. The current change
+adds only source/logging validation and documentation; it does not alter crypto,
+UI, media binaries, timeouts, permissions or acceptance thresholds. Its own CI
+must still be checked. Subsequent exact-HEAD receipts are attached to PR #11 and
+preserved in the exportable local validation archive.
