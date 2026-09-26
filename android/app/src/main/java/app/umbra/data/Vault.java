@@ -105,11 +105,12 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         boolean strongBox = context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE);
         if (!store.containsAlias(AES_ALIAS)) generate(AES_ALIAS, false, strongBox);
         if (!store.containsAlias(INDEX_ALIAS)) {
-            // A v2 database with a missing HMAC key must not get a replacement index silently.
+            // Only the explicit v1 migration may create an index key for an existing file.
+            // A truncated/unknown schema is not evidence of a legacy vault.
             java.io.File file = context.getDatabasePath("umbra.db");
             if (file.exists()) {
                 try (SQLiteDatabase db = SQLiteDatabase.openDatabase(file.getPath(), null, SQLiteDatabase.OPEN_READONLY, PRESERVE_CORRUPT)) {
-                    if (db.getVersion() >= 2) throw new SecurityException("La clave de índices no está disponible");
+                    if (db.getVersion() != 1) throw new SecurityException("La clave de índices no está disponible");
                 }
             }
             generate(INDEX_ALIAS, true, strongBox);

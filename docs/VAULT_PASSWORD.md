@@ -141,3 +141,8 @@ Vault domain object (`lockedVaultStartupNanos`) before system-gate/password unlo
 This measures the vault portion of startup in a new process, not full Activity
 launch time, a baseline delta, or physical-device performance. It must not be
 combined with unlock latency as if Argon2 ran automatically at startup.
+
+For an existing database, missing index-key generation is authorized only by the
+explicit legacy schema version 1 migration. Version 0/truncation and unknown
+versions are rejected, not treated as evidence of a legacy vault. Otherwise a
+replacement HMAC key could make subsequently restored records appear absent.

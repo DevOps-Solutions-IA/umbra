@@ -216,6 +216,8 @@ public class DeviceVaultPasswordTest {
             assertEquals(0, preserved.getVersion());
             try (var row = preserved.rawQuery("SELECT name FROM sqlite_master WHERE name='records'", null)) { assertFalse(row.moveToFirst()); }
         }
+        assertThrows(SecurityException.class, () -> Vault.prepareKey(isolated));
+        assertFalse("Unknown schema cannot authorize replacement index material", keys.containsAlias("umbra.index.v2"));
     }
 
 }

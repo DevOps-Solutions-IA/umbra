@@ -239,3 +239,16 @@ The diagnostic focused run `36265952623` and voice `36265952611` were retained a
 completed SUCCESS. A passing repeat does not establish the cause of the earlier
 UDP probe error; bounded diagnostics remain enabled. Final acceptance receipts
 and all subsequent statuses are linked from PR #11, without rewriting history.
+
+## Missing-index review on unknown schema
+
+Source review found prepareKey rejected missing index keys only for user_version
+>=2. A truncated/version-zero existing file could therefore reach generation of
+replacement index material. That is not a valid v1 migration; a later restored
+v2 database would have incompatible blinded addresses. The check now permits
+index creation for an existing file only at known schema version 1. The ninth
+Android corruption regression additionally requires version-zero prepareKey to
+reject before generation and leave the alias absent. This is a source-proven
+branch correction; Android behavior of this addition must be checked in its own
+run, not inferred from the previous nine-case reports. No hardware-only behavior
+is claimed from a software-keystore fixture.
