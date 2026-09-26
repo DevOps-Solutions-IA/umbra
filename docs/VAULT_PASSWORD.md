@@ -135,3 +135,9 @@ sources also fail. The guard reports paths only, never a matched value. A host
 regression injects synthetic logging calls to verify rejection. This narrow
 source check complements review; it is not whole-program data-flow analysis and
 does not prove secrecy in a compromised runtime.
+
+The restart fixture also times construction and the initial LOCKED state of the
+Vault domain object (`lockedVaultStartupNanos`) before system-gate/password unlock.
+This measures the vault portion of startup in a new process, not full Activity
+launch time, a baseline delta, or physical-device performance. It must not be
+combined with unlock latency as if Argon2 ran automatically at startup.

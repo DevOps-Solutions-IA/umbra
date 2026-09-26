@@ -214,3 +214,28 @@ adds only source/logging validation and documentation; it does not alter crypto,
 UI, media binaries, timeouts, permissions or acceptance thresholds. Its own CI
 must still be checked. Subsequent exact-HEAD receipts are attached to PR #11 and
 preserved in the exportable local validation archive.
+
+## Final instrumentation metric addition
+
+On `d13b97ee69bcbf7d6e31bf8ce345430ce6d8958a`, all local commands completed with
+exit 0, including the history guard (953 reachable blobs), full debug/release
+build, JVM/lint/APK/JNI checks and both optimized vault laboratory builds.
+Password CI `36266640553` passed both jobs; checkout
+`a86d93debfeb087fefce59347335189b9acf9adf`, equal tree
+`282f3f8dc71e3db8317e582c9f39a4b4b4f38a59`.
+Debug artifact `10913428550`, SHA256
+`816571f0849946a2f8757f1bcb15e9e01b7ba36ece1087b9fd3b6a724ea1945f`;
+R8 artifact `10913777849`, SHA256
+`0ec6c734aa2cce7d8c755514f28fdba5363fa0f379ba12b8f678e47cfa881e48`.
+
+The final test-only addition times Vault construction/LOCKED state after process
+restart, separately from password unlock. Both debug instrumentation APKs compiled
+with this addition. Its actual values and its own final-SHA CI remain to be read;
+no startup timing is inferred from previous unlock samples.
+
+Superseded Verify/video runs `36265952634` / `36265952629` were explicitly canceled
+to run complete replacements on the newer HEAD; cancellation is not success.
+The diagnostic focused run `36265952623` and voice `36265952611` were retained and
+completed SUCCESS. A passing repeat does not establish the cause of the earlier
+UDP probe error; bounded diagnostics remain enabled. Final acceptance receipts
+and all subsequent statuses are linked from PR #11, without rewriting history.

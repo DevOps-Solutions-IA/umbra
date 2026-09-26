@@ -56,8 +56,13 @@ public final class PasswordRestartFixtureListener extends RunListener {
                 }
             };
             AccessGate gate = new AccessGate();
+            long lockedStartup = System.nanoTime();
             try (Vault vault = new Vault(isolated, gate)) {
-                assertEquals(Vault.State.LOCKED, vault.getVaultState()); gate.unlock();
+                assertEquals(Vault.State.LOCKED, vault.getVaultState());
+                Bundle startup = new Bundle();
+                startup.putString("lockedVaultStartupNanos", Long.toString(System.nanoTime() - lockedStartup));
+                InstrumentationRegistry.getInstrumentation().sendStatus(0, startup);
+                gate.unlock();
                 if (phase.equals("verify-reinstall")) {
                     java.security.KeyStore keys = java.security.KeyStore.getInstance("AndroidKeyStore"); keys.load(null);
                     assertFalse(keys.containsAlias("umbra.vault.v1")); assertFalse(keys.containsAlias("umbra.index.v2"));
