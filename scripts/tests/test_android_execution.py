@@ -14,7 +14,7 @@ import run_bluetooth_emulation as nearby
 
 
 class AndroidExecutionTests(unittest.TestCase):
-    def run_single(self, report, returncode=0, flavor="offline"):
+    def run_single(self, report, returncode=0, flavor="offline", evidence=None):
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder)
             for name in ('app.apk', 'test.apk'):
@@ -22,7 +22,13 @@ class AndroidExecutionTests(unittest.TestCase):
             args = ['runner', '--serial', 'emulator-synthetic', '--flavor', flavor,
                     '--app-apk', str(base / 'app.apk'), '--test-apk', str(base / 'test.apk'),
                     '--log', str(base / 'run.log'), '--adb', 'synthetic-adb']
+            if evidence is not None:
+                args += ['--evidence-dir', str(base / 'evidence')]
             def execute(command, **kwargs):
+                if 'pull' in command:
+                    for index in range(evidence):
+                        (Path(command[-1]) / f'{index:02d}.png').write_bytes(b'png')
+                    return subprocess.CompletedProcess(command, 0)
                 if 'instrument' in command:
                     kwargs['stdout'].write(report)
                     return subprocess.CompletedProcess(command, returncode)
@@ -36,23 +42,32 @@ class AndroidExecutionTests(unittest.TestCase):
 
     def test_skip_cannot_be_hidden_by_summary(self):
         with self.assertRaises(SystemExit):
-            self.run_single('INSTRUMENTATION_STATUS_CODE: -3\nOK (25 tests)\nINSTRUMENTATION_CODE: -1\n')
+            self.run_single('INSTRUMENTATION_STATUS_CODE: -3\nOK (40 tests)\nINSTRUMENTATION_CODE: -1\n')
 
     def test_missing_completion_is_failure(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (25 tests)\n')
+            self.run_single('OK (40 tests)\n')
 
     def test_adb_failure_is_not_overridden_by_test_summary(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (25 tests)\nINSTRUMENTATION_CODE: -1\n', returncode=1)
+            self.run_single('OK (40 tests)\nINSTRUMENTATION_CODE: -1\n', returncode=1)
 
-    def test_twenty_five_executed_checks_and_completion_pass(self):
-        self.run_single('OK (25 tests)\nINSTRUMENTATION_CODE: -1\n')
+    def test_offline_requires_ui_render_checks(self):
+        with self.assertRaises(SystemExit):
+            self.run_single('OK (25 tests)\nINSTRUMENTATION_CODE: -1\n')
+        self.run_single('OK (40 tests)\nINSTRUMENTATION_CODE: -1\n')
+
+    def test_ui_evidence_must_be_present_when_requested(self):
+        with self.assertRaises(SystemExit):
+            self.run_single('OK (40 tests)\nINSTRUMENTATION_CODE: -1\n', evidence=0)
+        self.run_single('OK (40 tests)\nINSTRUMENTATION_CODE: -1\n', evidence=single.MIN_EVIDENCE)
 
     def test_connected_requires_new_surface_lifecycle_checks(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (25 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
-        self.run_single('OK (27 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
+            self.run_single('OK (40 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
+        with self.assertRaises(SystemExit):
+            self.run_single('OK (27 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
+        self.run_single('OK (42 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
 
     def test_physical_device_rejected_before_install_or_radio_changes(self):
         with tempfile.TemporaryDirectory() as folder:
