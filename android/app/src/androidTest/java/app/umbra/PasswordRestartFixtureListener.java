@@ -28,12 +28,15 @@ public final class PasswordRestartFixtureListener extends RunListener {
             DeviceVaultPasswordTest fixture = new DeviceVaultPasswordTest(); fixture.before();
             Files.write(locator.toPath(), fixture.file.getName().getBytes(StandardCharsets.UTF_8));
             if (phase.equals("prepare-migration")) {
-                fixture.migrationBarrier = () -> {
+                SQLiteDatabase db = fixture.vault.getWritableDatabase();
+                db.execSQL("ALTER TABLE records RENAME TO synthetic_original_records");
+                db.setCustomScalarFunction("umbra_lab_migration", value -> {
                     status("READY migration transaction open, staging table created, before commit");
                     while (true) {
                         try { Thread.sleep(1000); } catch (InterruptedException stopped) { Thread.currentThread().interrupt(); throw new IllegalStateException("Fixture interrupted"); }
                     }
-                };
+                });
+                db.execSQL("CREATE VIEW records AS SELECT bucket,k,nonce,value FROM synthetic_original_records WHERE umbra_lab_migration(bucket)=bucket");
             }
             fixture.vault.createPassword(password); fixture.gate.unlock(); fixture.vault.unlock(password);
             assertEquals(Vault.State.UNLOCKED, fixture.vault.getVaultState());
@@ -54,8 +57,11 @@ public final class PasswordRestartFixtureListener extends RunListener {
                 assertEquals(Vault.State.LOCKED, vault.getVaultState()); gate.unlock();
                 if (phase.equals("verify-migration")) {
                     assertFalse(vault.isPasswordConfigured());
-                    assertArrayEquals(new byte[]{1,2,3,4}, vault.get("meta", "identity"));
                     try (var row = vault.getReadableDatabase().rawQuery("SELECT name FROM sqlite_master WHERE name='records_password'", null)) { assertFalse(row.moveToFirst()); }
+                    // Restore only the test view; rollback must already have removed production staging.
+                    vault.getWritableDatabase().execSQL("DROP VIEW records");
+                    vault.getWritableDatabase().execSQL("ALTER TABLE synthetic_original_records RENAME TO records");
+                    assertArrayEquals(new byte[]{1,2,3,4}, vault.get("meta", "identity"));
                     vault.createPassword(password); gate.unlock();
                 }
                 assertThrows(SecurityException.class, () -> vault.get("meta", "identity"));

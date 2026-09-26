@@ -28,7 +28,6 @@ public class DeviceVaultPasswordTest {
     File file;
     AccessGate gate;
     Vault vault;
-    volatile Runnable migrationBarrier;
     private boolean ownsKeys;
     private static byte[] password() { return "synthetic password alpha".getBytes(StandardCharsets.UTF_8); }
     private static byte[] next() { return "synthetic password beta".getBytes(StandardCharsets.UTF_8); }
@@ -49,11 +48,7 @@ public class DeviceVaultPasswordTest {
         isolated = new ContextWrapper(context) {
             @Override public File getDatabasePath(String name) { return file; }
             @Override public SQLiteDatabase openOrCreateDatabase(String name, int mode, SQLiteDatabase.CursorFactory factory, DatabaseErrorHandler handler) {
-                SQLiteDatabase.CursorFactory observed = (db, driver, table, query) -> {
-                    if (migrationBarrier != null && query.toString().contains("SELECT bucket,k,nonce,value FROM records")) migrationBarrier.run();
-                    return new android.database.sqlite.SQLiteCursor(driver, table, query);
-                };
-                return SQLiteDatabase.openDatabase(file.getPath(), observed, SQLiteDatabase.CREATE_IF_NECESSARY, handler);
+                return SQLiteDatabase.openDatabase(file.getPath(), factory, SQLiteDatabase.CREATE_IF_NECESSARY, handler);
             }
         };
         gate = new AccessGate(); gate.unlock(); vault = new Vault(isolated, gate);
@@ -97,9 +92,13 @@ public class DeviceVaultPasswordTest {
         vault.unlock(next()); assertArrayEquals(new byte[]{9,8,7}, vault.get("session", "ratchet"));
     }
     @Test public void failedMigrationRollsBackAndLostKeyNeverReinitializes() throws Exception {
-        migrationBarrier = () -> { throw new android.database.sqlite.SQLiteDiskIOException("Synthetic storage failure inside migration"); };
-        assertThrows(Exception.class, () -> vault.createPassword(password()));
-        migrationBarrier = null;
+        SQLiteDatabase db = vault.getWritableDatabase();
+        long originalMaximum = db.getMaximumSize();
+        try (var pages = db.rawQuery("PRAGMA page_count", null)) {
+            assertTrue(pages.moveToFirst()); db.setMaximumSize(pages.getLong(0) * db.getPageSize());
+        }
+        try { assertThrows(android.database.sqlite.SQLiteFullException.class, () -> vault.createPassword(password())); }
+        finally { db.setMaximumSize(originalMaximum); }
         assertFalse(vault.isPasswordConfigured());
         assertArrayEquals(new byte[]{1,2,3,4}, vault.get("meta", "identity"));
         vault.getWritableDatabase().execSQL("UPDATE records SET value=X'01' WHERE bucket='session'");

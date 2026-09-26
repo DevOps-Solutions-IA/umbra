@@ -62,3 +62,33 @@ CI, results and artifact hashes must be appended after actual executions.
 Hardware biometric/TEE/StrongBox, real process death DURING commit, reinstall,
 independent cryptographic review and human password UX. No forensic memory-erasure
 or whole-storage rollback-resistance claim. No updates to PR #10 or Claude UI.
+
+## First published Android run — 5c0c455
+
+PR #11 OPEN/DRAFT against #10. HEAD `5c0c455b38b6bb6d897e2395683cfc8067439dae`,
+checkout `a5b6423cbdba7de11f3c02447b864088819f8269`, tree
+`6b9f6c3a3c774a872a5f60079f9d52224c4716cc`.
+Local full debug/release/lint/APK/JNI build on published HEAD: exit 0;
+164 connected + 124 offline JVM tests passed, 148 host tests passed.
+
+Password CI `36263833451` FAILED both debug and R8: 7/8 connected Vault cases
+passed, but the expected injected migration storage exception never happened.
+No force-stop/calibration or offline execution occurred after that failure.
+Artifacts `10913253373` (debug) and `10912844808` (R8) preserve the actual reports.
+Debug digest `c544cc662c483f3bfb77d803cedb5772acc2610bf104857d61f151b1f7d88214`;
+R8 digest `07f729796f3e75a2cfbb3dda81fb2a59472185679753e0d42f6d25c996856988`.
+
+Cause: the fixture overrode Context.openOrCreateDatabase to inject a cursor
+factory. Android 15 SQLiteOpenHelper instead calls SQLiteDatabase.openDatabase
+using its constructor-supplied factory; that fixture factory never ran. Verified
+against AOSP `android15-release`, SQLiteOpenHelper lines 156/370–382:
+https://github.com/aosp-mirror/platform_frameworks_base/blob/android15-release/core/java/android/database/sqlite/SQLiteOpenHelper.java
+
+Correction: exercise actual SQLiteFullException using max_page_count, restoring
+its original quota afterward and retaining rollback assertions. For deterministic
+force-stop before commit, a test-only SQL view/custom scalar function blocks the
+migration SELECT after the staging table is created. On restart the test first
+checks rollback removed staging/protection, then restores its synthetic view to
+the original table. This is an actual uncommitted production migration killed by
+the host, with a test schema barrier; it is not death during SQLite fsync/commit.
+No production Vault/crypto relaxation accompanies this fixture correction.
