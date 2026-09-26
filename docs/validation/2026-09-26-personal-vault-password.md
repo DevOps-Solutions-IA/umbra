@@ -252,3 +252,32 @@ reject before generation and leave the alias absent. This is a source-proven
 branch correction; Android behavior of this addition must be checked in its own
 run, not inferred from the previous nine-case reports. No hardware-only behavior
 is claimed from a software-keystore fixture.
+
+## RFCOMM regression and deterministic card-clock correction
+
+On `5b3b6cd6d0a40b620ab7287249b42bf39b203112`, password run `36267480704`
+passed debug/R8 in both flavors, including unknown-schema index-key rejection
+and startup measurement. All six local commands also exited 0 on that stable
+HEAD. Its focused run `36267480714` nearby job FAILED: five RFCOMM repetitions
+passed, offline repetition 2 closed after HELLO_RECEIVED on listener; dialer had
+sent HELLO. No proof/authentication or host comparison completed for that case.
+Listener instrumentation exit 0 carried an explicit assertion failure, correctly
+rejected by the host. Dialer was still running and terminated by cleanup. Artifact
+`10914870914`, SHA256
+`81b6d4d93ae7744b116db667acd26b039aae3cb46be7ddeb905894933be8de8a`.
+
+Source review found a reproducible defect: createCard sampled the wall clock
+separately for key expiry, created and expires. Crossing a second between the
+last two could sign a lifetime of MAX_TTL+1; importCard correctly rejected it.
+An internal clock seam preserves the production Bytes::now source. A deterministic
+real-libsignal JVM regression with successive readings t,t,t+1 failed before the
+fix (Gradle exit 1, SecurityException: invitation expired/clock incorrect), then
+passed connected/offline after using one issuance instant (exit 0). The same test
+requires a signed MAX_TTL+1 card to remain rejected and the imported contact to
+remain UNVERIFIED. No TTL limit, signature check or handshake timeout was relaxed.
+
+This is a demonstrated product defect consistent with the observed failure
+stage, not proof of the exact swallowed exception in that historical attempt.
+A test-only fixed-category card-import diagnostic now preserves that distinction
+without logging cards, capabilities or exception text. Final CI and actual RFCOMM
+must still pass on the corrected HEAD; JVM clock tests are not Bluetooth evidence.
