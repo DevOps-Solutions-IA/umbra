@@ -29,3 +29,16 @@ Existing launcher/adaptive/monochrome/notification/splash/reference tests unchan
 Executed here: 56 UI JVM tests (local JUnit shim) pass; type check 0 errors both flavors.
 `UiScreensRenderTest` (safe zone on the real AdaptiveIconDrawable, masks, splash, notification)
 is resource-driven and needs no change; not executed here.
+
+## Consolidation (same day, follow-up commit)
+
+- Launcher background color renamed to the conventional `@color/ic_launcher_background` (#0E120F),
+  used by both adaptive icons and the splash background/icon background.
+- Secondary symbol color #879676 (`ACCENT_SECONDARY`) applied to the small logos of the invitation
+  QR card and the verification QR panel; primary logos stay #A0AD93.
+- New JVM check `brandColorsAndRequiredIconFamiliesArePresent`: brand colors and presence of every
+  security, privacy, communication, location, device and navigation glyph family.
+- Search for Variant A geometry under `android/app/src`: only the test's discarded-geometry guard.
+- Executed here: 57 UI JVM tests pass (local JUnit shim); type check 0 errors both flavors;
+  tool tests and repository guard pass. Gradle build/lint/instrumentation and emulator captures
+  remain pending CI.

@@ -43,7 +43,7 @@ Comparación (16/20/24/32/48/72 px, render real de 16 px ampliado ×6, 512 px, n
 ## Implementación Android (única fuente de verdad)
 
 - Geometría: `res/values/brand.xml` → `@string/umbra_symbol_path` (rejilla 24×24, rellena, sin trazos,
-  degradados ni transparencias). Colores `@color/umbra_symbol` (#A0AD93) y `@color/umbra_launcher_background` (#0E120F).
+  degradados ni transparencias). Colores `@color/umbra_symbol` (#A0AD93) y `@color/ic_launcher_background` (#0E120F); alternativa secundaria del símbolo: token `ACCENT_SECONDARY` (#879676), usada en los logos pequeños de invitación y QR.
 - `drawable/umbra_symbol.xml`: logo interno (24dp, se tiñe desde el sistema de diseño con `Ui.logo()`).
 - `drawable/ic_launcher_foreground.xml`: capa frontal adaptativa de 108dp (escala ×2.6, centrado).
 - `mipmap-anydpi-v26/ic_launcher.xml` y `ic_launcher_round.xml`: fondo, frente y **monochrome** separados.

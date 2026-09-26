@@ -115,7 +115,23 @@ public class UiIconResourcesTest {
             for (Path p : files(SRC, ".xml")) assertFalse(p + " still contains a discarded symbol", Files.readString(p).contains(discarded));
         String styles = Files.readString(RES.resolve("values/styles.xml"));
         assertTrue(styles.contains("windowSplashScreenAnimatedIcon\">@drawable/ic_launcher_foreground"));
-        assertTrue(styles.contains("windowSplashScreenBackground\">@color/umbra_launcher_background"));
+        assertTrue(styles.contains("windowSplashScreenBackground\">@color/ic_launcher_background"));
+    }
+
+    @Test public void brandColorsAndRequiredIconFamiliesArePresent() throws Exception {
+        Map<String, String> values = values();
+        assertEquals("#FFA0AD93", values.get("@color/umbra_symbol"));
+        assertEquals("#FF0E120F", values.get("@color/ic_launcher_background"));
+        assertEquals(0xFF879676, UmbraColors.ACCENT_SECONDARY); // Secondary symbol color for small logos.
+        String[] required = {"vault_locked", "vault_unlocked", "password", "change_password", "emergency_lock", "lock", "unlock", "shield",
+            "shield_check", "verified", "identity_changed", "person_block", "network_off", "offline_bluetooth", "bell_off", "eye", "eye_off",
+            "warning", "info", "chat", "group", "call", "call_end", "video", "video_off", "mic", "mic_off", "speaker", "send", "attach", "file",
+            "reply", "location", "location_precise", "location_approx", "location_zone", "location_live", "location_off", "devices",
+            "device_current", "device_authorized", "device_pending", "device_revoked", "device_offline", "bluetooth", "back", "close", "check",
+            "search", "settings", "timer", "trash", "more", "contacts", "person", "person_add", "voice", "camera", "camera_switch", "qr"};
+        for (String name : required) assertTrue("missing icon ic_" + name, Files.exists(RES.resolve("drawable/ic_" + name + ".xml")));
+        for (String launcher : new String[]{"ic_launcher_foreground", "ic_notification_umbra", "umbra_symbol"})
+            assertTrue(launcher, Files.exists(RES.resolve("drawable/" + launcher + ".xml")));
     }
 
     @Test public void notificationIconIsAWhiteSilhouette() throws Exception {

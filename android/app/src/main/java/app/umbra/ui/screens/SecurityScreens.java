@@ -112,7 +112,7 @@ public final class SecurityScreens {
                 panel.addView(ui.text(UmbraType.CAPTION, "El código no se copia al portapapeles."));
             }
             case QR -> {
-                LinearLayout qrHead = ui.row(); qrHead.addView(ui.logo(20, UmbraColors.ACCENT_MUTED));
+                LinearLayout qrHead = ui.row(); qrHead.addView(ui.logo(20, UmbraColors.ACCENT_SECONDARY));
                 TextView qrTitle = ui.text(UmbraType.LABEL, "Mismo código en QR"); qrTitle.setPadding(ui.dp(8), 0, 0, 0); qrHead.addView(qrTitle);
                 panel.addView(qrHead);
                 if (s.qr() != null) {

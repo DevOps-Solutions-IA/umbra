@@ -54,7 +54,7 @@ public final class SettingsScreens {
         id.addView(ui.text(UmbraType.CAPTION, "Es pública: sirve para que tus contactos te identifiquen. No es una contraseña. UMBRA nunca muestra claves privadas."));
         body.addView(id);
         LinearLayout qr = ui.card();
-        LinearLayout qrHead = ui.row(); qrHead.addView(ui.logo(24, UmbraColors.ACCENT_MUTED));
+        LinearLayout qrHead = ui.row(); qrHead.addView(ui.logo(24, UmbraColors.ACCENT_SECONDARY));
         TextView qrTitle = ui.text(UmbraType.LABEL, "QR de invitación"); qrTitle.setPadding(ui.dp(10), 0, 0, 0); qrHead.addView(qrTitle);
         qr.addView(qrHead);
         qr.addView(ui.text(UmbraType.CAPTION, "Hoy las invitaciones se intercambian como archivo de un solo uso. Mostrarlas como QR requiere escaneo con cámara."));
