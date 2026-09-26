@@ -27,7 +27,7 @@ public final class FeatureAvailability {
         a.status.put(Feature.FILES, Status.AVAILABLE);
         a.status.put(Feature.LOCATION_SHARING, Status.AVAILABLE);
         a.status.put(Feature.DEVICE_LIST, Status.AVAILABLE);
-        a.status.put(Feature.DEVICE_REVOCATION, Status.AVAILABLE);
+        // DeviceService.revoke exists, but distributing the new roster to contacts has no UI flow yet.
         a.status.put(Feature.NEARBY_BLUETOOTH, Status.AVAILABLE);
         boolean calls = connected && callPlatform;
         Status media = calls ? Status.AVAILABLE : Status.NOT_IN_FLAVOR;

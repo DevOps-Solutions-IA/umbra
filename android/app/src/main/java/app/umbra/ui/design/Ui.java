@@ -483,7 +483,7 @@ public final class Ui {
     public LinearLayout bubble(MessageItem m, Runnable onClick, Runnable onRetry) {
         LinearLayout line = row(); line.setGravity(m.kind() == MessageItem.Kind.SYSTEM ? Gravity.CENTER : m.outgoing() ? Gravity.END : Gravity.START);
         if (m.kind() == MessageItem.Kind.SYSTEM) {
-            TextView s = chip(Tone.NEUTRAL, Glyph.INFO, m.text()); line.addView(s); line.setLayoutParams(margins(match(), 8, 8)); return line;
+            TextView s = chip(Tone.NEUTRAL, Glyph.INFO, m.text()); line.addView(s); line.setPadding(0, dp(8), 0, dp(8)); line.setLayoutParams(match()); return line;
         }
         LinearLayout b = column();
         b.setBackground(shape(m.outgoing() ? UmbraColors.BUBBLE_OUTGOING : UmbraColors.BUBBLE_INCOMING, 18));
@@ -518,7 +518,8 @@ public final class Ui {
         LinearLayout.LayoutParams p = wrap();
         int side = dp(44); if (m.outgoing()) p.setMarginStart(side); else p.setMarginEnd(side);
         line.addView(b, p);
-        line.setLayoutParams(margins(match(), 3, 3));
+        line.setPadding(0, dp(3), 0, dp(3)); // Padding, not margins: list rows get AbsListView params.
+        line.setLayoutParams(match());
         return line;
     }
     /** Location card inside a conversation: who shares, precision, freshness, and a stop control if ours. */

@@ -54,6 +54,9 @@ public record ErrorPresentation(ErrorKind kind, String title, String body, Glyph
         return ErrorKind.GENERIC;
     }
 
+    /** Same category with a context-specific explanation (still user-facing text, never a trace). */
+    public ErrorPresentation withBody(String newBody) { return new ErrorPresentation(kind, title, newBody, glyph, tone, retryable, technical); }
+
     /** Bounded single-line diagnostic; never multi-line traces. */
     static String sanitize(String technical) {
         if (technical == null) return null;
