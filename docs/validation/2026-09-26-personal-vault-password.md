@@ -151,3 +151,40 @@ New local candidate: debug instrumented APKs compile, JVM 164/124 and 149 host
 checks pass. Android execution of the ninth corruption case and reinstall remains
 pending until this candidate's own CI finishes. Existing multimedia failures and
 superseded runs stay in their reports; they are not removed or reclassified green.
+
+## Password acceptance — 8f204ea
+
+HEAD `8f204ea6dbda0164f2a9a99510826117712b2960`, checkout
+`a27aebe2c43ef3248734e2b76f38b67594e31438`, equal tree
+`3930c59b2fbaf2678ddaf73e889d5eaa22bfbfef`.
+Password run `36265376601`: both jobs SUCCESS. Both flavors passed nine actual
+Android Vault cases in debug and R8, including the newly reproduced default
+SQLite corruption deletion and preservation regression. Force-stop after unlock
+and during uncommitted migration passed in all four combinations. Debug also
+passed actual uninstall/reinstall of both flavors with restored ciphertext:
+correct password without the original device keys could not open or regenerate.
+Keystore fixture reported security level 0 (software), not TEE/StrongBox.
+
+Debug artifact `10914076104`, SHA256
+`1bee6deeb514c5402eb89e34dd530fb4a24c2ba8053f2795da5da9cb7abf5a90`;
+R8 artifact `10913526745`, SHA256
+`dc01a7767fb64191d4759dbcadca9eaf411f154f93ab3f6c22f185a3f40664cf`.
+App/test APK and R8 mapping hashes are in each flavor's receipt.json. Reports
+contain no database, password or key. Debug unlock samples 671–1011 ms; R8
+225–300 ms; sampled Java heap peak approximately 201 MB, including collectable
+allocations. These are AVD measurements, not physical-device calibration.
+
+Local on this exact HEAD: test_local, 149 tools tests, repository_guard,
+build_android --check-only, build_android --release, and both optimized vaultLab
+app/test builds all exited 0. JVM 164 connected / 124 offline. UI diff remains
+empty. The original base worktree is unchanged.
+
+Final regression acceptance is NOT complete: focused run `36265376586` debug
+again failed all nine attempts before media, at the owned-AVD UDP listener
+(exit 1, diagnostic category other, receivedBytes 0). RFCOMM passed. The previous
+`d4711ab` focused run had the same debug failure while its R8 cases passed; its
+Verify run `36264314236` passed all four jobs. This is insufficient to establish
+the cause of the UDP listener failure. A bounded escaped diagnostic of this
+specific synthetic toybox command is added next; it does not relax the route
+precondition, add retries or change network/privacy policy. Other current runs
+must finish and each final HEAD needs its own acceptance.
