@@ -189,8 +189,11 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     } catch(Exception rejected) {return false;}
                 }; // Native SSLPostConnectionCheck independently verifies host/IP identity; SECURE remains configured.
             }
-            NativeVoiceSession.DescriptionPublisher hostile=configuration.optBoolean("incorrectFingerprint")?
-                (generation,role,sdp,fingerprint)->lease.description(generation,role,sdp,Bytes.sha256(Bytes.utf8(fingerprint))):null;
+            var nativeWorker=new java.util.concurrent.atomic.AtomicReference<Thread>();
+            NativeVoiceSession.DescriptionPublisher hostile=(generation,role,sdp,fingerprint)->{
+                nativeWorker.set(Thread.currentThread());
+                lease.description(generation,role,sdp,configuration.optBoolean("incorrectFingerprint")?Bytes.sha256(Bytes.utf8(fingerprint)):fingerprint);
+            };
             voice=new NativeVoiceSession(context,lease,turn,adm,false,verifier,hostile,caller&&initialModulation);
             AtomicInteger videoCaptured=new AtomicInteger();
             SyntheticVideoCapturer.Decoded videoDecoded=new SyntheticVideoCapturer.Decoded(caller);
@@ -336,7 +339,24 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     if(videoStage==2 && Files.exists(files.resolve("synthetic-voice-video-off.json"))) {
                         Bundle beforeStop=new Bundle();beforeStop.putString("videoBeforeStop",voice.state().name()+":"+voice.failureStage()+":"+voice.videoStatus());
                         InstrumentationRegistry.getInstrumentation().sendStatus(0,beforeStop);
-                        videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();videoOffAt=SystemClock.elapsedRealtime();videoCaptureBaseline=videoCaptured.get();videoAudioBaseline=decoded.get();videoStage=6;
+                        if(configuration.optBoolean("stopVideoRace")) {
+                            final NativeVoiceSession activeVoice=voice;
+                            var entered=new java.util.concurrent.CountDownLatch(1);
+                            var resume=new java.util.concurrent.CountDownLatch(1);
+                            db.beforeTransaction=()->{
+                                if(Thread.currentThread()!=nativeWorker.get() || !activeVoice.videoActivationStage().equals("video-authorization"))return;
+                                db.beforeTransaction=null;entered.countDown();
+                                try {if(!resume.await(3,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("Video race release missing");}
+                                catch(InterruptedException e){Thread.currentThread().interrupt();throw new AssertionError(e);}
+                            };
+                            try {
+                                if(!entered.await(2,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("Native activation rendezvous not reached");
+                                videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();
+                            } finally {db.beforeTransaction=null;resume.countDown();}
+                            Thread.sleep(350);
+                            if(voice.state()!=NativeVoiceSession.State.ACTIVE)throw new AssertionError("Video-only cancellation terminated authorized audio: "+voice.failureStage());
+                        } else {videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();}
+                        videoOffAt=SystemClock.elapsedRealtime();videoCaptureBaseline=videoCaptured.get();videoAudioBaseline=decoded.get();videoStage=6;
                     }
                     if(videoStage==6 && SystemClock.elapsedRealtime()-videoOffAt>=2000 && decoded.get()-videoAudioBaseline>=50) {
                         int atRest=videoCaptured.get();Thread.sleep(500);

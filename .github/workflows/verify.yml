@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: umbra-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   repository-guard:
     runs-on: ubuntu-24.04

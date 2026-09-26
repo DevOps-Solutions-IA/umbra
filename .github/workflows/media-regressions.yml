@@ -1,12 +1,12 @@
-name: Video media laboratory
+name: Focused media regressions
 "on":
   pull_request:
-    paths: ['android/**', 'scripts/**', '.github/workflows/media-video.yml']
+    paths: ['android/**', 'scripts/**', '.github/workflows/media-regressions.yml']
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: video-media-${{ github.ref }}
+  group: focused-media-${{ github.ref }}
   cancel-in-progress: false
 jobs:
   video:
@@ -15,7 +15,7 @@ jobs:
       matrix:
         optimized: [false, true]
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
         with:
@@ -72,11 +72,11 @@ jobs:
           umbra_start_avd umbra-video-b 5556
           options=()
           if [ "${{ matrix.optimized }}" = true ]; then options+=(--optimized); fi
-          python scripts/run_video_matrix.py --a emulator-5554 --b emulator-5556 "${options[@]}" --reports "$UMBRA_DEVICE_REPORTS"
+          python scripts/run_media_regressions.py --a emulator-5554 --b emulator-5556 "${options[@]}" --reports "$UMBRA_DEVICE_REPORTS"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
-          name: video-media-evidence-r8-${{ matrix.optimized }}-${{ github.sha }}
+          name: focused-media-evidence-r8-${{ matrix.optimized }}-${{ github.sha }}
           path: |
             android/app/build/reports/video-media/
             android/app/build/outputs/mapping/connectedMediaLab/

@@ -182,6 +182,7 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     }
     public State state() { return state; }
     public String failureStage() { return failureStage; }
+    String videoActivationStage() { return videoFailureStage; }
     public String negotiationDiagnostic() { return negotiationDiagnostic+", pair="+pairDiagnostic+", stats="+statsDiagnostic; }
     public long receivedAudioPackets() { return receivedAudioPackets; }
     public String audioCodec() { return audioCodec; }

@@ -16,6 +16,8 @@ public final class SqliteDeviceRecords implements Records, AutoCloseable {
     private final File path;
     private SQLiteDatabase database;
     public String failBucket;
+    /** Test-only rendezvous before acquiring SQLite; never included in production APKs. */
+    public volatile Runnable beforeTransaction;
     public SqliteDeviceRecords() { this(null,false); }
     public SqliteDeviceRecords(String fixture, boolean existing) {
         if(fixture!=null && !Set.of("location-restart","voice-restart").contains(fixture)) throw new SecurityException("Unknown synthetic fixture");
@@ -57,7 +59,11 @@ public final class SqliteDeviceRecords implements Records, AutoCloseable {
         return keys;
     }
     public Runnable authorization() { var lease=gate.enter(); return () -> gate.check(lease); }
-    public synchronized <T> T transaction(Work<T> work) throws Exception {
+    public <T> T transaction(Work<T> work) throws Exception {
+        Runnable hook=beforeTransaction;if(hook!=null)hook.run();
+        return lockedTransaction(work);
+    }
+    private synchronized <T> T lockedTransaction(Work<T> work) throws Exception {
         var lease=gate.enter(); database.beginTransaction(); boolean ended=false;
         try {
             T value=work.run(); gate.commit(lease,() -> { database.setTransactionSuccessful(); database.endTransaction(); return null; });

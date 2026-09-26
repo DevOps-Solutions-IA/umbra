@@ -7,7 +7,7 @@ permissions:
   contents: read
 concurrency:
   group: optimized-media-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   optimized-voice:
     runs-on: ubuntu-24.04
