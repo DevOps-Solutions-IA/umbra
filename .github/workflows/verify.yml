@@ -23,6 +23,10 @@ jobs:
           python-version: '3.12'
       - name: Source and history hygiene
         run: python scripts/repository_guard.py --git-history
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5, Node 24
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Handoff tooling tests (not Android tests)
         run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
   relay-and-core:

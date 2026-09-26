@@ -1,5 +1,17 @@
 # Backlog de finalización verificable
 
+## Continuación tras CI completa de d9dd2f3 — 2026-09-26
+
+Verify (cuatro jobs), voz R8, modulación debug/R8 y las 18 regresiones
+focalizadas pasaron. Video R8 pasó 32 casos; debug pasó 31 y falló en
+credential-expiry: el arnés abortó ante el rechazo correcto de una escritura
+cancelada. Se añade una aserción estricta de ese rechazo, sin autorizar el envío
+ni alterar la caducidad, y tres repeticiones reales por configuración. Los
+resultados siguientes requieren CI nueva; los fallos anteriores se conservan.
+146 pruebas de herramientas locales pasan. Detalles y artefactos históricos en
+[la evidencia](validation/2026-09-26-modulator-stabilization.md); estado vigente
+y recibos finales en la PR #10, que sigue abierta en borrador.
+
 ## Estabilización comprobada parcialmente — 2026-09-26
 
 Carrera de video reproducida 3 veces debug y 3 R8 en 60bc42e/run36253121718.

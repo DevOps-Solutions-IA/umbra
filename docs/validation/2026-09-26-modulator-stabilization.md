@@ -146,3 +146,53 @@ proved, but sole causation of that historical timeout remains uncertain.
 Local tooling now 145 PASS, including rejection of missing/ambiguous discovery
 and permission states. New positive RFCOMM and final whole-commit CI required;
 final results/checkouts/artifact receipts are maintained in the PR #10 status.
+
+## d9dd2f3 acceptance and an additional expiry harness failure
+
+HEAD `d9dd2f3453436ecfab24ba5dbda3eb6835007627`, merge checkout
+`213884eb56205abd358a2e2efcbd9f43ef7bda83`, common tree
+`98f1da25f2553931b908db93f186afb538fa4edb`:
+Verify 36254567564 all four jobs PASS; voice R8 36254567556 all 15 PASS;
+modulation 36254567582 debug/R8 PASS; focused 36254567552 all 18 PASS
+(six nearby and six video per configuration). Both full-sequence RFCOMM runs
+also PASS with normal exit 0 on both endpoints. Local final-state tools 145,
+backend 149, core 105, connected JVM 157/offline JVM 117 PASS; full release
+build/lint/APK policies PASS. Both unsigned release hashes equal CI's hashes.
+Preserved downloadable ZIPs with locally checked SHA-256 in
+`.run/modulator-final-d9dd2f3/ci-receipt.json`, plus original patch/export/bundle.
+
+Full video 36254567544: R8 all 32 PASS; debug 31 PASS, credential-expiry FAIL.
+Original camera-permission-revoked, video-stop-race, direct-blocked and tls-valid
+PASS. The failure is NOT hidden by those results. Artifact 10910841972 SHA-256
+`491a1f4e11ac6f4d2ce03283fdb191ed7590017018b86f5405d95db61fb2782a`.
+All active/stopped/resumed video phases completed; the host requested expiry
+observation. The fixture instead terminated in pump/sendAuthorized with
+CallService.lease `Call interrupted`, while native expiry cancelled the lease.
+Cancellation between outbox enumeration and the transport guard is a valid
+rejected write, not successful signaling. No production guard is weakened.
+
+Lab correction asserts only that specific rejection, for the same queued call,
+after requested credential expiry has actually arrived and native media is
+terminal. Other exceptions, another call, missing expiry request, or live media
+still fail. Rejected delivery is counted in the closure receipt, never marked
+transported or retried; measured native callback quiescence remains mandatory.
+The clock is rechecked at rejection, not before waiting for the write guard.
+Negative JVM guard tests cover those distinctions; their first run failed on
+the missing helper, then passed. This is a classification test, not a native
+media reproduction. The actual red media run above is retained. Focused CI adds
+three real credential-expiry repetitions per configuration; their new result
+and all whole-commit suites remain pending until the next published HEAD runs.
+
+The tooling job now explicitly selects JDK 21 for the standalone negative lab
+assertion test. Local debug instrumentation compiled. An attempted combined
+debug/mediaLab instrumentation command failed because testBuildType is exclusive;
+separate Gradle invocations use the existing configuration rather than changing it.
+
+R8 tracing initially rejected the new lab helper as missing from its explicit
+fixture input JAR. Added that single test class to the source list; no broad keep
+rules, production dependency or minification changes. This build failure is
+retained in /tmp/umbra-expiry-r8-build-first.log.
+
+Separate debug instrumentation build PASS (10 s); corrected mediaLab/R8 build
+PASS (31 s). Tools 146 PASS, repository guard 315 files PASS, diff check PASS.
+These compile/classification checks do not replace the pending native CI runs.

@@ -103,7 +103,7 @@ if (providers.gradleProperty("umbraMediaLab").orNull == "true") {
         archiveFileName.set("media-fixture-references.jar")
         destinationDirectory.set(layout.buildDirectory.dir("generated/mediaLab"))
         from(layout.buildDirectory.dir("intermediates/javac/connectedMediaLabAndroidTest/compileConnectedMediaLabAndroidTestJavaWithJavac/classes")) {
-            include("app/umbra/media/VideoSurfaceLifecycleTest*.class", "app/umbra/media/CameraProviderFixtureListener*.class", "app/umbra/media/SyntheticVideoCapturer*.class", "app/umbra/media/VoiceEngineFixtureListener*.class", "app/umbra/media/VoiceRestartFixtureListener*.class",
+            include("app/umbra/media/ExpiredDeliveryAssertion.class", "app/umbra/media/VideoSurfaceLifecycleTest*.class", "app/umbra/media/CameraProviderFixtureListener*.class", "app/umbra/media/SyntheticVideoCapturer*.class", "app/umbra/media/VoiceEngineFixtureListener*.class", "app/umbra/media/VoiceRestartFixtureListener*.class",
                 "app/umbra/lab/SqliteDeviceRecords*.class", "app/umbra/DeviceSignalTest*.class", "app/umbra/DeviceMemoryRecords*.class")
         }
     }

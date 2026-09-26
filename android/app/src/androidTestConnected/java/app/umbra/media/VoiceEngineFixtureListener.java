@@ -39,13 +39,25 @@ public final class VoiceEngineFixtureListener extends RunListener {
         }
     }
     private long nextPoll;
-    private void pump(RelayClient relay,Engine engine) throws Exception {
+    private int expiredDeliveriesRejected;
+    private void pump(RelayClient relay,Engine engine) throws Exception { pump(relay,engine,null,null,false,Long.MAX_VALUE); }
+    private void pump(RelayClient relay,Engine engine,String callId,NativeVoiceSession voice,boolean expiryExpected,long credentialExpiry) throws Exception {
         for(JSONObject q:engine.outbox()) {
             // Match production scheduling. A successful upload is not a request
             // to repost the same immutable envelope on every 100 ms fixture tick.
             if(q.optLong("nextRelay",0)>Bytes.now()) continue;
             var envelope=q.getJSONObject("envelope");
-            relay.sendAuthorized(engine,engine.contact(q.getString("peer")).getJSONObject("card"),envelope);
+            try { relay.sendAuthorized(engine,engine.contact(q.getString("peer")).getJSONObject("card"),envelope); }
+            catch(SecurityException rejected) {
+                // Cancellation can occur after outbox enumeration and before the transport guard.
+                // Assert this exact expected expiry rejection; never mark it sent, retry it, or
+                // accept identity/storage/other-session errors as successful cancellation evidence.
+                ExpiredDeliveryAssertion.check(rejected,expiryExpected && Bytes.now()>=credentialExpiry,voice!=null &&
+                    (voice.state()==NativeVoiceSession.State.FAILED || voice.state()==NativeVoiceSession.State.ENDED),
+                    callId,q.optString("callSession"));
+                expiredDeliveriesRejected++;
+                return; // Native closure must still pass the measured callback-quiescence checks.
+            }
             engine.transported(envelope.getString("id"),true);
         }
         long now=SystemClock.elapsedRealtime();
@@ -207,7 +219,10 @@ public final class VoiceEngineFixtureListener extends RunListener {
             long processingAt=0,processingWindow=0;String processingExpected="",processingDiagnostic="";
             long muteAt=0; int quietBaseline=-1,resumeBaseline=0;
             while(SystemClock.elapsedRealtime()<deadline) {
-                pump(relay,engine);
+                boolean expiryExpected=evidence &&
+                    Files.exists(files.resolve("synthetic-voice-loss.json")) &&
+                    read("synthetic-voice-loss.json").optString("action").equals("credential-expiry");
+                pump(relay,engine,id,voice,expiryExpected,credential.getLong("expires"));
                 if(voice.state()==NativeVoiceSession.State.FAILED && !evidence) {
                     if(!expectedRejection) throw new AssertionError("Native authenticated voice failed before audio: "+voice.failureStage()+"; "+voice.negotiationDiagnostic()+"; captured="+captured.get()+", decoded="+decoded.get());
                     if(captured.get()!=0 || decoded.get()!=0 || videoCaptured.get()!=0) throw new AssertionError("Rejected TURN path captured or decoded audio");
@@ -276,7 +291,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         for(JSONObject row:new Engine(db,SystemClock::elapsedRealtime).calls().sessions())
                             if(!app.umbra.calls.CallPayload.TERMINAL.contains(row.getString("state"))) throw new AssertionError("SQLite rollback revived voice");
                     }
-                    write("synthetic-voice-lost.json",new JSONObject().put("failedClosed",true).put("nativeCaptureQuietAfterMillis",quietAfter).put("nativeCaptureObservedMillis",observedFor).put("lateCaptureCallbacks",lateCaptureCallbacks));waitFor("synthetic-voice-stop.json",deadline);break;
+                    write("synthetic-voice-lost.json",new JSONObject().put("failedClosed",true).put("nativeCaptureQuietAfterMillis",quietAfter).put("nativeCaptureObservedMillis",observedFor).put("lateCaptureCallbacks",lateCaptureCallbacks).put("expiredDeliveriesRejected",expiredDeliveriesRejected));waitFor("synthetic-voice-stop.json",deadline);break;
                 }
                 if(initialModulation && !initialProcessingEvidence && voice.state()==NativeVoiceSession.State.ACTIVE && (caller?decoded.get():modified.get())>=100) {
                     if(!caller && decoded.get()!=0)throw new AssertionError("Natural voice escaped initial MODULATED selection");
