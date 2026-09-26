@@ -196,3 +196,17 @@ retained in /tmp/umbra-expiry-r8-build-first.log.
 Separate debug instrumentation build PASS (10 s); corrected mediaLab/R8 build
 PASS (31 s). Tools 146 PASS, repository guard 315 files PASS, diff check PASS.
 These compile/classification checks do not replace the pending native CI runs.
+
+## Receipt schema regression in 0cebdec (retained, not a media pass)
+
+Modulation 36257524154 failed both debug/R8 at lock. The lab added
+expiredDeliveriesRejected to closure receipts but host valid_stop required the
+old exact four-key set; every otherwise valid new closure receipt was rejected.
+This is a regression introduced during stabilization, not a demonstrated native
+capture failure. Existing stop timing/callback checks remain unchanged.
+Updated the exact schema and type/bounds checks: the new count must be 0, or at
+most 1 only in the explicit credential-expiry scenario. Missing/extra fields,
+booleans, negative/excess counts and weak closure observations fail. Regression
+failed before the validator fix and passes after. Bounded closure observations
+are saved before validation so a later failure retains its measurement.
+The failed CI runs remain visible; no prior green validates this correction.

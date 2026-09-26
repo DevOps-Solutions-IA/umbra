@@ -82,10 +82,15 @@ class VoiceEvidenceTest(unittest.TestCase):
 
     def test_state_flag_does_not_prove_native_capture_stopped(self):
         good={"failedClosed":True,"nativeCaptureQuietAfterMillis":1000,
-              "nativeCaptureObservedMillis":500,"lateCaptureCallbacks":0}
+              "nativeCaptureObservedMillis":500,"lateCaptureCallbacks":0,"expiredDeliveriesRejected":0}
         self.assertTrue(valid_stop(good))
+        self.assertTrue(valid_stop({**good,"expiredDeliveriesRejected":1},expected_expiry=True))
+        self.assertFalse(valid_stop({**good,"expiredDeliveriesRejected":1}))
         self.assertFalse(valid_stop({"failedClosed":True}))
         for field,value in (("lateCaptureCallbacks",1),("nativeCaptureObservedMillis",0),
-                            ("nativeCaptureQuietAfterMillis",30000),("failedClosed",False)):
+                            ("nativeCaptureQuietAfterMillis",30000),("failedClosed",False),
+                            ("expiredDeliveriesRejected",-1),("expiredDeliveriesRejected",True),
+                            ("expiredDeliveriesRejected",2),("unknown",0)):
             bad={**good,field:value}
             self.assertFalse(valid_stop(bad))
+            self.assertFalse(valid_stop(bad,expected_expiry=True))

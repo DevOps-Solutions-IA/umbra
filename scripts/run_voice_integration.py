@@ -33,13 +33,14 @@ def valid_audio(value):
             and value.get("codec")=="audio/opus" and value.get("sdpAddressAudit") is True)
 
 
-def valid_stop(report):
-    return (set(report)=={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks"}
+def valid_stop(report, *, expected_expiry=False):
+    return (set(report)=={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"}
             and report["failedClosed"] is True
-            and all(type(report[key]) is int for key in ("nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks"))
+            and all(type(report[key]) is int for key in ("nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"))
             and 1000<=report["nativeCaptureQuietAfterMillis"]<=2000
             and 500<=report["nativeCaptureObservedMillis"]<=1500
-            and report["lateCaptureCallbacks"]==0)
+            and report["lateCaptureCallbacks"]==0
+            and 0<=report["expiredDeliveriesRejected"]<=(1 if expected_expiry else 0))
 
 
 def permission_granted(dump, name):
@@ -294,7 +295,9 @@ def main():
                     docker("stop","--time","0",turn.name)
                 for serial in (args.a,args.b):
                     stopped=read(serial,"synthetic-voice-lost.json",processes[serial],deadline)
-                    if not valid_stop(stopped):
+                    closure_keys=("failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected")
+                    (args.reports/f"closure-observation-{serial}.json").write_text(json.dumps({key:stopped.get(key) for key in closure_keys},indent=2)+"\n")
+                    if not valid_stop(stopped,expected_expiry=args.scenario=="credential-expiry"):
                         raise RuntimeError("Native media did not stop for scenario: "+args.scenario)
                     stop_evidence.append(stopped)
             if args.scenario in ("allocation-expiry","force-stop","permission-revoked","camera-permission-revoked"):
