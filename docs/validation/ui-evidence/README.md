@@ -27,6 +27,7 @@ Required set and file names (connected variant; offline omits calls/modulator/vi
 | 12 | Settings | `13-settings*.png` |
 | 13 | Offline | `14-offline-nearby.png`, `14b-offline-chat.png` (offline variant) |
 | 14 | Identity changed | `15-chat-identity-changed.png`, `15b/15c` unverified/blocked |
+| — | Branding (launcher masks, splash composition, icon set) | `21-launcher-icon-masks.png`, `22-splash-theme-composition.png`, `23-icon-set.png` |
 | — | Onboarding, empty, errors, large font | `02*`, `17-empty-state.png`, `18-errors.png`, `20*` |
 
 Status on 2026-09-26: not yet generated (no CI run of this branch). Add a dated

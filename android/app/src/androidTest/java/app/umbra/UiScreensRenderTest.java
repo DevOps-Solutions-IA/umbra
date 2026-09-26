@@ -401,4 +401,85 @@ public class UiScreensRenderTest {
             new SecurityScreens.VerifyActions() { public void back() {} public void method(SecurityScreens.Method m) {} public void compare(String c) {} public void technical(boolean s) {} }));
         assertAccessible(verify);
     }
+
+    @Test public void brandingLauncherSplashNotificationAndIconSetRenderOnAndroid() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
+            Context ctx = themed(1f); float d = ctx.getResources().getDisplayMetrics().density;
+            android.graphics.drawable.Drawable launcher = ctx.getDrawable(R.mipmap.ic_launcher);
+            assertTrue("launcher must be adaptive", launcher instanceof android.graphics.drawable.AdaptiveIconDrawable);
+            android.graphics.drawable.AdaptiveIconDrawable adaptive = (android.graphics.drawable.AdaptiveIconDrawable) launcher;
+            if (android.os.Build.VERSION.SDK_INT >= 33) assertNotNull("themed icon layer", adaptive.getMonochrome());
+            assertTrue(ctx.getDrawable(R.mipmap.ic_launcher_round) instanceof android.graphics.drawable.AdaptiveIconDrawable);
+            // Foreground stays inside the 66dp safe zone (radius 33 of 108) for every mask.
+            int size = Math.round(108 * d);
+            Bitmap fg = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
+            android.graphics.drawable.Drawable front = ctx.getDrawable(R.drawable.ic_launcher_foreground);
+            front.setBounds(0, 0, size, size); front.draw(new android.graphics.Canvas(fg));
+            double max = 0; int opaque = 0;
+            for (int y = 0; y < size; y++) for (int x = 0; x < size; x++) if (Color.alpha(fg.getPixel(x, y)) > 16) { opaque++; max = Math.max(max, Math.hypot(x + 0.5 - size / 2.0, y + 0.5 - size / 2.0)); }
+            assertTrue("symbol drawn", opaque > size * size / 50);
+            assertTrue("symbol leaves the safe zone: " + max / d + "dp", max <= 33 * d + 1);
+            // Mask and backdrop sheet (real framework drawing of the real resources).
+            String[] masks = {"circle", "squircle", "rounded", "teardrop", "square"};
+            int[] backdrops = {Color.BLACK, 0xFF7A7F78, Color.WHITE, 0xFFD9DDD2, 0xFF1F2A22};
+            int cell = Math.round(72 * d), pad = Math.round(12 * d);
+            Bitmap sheet = Bitmap.createBitmap((cell + pad) * masks.length + pad, (cell + pad) * backdrops.length + pad, Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas c = new android.graphics.Canvas(sheet);
+            for (int r = 0; r < backdrops.length; r++) {
+                android.graphics.Paint bg = new android.graphics.Paint(); bg.setColor(backdrops[r]);
+                c.drawRect(0, r * (cell + pad), sheet.getWidth(), (r + 1) * (cell + pad) + pad, bg);
+                for (int m = 0; m < masks.length; m++) {
+                    int left = pad + m * (cell + pad), top = pad + r * (cell + pad);
+                    android.graphics.Path clip = new android.graphics.Path(); android.graphics.RectF box = new android.graphics.RectF(left, top, left + cell, top + cell);
+                    switch (masks[m]) {
+                        case "circle" -> clip.addOval(box, android.graphics.Path.Direction.CW);
+                        case "squircle" -> clip.addRoundRect(box, cell * 0.36f, cell * 0.36f, android.graphics.Path.Direction.CW);
+                        case "rounded" -> clip.addRoundRect(box, cell * 0.18f, cell * 0.18f, android.graphics.Path.Direction.CW);
+                        case "teardrop" -> clip.addRoundRect(box, new float[]{cell / 2f, cell / 2f, cell / 2f, cell / 2f, cell * 0.1f, cell * 0.1f, cell / 2f, cell / 2f}, android.graphics.Path.Direction.CW);
+                        default -> clip.addRect(box, android.graphics.Path.Direction.CW);
+                    }
+                    c.save(); c.clipPath(clip);
+                    // Adaptive layers are 108dp with 18dp bleed on each side of the 72dp viewport.
+                    int bleed = Math.round(cell * 18f / 72f);
+                    adaptive.getBackground().setBounds(left - bleed, top - bleed, left + cell + bleed, top + cell + bleed); adaptive.getBackground().draw(c);
+                    adaptive.getForeground().setBounds(left - bleed, top - bleed, left + cell + bleed, top + cell + bleed); adaptive.getForeground().draw(c);
+                    c.restore();
+                }
+            }
+            save("21-launcher-icon-masks", sheet); sheet.recycle();
+            // Splash: resolve the theme attributes and compose the equivalent frame.
+            android.content.res.TypedArray t = ctx.obtainStyledAttributes(R.style.Theme_Umbra, new int[]{android.R.attr.windowSplashScreenAnimatedIcon, android.R.attr.windowSplashScreenBackground});
+            int icon = t.getResourceId(0, 0); int splashBg = t.getColor(1, 0); t.recycle();
+            assertEquals(R.drawable.ic_launcher_foreground, icon);
+            assertEquals(0xFF0E120F, splashBg);
+            Bitmap splash = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888); splash.eraseColor(splashBg);
+            int s2 = Math.round(240 * d); android.graphics.drawable.Drawable si = ctx.getDrawable(icon);
+            si.setBounds((WIDTH - s2) / 2, (HEIGHT - s2) / 2, (WIDTH + s2) / 2, (HEIGHT + s2) / 2); si.draw(new android.graphics.Canvas(splash));
+            save("22-splash-theme-composition", splash); splash.recycle();
+            // Notification icon: white silhouette only.
+            Bitmap note = Bitmap.createBitmap(Math.round(24 * d), Math.round(24 * d), Bitmap.Config.ARGB_8888);
+            android.graphics.drawable.Drawable n = ctx.getDrawable(R.drawable.ic_notification_umbra); n.setBounds(0, 0, note.getWidth(), note.getHeight()); n.draw(new android.graphics.Canvas(note));
+            int white = 0;
+            for (int y = 0; y < note.getHeight(); y++) for (int x = 0; x < note.getWidth(); x++) {
+                int px = note.getPixel(x, y);
+                if (Color.alpha(px) > 200) { white++; assertTrue("notification icon must be white", Color.red(px) > 240 && Color.green(px) > 240 && Color.blue(px) > 240); }
+            }
+            assertTrue(white > 20); note.recycle();
+        });
+        View icons = render("23-icon-set", ui -> {
+            LinearLayout box = ui.column();
+            int[] colors = {app.umbra.ui.design.StateColors.NORMAL, app.umbra.ui.design.StateColors.SELECTED, app.umbra.ui.design.StateColors.DISABLED,
+                app.umbra.ui.design.StateColors.WARNING, app.umbra.ui.design.StateColors.DANGER, app.umbra.ui.design.StateColors.VERIFIED};
+            LinearLayout line = null; int i = 0;
+            for (Glyph g : Glyph.values()) {
+                if (i++ % 10 == 0) { line = ui.row(); box.addView(line); }
+                line.addView(ui.iconView(g, colors[i % colors.length], 24), ui.margins(new LinearLayout.LayoutParams(ui.dp(32), ui.dp(32)), 4, 4));
+            }
+            LinearLayout sizes = ui.row(); box.addView(sizes);
+            for (int sdp : new int[]{16, 20, 24, 32, 48}) sizes.addView(ui.iconView(Glyph.VOICE, app.umbra.ui.design.UmbraColors.ACCENT_SECONDARY, sdp));
+            box.addView(ui.logo(48, app.umbra.ui.design.UmbraColors.ACCENT_MUTED));
+            return Screen.of(null, box, null);
+        });
+        assertNotNull(icons);
+    }
 }
