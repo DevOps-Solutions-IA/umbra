@@ -146,7 +146,7 @@ public final class HomeScreens {
         status.addView(ui.text(UmbraType.CAPTION, "Un enlace cercano a la vez. Ambos teléfonos deben tener UMBRA abierta y desbloqueada."));
         body.addView(status);
         if (s.relayAllowed())
-            body.addView(ui.switchRow("Solo Bluetooth", "Pausa el servidor privado; no se usa internet mientras esté activo.", s.bluetoothOnly(), null, a::bluetoothOnly));
+            body.addView(ui.switchRow(ui.context().getString(app.umbra.R.string.bluetooth_only), "Pausa el servidor privado mientras esté activo.", s.bluetoothOnly(), null, a::bluetoothOnly));
         body.addView(ui.sectionHeader("Contactos verificados"));
         body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Esperar a un contacto verificado", Glyph.BLUETOOTH, a::listen));
         body.addView(ui.button(Ui.ButtonKind.SECONDARY, "Conectar con un contacto verificado", Glyph.CHEVRON, a::connectVerified));

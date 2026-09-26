@@ -475,23 +475,13 @@ public final class MainActivity extends Activity {
 
     // ================================================================== rendering
     private void mount(Screen screen) {
-        root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(UmbraColors.BACKGROUND_PRIMARY);
-        root.setFilterTouchesWhenObscured(true);
-        root.setSaveEnabled(false); root.setImportantForContentCapture(View.IMPORTANT_FOR_CONTENT_CAPTURE_NO_EXCLUDE_DESCENDANTS);
+        root = screen.compose(ui);
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             Insets system = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
             Insets keyboard = insets.getInsets(WindowInsets.Type.ime());
             view.setPadding(ui.dp(16) + system.left, ui.dp(6) + system.top, ui.dp(16) + system.right, ui.dp(6) + Math.max(system.bottom, keyboard.bottom));
             return insets;
         });
-        if (screen.top() != null) root.addView(screen.top(), Ui.match());
-        if (screen.bodyScrolls()) root.addView(screen.body(), new LinearLayout.LayoutParams(-1, 0, 1));
-        else {
-            ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setClipToPadding(false);
-            scroll.addView(screen.body(), new FrameLayout.LayoutParams(-1, -2));
-            root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-        }
-        if (screen.bottom() != null) root.addView(screen.bottom(), Ui.match());
         setContentView(root); root.requestApplyInsets();
     }
     private void showLocked() {
