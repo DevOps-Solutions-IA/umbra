@@ -53,7 +53,17 @@ public final class NearbyFixtureListener extends RunListener {
             link = new BluetoothLink(InstrumentationRegistry.getInstrumentation().getTargetContext(), new BluetoothLink.Listener() {
                 public String ownId() throws Exception { synchronized (recordsLock) { return engine.id(); } }
                 public JSONObject ownCard() throws Exception { synchronized (recordsLock) { return engine.createCard(); } }
-                public String acceptCard(JSONObject card) throws Exception { synchronized (recordsLock) { return engine.importCard(card); } }
+                public String acceptCard(JSONObject card) throws Exception {
+                    synchronized (recordsLock) {
+                        try { return engine.importCard(card); }
+                        catch (Exception failure) {
+                            // Fixed categories only: never emit card content, capabilities or exception text.
+                            NearbyFixtureListener.this.status("nearbyCardImportFailure",
+                                failure instanceof SecurityException ? "SECURITY" : failure instanceof IllegalStateException ? "STATE" : "OTHER");
+                            throw failure;
+                        }
+                    }
+                }
                 public byte[] prove(boolean d, String peer, byte[] a, byte[] b) throws Exception {
                     synchronized (recordsLock) { return engine.proveNearby(d, peer, a, b); }
                 }

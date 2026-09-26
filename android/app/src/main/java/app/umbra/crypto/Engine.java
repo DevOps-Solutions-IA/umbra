@@ -80,7 +80,9 @@ public final class Engine {
     public void setOnline(boolean enabled) throws Exception {
         db.transaction(() -> { JSONObject p = profile(); p.put("online", enabled); put("meta", "profile", p); return null; });
     }
-    public JSONObject createCard() throws Exception {
+    public JSONObject createCard() throws Exception { return createCard(Bytes::now); }
+    // Injectable only within the domain package for deterministic clock-boundary tests.
+    JSONObject createCard(java.util.function.LongSupplier wallClock) throws Exception {
         return db.transaction(() -> {
             app.umbra.devices.DevicePolicy.authorize(db, id(), id());
             // Bound unused key material: exporting indefinitely cannot fill storage without limit.
@@ -95,7 +97,8 @@ public final class Engine {
             signal.storePreKey(keyId, new PreKeyRecord(keyId, oneTime));
             signal.storeSignedPreKey(keyId, new SignedPreKeyRecord(keyId, System.currentTimeMillis(), signed, ecSignature));
             signal.storeKyberPreKey(keyId, new KyberPreKeyRecord(keyId, System.currentTimeMillis(), kem, kemSignature));
-            db.put("key-expiry", "" + keyId, Bytes.utf8("" + (Bytes.now() + MAX_TTL)));
+            long created = wallClock.getAsLong(), expiry = Math.addExact(created, MAX_TTL);
+            db.put("key-expiry", "" + keyId, Bytes.utf8("" + expiry));
             JSONObject me = profile();
             JSONObject body = new JSONObject().put("v", 1).put("id", me.getString("id")).put("alias", me.getString("alias"))
                 .put("identity", Bytes.b64(identity.getPublicKey().serialize())).put("registration", signal.getLocalRegistrationId())
@@ -103,7 +106,7 @@ public final class Engine {
                 .put("signed", Bytes.b64(signed.getPublicKey().serialize())).put("signedSig", Bytes.b64(ecSignature))
                 .put("kem", Bytes.b64(kem.getPublicKey().serialize())).put("kemSig", Bytes.b64(kemSignature))
                 .put("box", me.getString("box")).put("write", me.getString("write"))
-                .put("created", Bytes.now()).put("expires", Bytes.now() + MAX_TTL);
+                .put("created", created).put("expires", expiry);
             byte[] raw = Bytes.utf8(body.toString());
             return new JSONObject().put("format", "umbra-contact-v1").put("body", Bytes.b64(raw))
                 .put("signature", Bytes.b64(identity.getPrivateKey().calculateSignature(raw)));

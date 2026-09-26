@@ -2,9 +2,11 @@ import java.security.MessageDigest
 
 plugins { id("com.android.application") }
 val relayIntegrationClasspath by configurations.creating
+val passwordDistribution by configurations.creating { isTransitive = false }
 val voiceDistribution by configurations.creating { isTransitive = false }
 val voiceArtifact = files(rootProject.file("vendor/webrtc-150.7871.01-umbra.5.aar"))
 val voiceArtifactSha256 = "25f2abebc99e2e109cff83a428080408843fda51a9cdadb5c081d694c92b7620"
+val vaultLab = providers.gradleProperty("umbraVaultLab").orNull == "true"
 val mediaLabReferences = layout.buildDirectory.file("generated/mediaLab/references.pro")
 val verifyVoiceDistribution by tasks.registering {
     inputs.files(voiceDistribution)
@@ -26,7 +28,7 @@ val verifyVoiceDistribution by tasks.registering {
     }
 }
 tasks.configureEach {
-    if (name == "preConnectedDebugBuild" || name == "preConnectedReleaseBuild" || name == "preConnectedMediaLabBuild") {
+    if (name == "preConnectedDebugBuild" || name == "preConnectedReleaseBuild" || name == "preConnectedMediaLabBuild" || name == "preConnectedVaultLabBuild") {
         dependsOn(verifyVoiceDistribution)
     }
 }
@@ -70,6 +72,16 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug { applicationIdSuffix = ".dev" }
+        if (vaultLab) {
+            create("vaultLab") {
+                initWith(getByName("release"))
+                applicationIdSuffix = ".vaultlab"
+                signingConfig = signingConfigs.getByName("debug")
+                matchingFallbacks += "release"
+                proguardFiles("media-lab-rules.pro")
+                isDebuggable = false
+            }
+        }
         if (providers.gradleProperty("umbraMediaLab").orNull == "true") {
             create("mediaLab") {
                 initWith(getByName("release"))
@@ -84,6 +96,7 @@ android {
         }
     }
     if (providers.gradleProperty("umbraMediaLab").orNull == "true") testBuildType = "mediaLab"
+    if (vaultLab) testBuildType = "vaultLab"
     packaging {
         // Source-built WebRTC is already stripped (symbol_level=0). Preserve the
         // exact reviewed four-ABI bytes; APK policy verifies their pinned hashes.
@@ -139,7 +152,63 @@ if (providers.gradleProperty("umbraMediaLab").orNull == "true") {
             (name.contains("ConnectedMediaLab") && name.contains("lint", ignoreCase = true))) dependsOn(trace)
     }
 }
+if (vaultLab) {
+    for (flavor in listOf("connected", "offline")) {
+        val variant = "${flavor}VaultLab"
+        val capital = variant.replaceFirstChar { it.uppercase() }
+        val rules = layout.buildDirectory.file("generated/vaultLab/$flavor.pro")
+        // AGP combines flavor/build-type rules; flavor-specific inputs avoid cross-flavor API roots.
+        android.productFlavors.getByName(flavor).proguardFile(rules)
+        val fixture = tasks.register<Jar>("${variant}FixtureReferences") {
+            dependsOn("compile${capital}AndroidTestJavaWithJavac")
+            archiveFileName.set("$variant-fixture.jar")
+            destinationDirectory.set(layout.buildDirectory.dir("generated/vaultLab"))
+            from(layout.buildDirectory.dir("intermediates/javac/${variant}AndroidTest/compile${capital}AndroidTestJavaWithJavac/classes")) {
+                include("app/umbra/DeviceVaultPasswordTest*.class", "app/umbra/PasswordRestartFixtureListener*.class",
+                    "app/umbra/DeviceSignalTest*.class", "app/umbra/DeviceMemoryRecords*.class")
+            }
+        }
+        val trace = tasks.register<JavaExec>("trace${capital}Api") {
+            dependsOn(fixture)
+            inputs.file(fixture.flatMap { it.archiveFile })
+            outputs.file(rules)
+            mainClass.set("com.android.tools.r8.tracereferences.TraceReferences")
+            classpath = files(com.android.tools.r8.R8::class.java.protectionDomain.codeSource.location)
+            doFirst {
+                val target = layout.buildDirectory.file("intermediates/compile_app_classes_jar/$variant/bundle${capital}ClassesToCompileJar/classes.jar").get().asFile
+                val compile = tasks.getByName("compile${capital}AndroidTestJavaWithJavac") as JavaCompile
+                val arguments = mutableListOf("--keep-rules", "--allowobfuscation", "--source", fixture.get().archiveFile.get().asFile.path,
+                    "--target", target.path, "--output", rules.get().asFile.path)
+                val libraries = compile.classpath.files + (compile.options.bootstrapClasspath?.files ?: emptySet())
+                for (library in libraries.filter { it.canonicalFile != target.canonicalFile }) arguments.addAll(listOf("--lib", library.path))
+                setArgs(arguments)
+            }
+            doLast {
+                val file = rules.get().asFile
+                file.writeText(file.readText().replace("-keep,allowobfuscation", "-keep,allowoptimization,allowobfuscation")
+                    .replace("-keep ", "-keep,allowoptimization,allowobfuscation "))
+            }
+        }
+        tasks.configureEach {
+            if (name == "minify${capital}WithR8" || (name.contains(capital) && name.contains("lint", ignoreCase = true))) dependsOn(trace)
+        }
+    }
+}
+
+val verifyPasswordDistribution by tasks.registering {
+    inputs.files(passwordDistribution)
+    doLast {
+        val actual = MessageDigest.getInstance("SHA-256").digest(passwordDistribution.singleFile.readBytes())
+            .joinToString("") { "%02x".format(it) }
+        check(actual == "fc50334d4d87b4272e72fa95ca748ead05bdef02ef760a5b13f64ffee317cd81") {
+            "Argon2 distribution integrity failure"
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(verifyPasswordDistribution) }
 dependencies {
+    add(passwordDistribution.name, "org.bouncycastle:bcprov-jdk15to18:1.86")
+    implementation("org.bouncycastle:bcprov-jdk15to18:1.86") { isTransitive = false }
     add(voiceDistribution.name, voiceArtifact)
     add("connectedImplementation", voiceArtifact)
     add(relayIntegrationClasspath.name, "org.signal:libsignal-client:0.102.3")

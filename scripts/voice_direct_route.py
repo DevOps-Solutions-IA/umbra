@@ -33,7 +33,10 @@ def probe_udp(adb: str, sender: str, receiver: str, address: str) -> bool:
         received,diagnostic=listener.communicate(timeout=7)
         if listener.returncode not in (0,124) or diagnostic:
             kind='timeout' if b'timeout' in diagnostic.lower() else ('refused' if b'refused' in diagnostic.lower() else 'other' if diagnostic else 'none')
-            raise RuntimeError(f'AVD UDP probe receiver failed: exit={listener.returncode}, diagnostic={kind}, receivedBytes={len(received)}')
+            # This stderr belongs only to toybox nc on our synthetic UDP probe,
+            # never an app, PCM, SDP or credential-bearing command. Bound and escape it.
+            detail=repr(diagnostic[:256])
+            raise RuntimeError(f'AVD UDP probe receiver failed: exit={listener.returncode}, diagnostic={kind}, receivedBytes={len(received)}, toolError={detail}')
         return received==challenge
     finally:
         if listener.poll() is None:

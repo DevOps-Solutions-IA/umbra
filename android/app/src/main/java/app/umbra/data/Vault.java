@@ -8,6 +8,8 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.security.keystore.*;
 import app.umbra.core.*;
+import app.umbra.vault.PasswordEnvelope;
+import javax.crypto.spec.SecretKeySpec;
 import org.json.JSONObject;
 import java.security.KeyStore;
 import java.util.*;
@@ -19,15 +21,42 @@ import javax.crypto.SecretKeyFactory;
 public final class Vault extends SQLiteOpenHelper implements Records {
     private static final String AES_ALIAS = "umbra.vault.v1", INDEX_ALIAS = "umbra.index.v2";
     private static final long MAX_ENCRYPTED_BYTES = 64L * 1024 * 1024;
+    private static final android.database.DatabaseErrorHandler PRESERVE_CORRUPT = database -> {
+        throw new android.database.sqlite.SQLiteDatabaseCorruptException("Vault database damaged; automatic deletion refused");
+    };
     private final AccessGate gate;
+    private boolean initialCreationAllowed;
     private int transactionDepth;
     private boolean rollbackOnly;
-    public Vault(Context context, AccessGate gate) { super(context, "umbra.db", null, 2); this.gate = gate; }
+    private final Runnable passwordInvalidation = this::forgetPasswordKey;
+    private volatile byte[] passwordDataKey;
+    private volatile AccessGate.Lease passwordLease;
+    private volatile State passwordState = State.LOCKED;
+    public enum State { UNINITIALIZED, LOCKED, UNLOCKING, UNLOCKED, LOCKING, CORRUPT, KEY_UNAVAILABLE }
+    private long autoLockMillis = 240_000;
+    private final java.io.File databaseFile;
+    private java.util.concurrent.ScheduledFuture<?> autoLockTimer;
+    private static final java.util.concurrent.ScheduledThreadPoolExecutor TIMERS = timerExecutor();
+    private static java.util.concurrent.ScheduledThreadPoolExecutor timerExecutor() {
+        var executor = new java.util.concurrent.ScheduledThreadPoolExecutor(1, work -> {
+            Thread thread = new Thread(work, "umbra-vault-autolock"); thread.setDaemon(true); return thread;
+        });
+        executor.setRemoveOnCancelPolicy(true); return executor;
+    }
+    private void forgetPasswordKey() {
+        byte[] old = passwordDataKey; passwordDataKey = null; passwordLease = null;
+        PasswordEnvelope.erase(old); passwordState = State.LOCKED;
+    }
+    public Vault(Context context, AccessGate gate) { super(context, "umbra.db", null, 2, PRESERVE_CORRUPT); this.gate = gate; this.databaseFile = context.getDatabasePath("umbra.db"); initialCreationAllowed = !databaseFile.exists(); gate.onInvalidation(passwordInvalidation); }
     private static void createTable(SQLiteDatabase db, String table) {
         // Table identifiers are internal constants, never user input.
         db.execSQL("CREATE TABLE " + table + "(bucket TEXT NOT NULL,k TEXT NOT NULL,nonce BLOB NOT NULL,value BLOB NOT NULL,PRIMARY KEY(bucket,k))");
     }
-    @Override public void onCreate(SQLiteDatabase db) { gate.requireUnlocked(); createTable(db, "records"); }
+    @Override public void onCreate(SQLiteDatabase db) {
+        gate.requireUnlocked();
+        if (!initialCreationAllowed) throw new IllegalStateException("Existing vault has no valid schema; automatic initialization refused");
+        createTable(db, "records"); initialCreationAllowed = false;
+    }
     @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion != 1 || newVersion != 2) throw new IllegalStateException("Explicit migration required");
         AccessGate.Lease lease = gate.enter();
@@ -76,11 +105,12 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         boolean strongBox = context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_STRONGBOX_KEYSTORE);
         if (!store.containsAlias(AES_ALIAS)) generate(AES_ALIAS, false, strongBox);
         if (!store.containsAlias(INDEX_ALIAS)) {
-            // A v2 database with a missing HMAC key must not get a replacement index silently.
+            // Only the explicit v1 migration may create an index key for an existing file.
+            // A truncated/unknown schema is not evidence of a legacy vault.
             java.io.File file = context.getDatabasePath("umbra.db");
             if (file.exists()) {
-                try (SQLiteDatabase db = SQLiteDatabase.openDatabase(file.getPath(), null, SQLiteDatabase.OPEN_READONLY)) {
-                    if (db.getVersion() >= 2) throw new SecurityException("La clave de índices no está disponible");
+                try (SQLiteDatabase db = SQLiteDatabase.openDatabase(file.getPath(), null, SQLiteDatabase.OPEN_READONLY, PRESERVE_CORRUPT)) {
+                    if (db.getVersion() != 1) throw new SecurityException("La clave de índices no está disponible");
                 }
             }
             generate(INDEX_ALIAS, true, strongBox);
@@ -113,17 +143,17 @@ public final class Vault extends SQLiteOpenHelper implements Records {
     private static SecretKey key(String alias) throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore"); store.load(null);
         SecretKey key = (SecretKey) store.getKey(alias, null);
-        if (key == null) throw new IllegalStateException("Vault key missing; recovery is not possible");
+        if (key == null) throw new java.security.UnrecoverableKeyException("Vault key unavailable");
         return key;
     }
     private String index(String bucket, String key) throws Exception { return VaultCodec.index(key(INDEX_ALIAS), bucket, key); }
     private JSONObject decode(String bucket, String index, byte[] nonce, byte[] ciphertext) throws Exception {
-        byte[] clear = VaultCodec.open(key(AES_ALIAS), bucket, index, nonce, ciphertext);
+        byte[] clear = VaultCodec.open(dataKey(), bucket, index, nonce, ciphertext);
         try { return new JSONObject(Bytes.text(clear)); }
         finally { Arrays.fill(clear, (byte) 0); }
     }
     @Override public synchronized byte[] get(String bucket, String logicalKey) {
-        AccessGate.Lease lease = gate.enter();
+        AccessGate.Lease lease = gate.enter(); requirePasswordAccess();
         try {
             String index = index(bucket, logicalKey);
             try (Cursor c = getReadableDatabase().rawQuery("SELECT nonce,value FROM records WHERE bucket=? AND k=?", new String[]{bucket, index})) {
@@ -144,7 +174,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
             String index = index(bucket, logicalKey);
             byte[] clear = Bytes.utf8(new JSONObject().put("key", logicalKey).put("data", Bytes.b64(data)).toString());
             try {
-                VaultCodec.Sealed sealed = VaultCodec.seal(key(AES_ALIAS), bucket, index, clear);
+                VaultCodec.Sealed sealed = VaultCodec.seal(dataKey(), bucket, index, clear);
                 SQLiteDatabase db = getWritableDatabase();
                 if (!db.inTransaction()) throw new IllegalStateException("Vault writes require an explicit transaction");
                 try (Cursor c = db.rawQuery("SELECT COALESCE(SUM(length(value)),0),COALESCE(SUM(CASE WHEN bucket=? AND k=? THEN length(value) ELSE 0 END),0) FROM records", new String[]{bucket, index})) {
@@ -163,7 +193,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
             throw new android.database.SQLException("Vault write failed");
     }
     @Override public synchronized void remove(String bucket, String logicalKey) {
-        gate.requireUnlocked();
+        gate.requireUnlocked(); requirePasswordAccess();
         try {
             SQLiteDatabase db = getWritableDatabase();
             if (!db.inTransaction()) throw new IllegalStateException("Vault writes require an explicit transaction");
@@ -173,7 +203,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         catch (Exception e) { throw new IllegalStateException("Cannot remove vault record", e); }
     }
     @Override public synchronized List<String> keys(String bucket) {
-        AccessGate.Lease lease = gate.enter(); List<String> out = new ArrayList<>();
+        AccessGate.Lease lease = gate.enter(); requirePasswordAccess(); List<String> out = new ArrayList<>();
         try (Cursor c = getReadableDatabase().rawQuery("SELECT k,nonce,value FROM records WHERE bucket=?", new String[]{bucket})) {
             while (c.moveToNext()) { gate.check(lease); out.add(decode(bucket, c.getString(0), c.getBlob(1), c.getBlob(2)).getString("key")); }
             gate.check(lease); return out;
@@ -182,10 +212,11 @@ public final class Vault extends SQLiteOpenHelper implements Records {
     }
     @Override public Runnable authorization() {
         AccessGate.Lease lease = gate.enter();
-        return () -> gate.check(lease);
+        requirePasswordAccess();
+        return () -> { gate.check(lease); requirePasswordAccess(); };
     }
     @Override public synchronized <T> T transaction(Work<T> work) throws Exception {
-        AccessGate.Lease lease = gate.enter(); SQLiteDatabase db = getWritableDatabase(); db.beginTransaction();
+        AccessGate.Lease lease = gate.enter(); requirePasswordAccess(); SQLiteDatabase db = getWritableDatabase(); db.beginTransaction();
         boolean ended = false;
         if (transactionDepth++ == 0) rollbackOnly = false;
         try {
@@ -200,6 +231,159 @@ public final class Vault extends SQLiteOpenHelper implements Records {
             try { if (!ended && db.inTransaction()) db.endTransaction(); }
             finally { if (--transactionDepth == 0) rollbackOnly = false; }
         }
+    }
+    /** No UI gate can recreate this key for an enrolled vault. */
+    private synchronized void requirePasswordAccess() {
+        if (isPasswordConfigured()) {
+            AccessGate.Lease lease = passwordLease;
+            if (passwordDataKey == null || lease == null) throw new AccessGate.LockedException();
+            gate.check(lease);
+        }
+    }
+    private SecretKey dataKey() throws Exception {
+        if (!isPasswordConfigured()) {
+            if (passwordDataKey != null) throw new SecurityException("Vault protection missing");
+            return key(AES_ALIAS);
+        }
+        requirePasswordAccess();
+        byte[] clear = passwordDataKey;
+        if (clear == null) throw new AccessGate.LockedException();
+        return new SecretKeySpec(clear, "AES");
+    }
+    private byte[] protection() {
+        if (!databaseFile.exists()) return null;
+        SQLiteDatabase db = getReadableDatabase();
+        try (Cursor table = db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name='vault_protection'", null)) {
+            if (!table.moveToFirst()) return null;
+        }
+        try (Cursor row = db.rawQuery("SELECT envelope FROM vault_protection WHERE id=1", null)) {
+            if (!row.moveToFirst()) throw new IllegalStateException("Vault protection damaged");
+            byte[] envelope = row.getBlob(0);
+            if (envelope == null || envelope.length != PasswordEnvelope.SIZE || row.moveToNext())
+                throw new IllegalStateException("Vault protection damaged");
+            return envelope;
+        }
+    }
+    public synchronized boolean isPasswordConfigured() { return protection() != null; }
+    public State getVaultState() {
+        synchronized (gate) {
+            try {
+                if (!databaseFile.exists()) return State.UNINITIALIZED;
+                if (passwordState == State.UNLOCKING) return passwordState;
+                if (passwordDataKey != null) { gate.check(passwordLease); return State.UNLOCKED; }
+                return passwordState;
+            } catch (AccessGate.LockedException locked) { forgetPasswordKey(); return State.LOCKED; }
+        }
+    }
+    /** Off-main-thread, after Android authentication. Takes UTF-8 bytes; caller erases input. */
+    public synchronized void createPassword(byte[] password) throws Exception {
+        createPassword(password, PasswordEnvelope.DEFAULT);
+    }
+    public synchronized void createPassword(byte[] password, PasswordEnvelope.Parameters parameters) throws Exception {
+        AccessGate.Lease lease = gate.enter();
+        if (isPasswordConfigured()) throw new IllegalStateException("Password already configured");
+        SQLiteDatabase db = getWritableDatabase();
+        if (db.inTransaction()) throw new IllegalStateException("Enrollment requires its own transaction");
+        byte[] fresh = PasswordEnvelope.randomDataKey(), verified = null;
+        try {
+            byte[] envelope = PasswordEnvelope.seal(password, fresh, key(AES_ALIAS), parameters);
+            verified = PasswordEnvelope.open(password, envelope, key(AES_ALIAS));
+            if (!java.security.MessageDigest.isEqual(fresh, verified)) throw new SecurityException("Vault unlock failed");
+            db.beginTransaction();
+            boolean ended = false;
+            try {
+                gate.check(lease);
+                // One-time migration: old device AES key is intentionally non-exportable.
+                createTable(db, "records_password");
+                try (Cursor rows = db.rawQuery("SELECT bucket,k,nonce,value FROM records", null)) {
+                    while (rows.moveToNext()) {
+                        gate.check(lease);
+                        String bucket = rows.getString(0), index = rows.getString(1);
+                        byte[] clear = VaultCodec.open(key(AES_ALIAS), bucket, index, rows.getBlob(2), rows.getBlob(3));
+                        try {
+                            JSONObject record = new JSONObject(Bytes.text(clear));
+                            if (!index.equals(index(bucket, record.getString("key")))) throw new SecurityException("Vault record address mismatch");
+                            insert(db, "records_password", bucket, index,
+                                VaultCodec.seal(new SecretKeySpec(fresh, "AES"), bucket, index, clear));
+                        } finally { PasswordEnvelope.erase(clear); }
+                    }
+                }
+                db.execSQL("CREATE TABLE vault_protection(id INTEGER PRIMARY KEY CHECK(id=1),envelope BLOB NOT NULL)");
+                db.execSQL("INSERT INTO vault_protection VALUES(1,?)", new Object[]{envelope});
+                db.execSQL("DROP TABLE records"); db.execSQL("ALTER TABLE records_password RENAME TO records");
+                gate.commit(lease, () -> { db.setTransactionSuccessful(); db.endTransaction(); return null; });
+                ended = true;
+            } finally { if (!ended && db.inTransaction()) db.endTransaction(); }
+            // Enrollment finishes locked; never extend the old authenticated session.
+            lock();
+        } finally { PasswordEnvelope.erase(fresh); PasswordEnvelope.erase(verified); }
+    }
+    public synchronized void unlock(byte[] password) throws Exception {
+        AccessGate.Lease lease = gate.invalidateAuthorizations(); // system authentication still mandatory
+        forgetPasswordKey(); passwordState = State.UNLOCKING;
+        byte[] clear = null;
+        try {
+            byte[] envelope = protection();
+            if (envelope == null) throw new SecurityException("Password enrollment required");
+            clear = PasswordEnvelope.open(password, envelope, key(AES_ALIAS));
+            VaultCodec.index(key(INDEX_ALIAS), "meta", "identity"); // require the existing index key, never regenerate it
+            final byte[] opened = clear;
+            gate.commit(lease, () -> {
+                passwordDataKey = opened; passwordLease = lease; passwordState = State.UNLOCKED;
+                scheduleAutoLock(); return null;
+            });
+            clear = null;
+        } catch (Exception failure) {
+            forgetPasswordKey();
+            if (failure instanceof java.security.UnrecoverableKeyException) passwordState = State.KEY_UNAVAILABLE;
+            else if (failure instanceof IllegalStateException || failure instanceof android.database.sqlite.SQLiteDatabaseCorruptException) passwordState = State.CORRUPT;
+            throw new SecurityException("Vault unlock failed");
+        } finally { PasswordEnvelope.erase(clear); }
+    }
+    public synchronized void changePassword(byte[] current, byte[] replacement) throws Exception {
+        AccessGate.Lease lease = gate.enter(); requirePasswordAccess();
+        SQLiteDatabase db = getWritableDatabase();
+        if (db.inTransaction()) throw new IllegalStateException("Password change requires its own transaction");
+        byte[] clear = null, check = null;
+        try {
+            byte[] before = protection();
+            if (before == null) throw new SecurityException("Password enrollment required");
+            clear = PasswordEnvelope.open(current, before, key(AES_ALIAS));
+            byte[] after = PasswordEnvelope.seal(replacement, clear, key(AES_ALIAS), PasswordEnvelope.parameters(before));
+            check = PasswordEnvelope.open(replacement, after, key(AES_ALIAS));
+            if (!java.security.MessageDigest.isEqual(clear, check)) throw new SecurityException("Vault unlock failed");
+            db.beginTransaction(); boolean ended = false;
+            try {
+                gate.check(lease);
+                if (!Arrays.equals(before, protection())) throw new SecurityException("Vault protection changed");
+                db.execSQL("UPDATE vault_protection SET envelope=? WHERE id=1", new Object[]{after});
+                gate.commit(lease, () -> { db.setTransactionSuccessful(); db.endTransaction(); return null; });
+                ended = true;
+            } finally { if (!ended && db.inTransaction()) db.endTransaction(); }
+            lock();
+        } finally { PasswordEnvelope.erase(clear); PasswordEnvelope.erase(check); }
+    }
+    /** Immediate invalidation, even while Argon2 or a database transaction is running. */
+    public void lock() { gate.lock(); }
+    public synchronized long getAutoLockPolicy() { return autoLockMillis; }
+    public synchronized void setAutoLockPolicy(long millis) {
+        if (millis < 1 || millis > 240_000) throw new IllegalArgumentException("Autolock exceeds existing policy");
+        if (passwordDataKey != null) throw new IllegalStateException("Configure autolock while locked");
+        autoLockMillis = millis;
+    }
+    private void scheduleAutoLock() {
+        if (autoLockTimer != null) autoLockTimer.cancel(false);
+        AccessGate.Lease scheduled = passwordLease;
+        long remaining = Math.min(java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(autoLockMillis), gate.remainingNanos(scheduled));
+        autoLockTimer = TIMERS.schedule(() -> {
+            synchronized (gate) { if (passwordLease == scheduled) gate.lock(); }
+        }, Math.max(0, remaining), java.util.concurrent.TimeUnit.NANOSECONDS);
+    }
+
+    @Override public synchronized void close() {
+        lock();
+        if (autoLockTimer != null) { autoLockTimer.cancel(false); autoLockTimer = null; }
+        super.close();
     }
     public static synchronized void destroyKey() throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore"); store.load(null);

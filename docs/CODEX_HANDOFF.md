@@ -1,5 +1,14 @@
 # Transferencia técnica a Codex
 
+## Personal vault password — ejecución #11, 2026-09-26
+
+PARTIAL: nueva rama `codex/personal-vault-password` desde PR #10 verde `6b0a844`.
+PR #10 y UI de Claude no se modifican. Argon2id + Keystore, migración transaccional
+y APIs de dominio implementadas; consultar [evidencia](validation/2026-09-26-personal-vault-password.md)
+para validación del nuevo código, fallos y límites. No atribuir la CI de la base
+a esta entrega. La integración visual sigue en la rama de UI independiente.
+
+
 ## Continuación tras CI completa de d9dd2f3 — 2026-09-26
 
 Verify (cuatro jobs), voz R8, modulación debug/R8 y las 18 regresiones
