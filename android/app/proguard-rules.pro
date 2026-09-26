@@ -14,3 +14,17 @@
 -keepclasseswithmembers,includedescriptorclasses,allowaccessmodification,allowoptimization class org.jni_zero.** {
     @org.jni_zero.CalledByNative <methods>;
 }
+
+# Domain API intentionally delivered before its separate UI integration. Retain
+# only password entry points, with optimized bodies; no provider-wide keep rule.
+-keepclassmembers,allowoptimization class app.umbra.data.Vault {
+    public boolean isPasswordConfigured();
+    public app.umbra.data.Vault$State getVaultState();
+    public void createPassword(byte[]);
+    public void createPassword(byte[],app.umbra.vault.PasswordEnvelope$Parameters);
+    public void unlock(byte[]);
+    public void lock();
+    public void changePassword(byte[],byte[]);
+    public long getAutoLockPolicy();
+    public void setAutoLockPolicy(long);
+}

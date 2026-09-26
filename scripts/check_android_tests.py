@@ -24,7 +24,7 @@ def validate(directory: Path, expected: set[str]) -> int:
 
 def main():
     source = ROOT / "android/app/src/test/java/app/umbra"
-    expected = {"app.umbra." + path.stem for path in source.glob("*Test.java")}
+    expected = {"app.umbra." + str(path.relative_to(source).with_suffix("")).replace("/", ".") for path in source.rglob("*Test.java")}
     for variant in ("Connected", "Offline"):
         variant_expected = expected | {"app.umbra." + path.stem for path in (ROOT / f"android/app/src/test{variant}/java/app/umbra").glob("*Test.java")}
         count = validate(ROOT / f"android/app/build/test-results/test{variant}DebugUnitTest", variant_expected)

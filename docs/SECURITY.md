@@ -189,3 +189,15 @@ encolado en Opus o en tránsito puede llegar después. El receptor puede guardar
 lo que recibe. Ver [ADR](adr/ADR-voice-modulator.md) y
 [contrato](protocol/VOICE_PROCESSING.md). Pruebas remotas y R8 deben constar en
 evidencia propia del commit; una prueba de DSP no certifica el pipeline completo.
+
+## Personal password vault — execution #11 under validation
+
+An enrolled vault requires Argon2id-derived material AND its device Keystore key.
+The UI authentication flag cannot supply the random DEK. Legacy enrollment is
+explicit and reciphers records atomically once; password change rewraps only the
+DEK. Android authentication/hardware requirements and offline policy remain.
+See [threat model and limits](VAULT_PASSWORD.md) and
+[evidence](validation/2026-09-26-personal-vault-password.md). No recovery or server
+password material. Historical legacy copies and privileged full-state rollback
+are not retroactively prevented. AVD software-key fixtures do not prove physical
+hardware security, biometric interaction or protection against a compromised OS.
