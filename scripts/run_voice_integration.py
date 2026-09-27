@@ -16,6 +16,7 @@ from voice_network_evidence import summarize, summarize_tls, summarize_ipv6_turn
 from turn_lab import TurnLab, docker
 from voice_relay_lab import voice_relay
 from android_apk_install import ensure_apk
+from admission_lab import reset_exchange
 from voice_direct_route import probe_udp
 from check_optimized_media import inspect as inspect_optimized_media
 
@@ -140,6 +141,7 @@ def main():
             if len(uids)!=1 or not 10000<=int(uids[0])<=19999: raise RuntimeError("Unknown isolated mediaLab UID")
             app_uids[serial]=uids[0]
         run(serial,"shell","run-as",PACKAGE,"mkdir","-p","files")
+        reset_exchange(run,serial,PACKAGE)
         if args.scenario in ("permission-revoked","camera-permission-revoked"):
             run(serial,"shell","pm","grant",PACKAGE,"android.permission.CAMERA" if args.scenario=="camera-permission-revoked" else "android.permission.RECORD_AUDIO")
         if args.scenario=="camera-denied":run(serial,"shell","pm","revoke",PACKAGE,"android.permission.CAMERA")

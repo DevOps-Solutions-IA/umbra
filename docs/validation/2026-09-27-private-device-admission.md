@@ -177,3 +177,27 @@ descrito; no atribuir ese verde parcial a otro HEAD. La revisión añade tambié
 cierre explícito de scopes WebSocket, sin protocolo de posesión definido en v1,
 para impedir que una ruta futura eluda el gate HTTP. La nueva regresión real
 TestClient confirma code1008 antes de ejecutar el handler; 17 pruebas HTTP pasan.
+
+## Aislamiento entre repeticiones del laboratorio
+
+En 36310722521, los logs debug muestran AdmissionCredential.verify línea27
+(realm/issuer mismatch), antes de media, además de los fallos notBefore.
+El arnés limpiaba synthetic-voice-* pero no los cuatro archivos de intercambio
+synthetic-admission-*. Una instalación fallida dejaba una aprobación del realm
+anterior que el siguiente escenario podía leer. Se añade force-stop previo y
+limpieza explícita de esos cuatro archivos públicos antes de iniciar cada fixture
+voz/video/modulación y RFCOMM, sin borrar la bóveda ni aceptar otra autoridad.
+La regresión reproduce archivos residuales, comprueba orden stop→cleanup,
+preservación del vault y rechazo si stop falla. 157 tests de herramientas exit0.
+La repetición real en AVD queda a cargo de la CI del siguiente commit.
+
+678786d: Admission 36311575649 y Password 36311575634 SUCCESS.
+Checkout Admission `f344ac00063714c89be2a1c8800782ccfe741fe3`.
+Artefactos Admission: 10928797756 (R8), digest SHA256
+`e5d6dbd533fd8e6ee2fd2175e3286627e68999a17491f1dd514b8b82c71cca28`;
+10928608210 (debug), digest SHA256
+`04daa1b4c7b218b953e1c11d7ce97e5268d50a01f1c45e5104f62aece19f8087`.
+Son recibos de ese SHA, no validación automática de la corrección posterior.
+Build local sobre 678786d exit0: JVM, lint, JNI y APK policy ambas variantes;
+hashes APK coinciden con los ya registrados de 2a15f27 (sin cambio productivo
+Android entre ellos). Backend local 204 tests exit0.

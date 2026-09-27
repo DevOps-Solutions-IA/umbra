@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from admission_lab import AdmissionLab
+from admission_lab import AdmissionLab, reset_exchange
 import json
 import os
 from pathlib import Path
@@ -75,6 +75,7 @@ def main() -> None:
                 if not apk.is_file():
                     raise FileNotFoundError(apk)
                 adb(serial, 'install', '-r', str(apk))
+            reset_exchange(adb, serial, package)
             for permission in ('CONNECT', 'SCAN', 'ADVERTISE'):
                 adb(serial, 'shell', 'pm', 'grant', package, f'android.permission.BLUETOOTH_{permission}')
             adb(serial, 'shell', 'svc', 'wifi', 'disable')

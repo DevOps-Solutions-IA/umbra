@@ -11,6 +11,18 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "relay"))
 
 
+def reset_exchange(run, serial, package):
+    """After verifying an owned AVD, stop the old fixture before removing its public exchange.
+
+    A failed previous installation can leave a credential from another realm. Never
+    weaken realm validation or let that file race the next request. No vault is deleted.
+    """
+    run(serial, "shell", "am", "force-stop", package)
+    run(serial, "shell", "run-as", package, "rm", "-f", *(
+        "files/synthetic-admission-" + suffix for suffix in
+        ("request.json", "request.tmp", "credential.json", "credential.tmp")))
+
+
 class AdmissionLab:
     def __init__(self):
         from nacl.signing import SigningKey
