@@ -247,7 +247,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
             boolean cameraDeniedChecked=false,cameraDeniedEvidence=false;int cameraDeniedBaseline=0;
             int processingStep=0,processingNatural=0,processingModified=0,processingLoud=0,processingVideo=0;
             long processingAt=0,processingWindow=0;String processingExpected="",processingDiagnostic="";
-            long muteAt=0; int quietBaseline=-1,resumeBaseline=0;
+            long muteAt=0,quietWindowAt=0; int quietBaseline=-1,resumeBaseline=0;
             while(SystemClock.elapsedRealtime()<deadline) {
                 boolean expiryExpected=evidence &&
                     Files.exists(files.resolve("synthetic-voice-loss.json")) &&
@@ -341,14 +341,20 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     write("synthetic-voice-audio.json",new JSONObject().put("sdpAddressAudit",true).put("decodedBuffers",decoded.get()).put("capturedBuffers",captured.get()).put("verifiedNativeTransport",true).put("receivedAudioPackets",voice.receivedAudioPackets()).put("codec",voice.audioCodec()).put("nativeRelayProtocol",voice.nativeRelayProtocol())); evidence=true;
                 }
                 if(evidence && !muting && Files.exists(files.resolve("synthetic-voice-mute.json"))) {
-                    voice.mute(true); muting=true;muteAt=SystemClock.elapsedRealtime();
+                    voice.mute(true); muting=true;
+                    write("synthetic-voice-mute-applied.json",new JSONObject().put("applied",true).put("elapsedMillis",SystemClock.elapsedRealtime()));
                 }
-                if(muting && !mutedEvidence) {
-                    long age=SystemClock.elapsedRealtime()-muteAt;
-                    if(age>=2000 && quietBaseline<0) quietBaseline=decoded.get();
-                    if(age>=3200) {
-                        if(decoded.get()-quietBaseline>3) throw new AssertionError("Decoded peer tone continued while both endpoints muted");
-                        write("synthetic-voice-muted.json",new JSONObject().put("quiet",true));mutedEvidence=true;
+                if(muting && !mutedEvidence && Files.exists(files.resolve("synthetic-voice-mute-observe.json"))) {
+                    long now=SystemClock.elapsedRealtime();
+                    // Host releases this barrier only after BOTH native mute calls returned.
+                    if(muteAt==0)muteAt=now;
+                    if(now-muteAt>=2000 && quietBaseline<0) {quietBaseline=decoded.get();quietWindowAt=now;}
+                    if(quietWindowAt!=0 && now-quietWindowAt>=1200) {
+                        long observed=now-quietWindowAt;
+                        if(observed>2500)throw new AssertionError("Mute observation window overran: "+observed);
+                        int tones=decoded.get()-quietBaseline;
+                        if(tones>3) throw new AssertionError("Decoded peer tone continued after both native mute confirmations: tones="+tones+", observedMillis="+observed);
+                        write("synthetic-voice-muted.json",new JSONObject().put("quiet",true).put("observedMillis",observed).put("decodedTones",tones));mutedEvidence=true;
                     }
                 }
                 if(mutedEvidence && !resuming && Files.exists(files.resolve("synthetic-voice-resume.json"))) {

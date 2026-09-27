@@ -34,6 +34,27 @@ def valid_audio(value):
             and value.get("codec")=="audio/opus" and value.get("sdpAddressAudit") is True)
 
 
+def coordinate_mute(serials, processes, deadline, write, read):
+    for serial in serials: write(serial,"synthetic-voice-mute.json",{"mute":True})
+    applied=[]
+    for serial in serials:
+        value=read(serial,"synthetic-voice-mute-applied.json",processes[serial],deadline)
+        if set(value)!={"applied","elapsedMillis"} or value["applied"] is not True or type(value["elapsedMillis"]) is not int or value["elapsedMillis"]<=0:
+            raise RuntimeError("Missing native mute application confirmation")
+        applied.append(value)
+    # No receive window starts while the other endpoint has yet to apply mute.
+    for serial in serials:write(serial,"synthetic-voice-mute-observe.json",{"bothApplied":True})
+    observed=[]
+    for serial in serials:
+        value=read(serial,"synthetic-voice-muted.json",processes[serial],deadline)
+        if (set(value)!={"quiet","observedMillis","decodedTones"} or value["quiet"] is not True
+                or type(value["observedMillis"]) is not int or not 1200<=value["observedMillis"]<=2500
+                or type(value["decodedTones"]) is not int or not 0<=value["decodedTones"]<=3):
+            raise RuntimeError("Muted endpoints continued delivering decoded tones or lacked a positive observation window")
+        observed.append(value)
+    return {"applied":applied,"observed":observed}
+
+
 def valid_stop(report, *, expected_expiry=False):
     return (set(report)=={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"}
             and report["failedClosed"] is True
@@ -230,6 +251,7 @@ def main():
                 for serial in (args.a,args.b):write(serial,"synthetic-voice-initial-natural.json",{"naturalVoiceExplicitlyConfirmed":True})
             evidence=[]
             stop_evidence=[]
+            mute_evidence=None
             for serial in (args.a,args.b):
                 value=read(serial,"synthetic-voice-audio.json",processes[serial],deadline)
                 expected_rejection={"rejectedBeforeCapture":True}
@@ -249,10 +271,7 @@ def main():
                     if denial.get("deniedWithoutVideoState") is not True or denial.get("decodedAudioAfterDenial",0)<50:
                         raise RuntimeError("Camera denial did not preserve authorized audio")
             if not rejection:
-                for serial in (args.a,args.b): write(serial,"synthetic-voice-mute.json",{"mute":True})
-                for serial in (args.a,args.b):
-                    if read(serial,"synthetic-voice-muted.json",processes[serial],deadline)!={"quiet":True}:
-                        raise RuntimeError("Muted endpoints continued delivering decoded tones")
+                mute_evidence=coordinate_mute((args.a,args.b),processes,deadline,write,read)
                 for serial in (args.a,args.b): write(serial,"synthetic-voice-resume.json",{"resume":True})
                 for serial in (args.a,args.b):
                     if read(serial,"synthetic-voice-resumed.json",processes[serial],deadline).get("decodedAfterUnmute",0)<50:
@@ -416,7 +435,7 @@ def main():
                             continue
                         network.append(summarize(snapshot,turn.address,turn_port=3479 if args.scenario=="unreachable" else 3478,
                                                  since=capture_since,until=capture_until,require_turn=(index==0 or args.scenario not in ("expired-auth","invalid-auth","unreachable"))))
-            (args.reports/"voice-evidence.json").write_text(json.dumps({"apkSha256":apk_hashes,"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn TLS" if args.turn_tls else "native WebRTC through coturn UDP","turnTlsCase":args.turn_tls,"scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":not rejection,"network":network,"audio":evidence,"allocationExpiry":allocation_evidence,"nativeCaptureClosure":stop_evidence,"networkImpairment":shape_evidence},indent=2)+"\n")
+            (args.reports/"voice-evidence.json").write_text(json.dumps({"apkSha256":apk_hashes,"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn TLS" if args.turn_tls else "native WebRTC through coturn UDP","turnTlsCase":args.turn_tls,"scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":not rejection,"muteBarrier":mute_evidence,"network":network,"audio":evidence,"allocationExpiry":allocation_evidence,"nativeCaptureClosure":stop_evidence,"networkImpairment":shape_evidence},indent=2)+"\n")
             print("PASS two AVD native voice scenario: "+args.scenario)
         finally:
             errors=[]

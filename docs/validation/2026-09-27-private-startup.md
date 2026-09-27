@@ -141,3 +141,40 @@ a sensores/scan antes de conectar, después de desconectar y tras force-stop.
 El control positivo connected obtuvo dos consultas DNS en ambas matrices y
 tráfico HTTPS/Signal (26/27 paquetes respectivamente). Esto valida este SHA,
 no sustituye la ejecución final de la corrección del fixture de media.
+
+## Iteración de coordinación mute
+
+HEAD `405a77e1975a77f547a127d4575a24a7489f0665`, árbol
+`57fce5032ca4243945b9d44080d91bc1783983bc`: startup 36354688668,
+password 36354688670 y admission 36354688661 terminaron SUCCESS.
+Startup ejecutó checkout `f6b6d005321d491d93eb2a802a53b09fff3a93b2`,
+mismo árbol; cuatro recibos PASS, control positivo de dos consultas DNS
+por connected, cero tráfico de UID en las ventanas privadas.
+Local: build_android.py --release exit 0 (204 JVM connected/150 offline),
+163 herramientas exit 0; test_local.sh primero falló con JDK heredado
+incompatible (release 21), y pasó al repetir con JAVA_HOME JDK21 explícito.
+
+Modulación debug 36354688653 falló en video antes de modular: `Decoded
+peer tone continued while both endpoints muted` (artefacto 10943472599).
+Verify previo 36353999930 había fallado con la misma aserción en
+allocation-expiry. Además se conserva el overrun de ventana de modulación
+de 36353999915; todavía no tiene causa demostrada.
+
+La inspección encontró una carrera verificable del arnés: la observación
+remota se medía desde el mute LOCAL, sin confirmación del mute del otro
+AVD. Una demora de coordinación podía contabilizar voz legítimamente aún
+no silenciada por el interlocutor. Se añadió una barrera: ambos extremos
+confirman retorno del mute nativo antes de abrir observaciones. Se preservan
+2 s de drenaje, al menos 1.2 s de observación y máximo tres tonos; se rechazan
+ventanas vacías o superiores a 2.5 s. Los recibos conservan tiempos monotónicos
+locales, sin comparar relojes entre AVD. Regresiones del coordinador prueban
+confirmación tardía, ausente y ventana vacía. Esto corrige la carrera del
+arnés; no atribuye todavía todos los fallos históricos a esa causa ni prueba
+por sí solo el mute multimedia. Requiere nueva ejecución AVD/debug/R8.
+
+La matriz R8 de modulación 36354688653 sí completó SUCCESS en `405a77e`,
+incluido el nuevo rechazo del relay después de lock/unlock; el workflow
+permanece FAILURE por su matriz debug. La corrección de barrera compila
+con `-PumbraMediaLab=true` (exit 0, R8 real) y 165 pruebas de herramientas
+pasan. La primera invocación Gradle sin esa propiedad falló porque el
+build de laboratorio está deliberadamente deshabilitado por defecto.
