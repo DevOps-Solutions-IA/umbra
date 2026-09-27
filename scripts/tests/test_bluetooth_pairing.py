@@ -77,3 +77,31 @@ class PairingTests(unittest.TestCase):
         self.assertFalse(pairing.discovering('  Discovering: false\n'))
         for dump in ('','Discovering: unknown','Discovering: false\nDiscovering: true'):
             with self.assertRaises(RuntimeError):pairing.discovering(dump)
+
+    def test_idle_failure_cannot_read_stale_xml_and_is_bounded(self):
+        with tempfile.TemporaryDirectory() as folder:
+            flow=pairing.Pairing('adb',('a','b'),Path(folder),60)
+            dumps=iter(['ERROR: could not get idle state.', 'UI hierchary dumped to: /sdcard/umbra-pairing.xml'])
+            commands=[]
+            def command(serial,*args):
+                commands.append(args)
+                if args[1]=='uiautomator':return next(dumps)
+                if args[1]=='cat':return '<hierarchy><node package="com.android.settings" text="fresh"/></hierarchy>'
+                return ''
+            with patch.object(flow,'command',side_effect=command),patch.object(pairing.time,'sleep'):
+                self.assertEqual(flow.ui('a')[0].get('text'),'fresh')
+            self.assertEqual([c[1] for c in commands],['rm','uiautomator','rm','uiautomator','cat'])
+            self.assertIn('could not get idle state',(Path(folder)/'a-ui-acquisition.txt').read_text())
+            with patch.object(flow,'command',return_value='ERROR: could not get idle state.') as call,patch.object(pairing.time,'sleep'):
+                with self.assertRaisesRegex(RuntimeError,'remained non-idle'):flow.ui('a')
+                self.assertEqual(call.call_count,6)
+                self.assertFalse(any(c.args[2]=='cat' for c in call.call_args_list))
+
+    def test_unknown_dump_failure_and_malformed_xml_fail_closed(self):
+        with tempfile.TemporaryDirectory() as folder:
+            flow=pairing.Pairing('adb',('a','b'),Path(folder),60)
+            with patch.object(flow,'command',side_effect=['','unexpected error']) as call:
+                with self.assertRaisesRegex(RuntimeError,'did not confirm'):flow.ui('a')
+                self.assertEqual(call.call_count,2)
+            with patch.object(flow,'command',side_effect=['','UI hierchary dumped to: /sdcard/umbra-pairing.xml','broken']):
+                with self.assertRaises(ET.ParseError):flow.ui('a')

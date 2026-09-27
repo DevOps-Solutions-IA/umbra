@@ -201,3 +201,23 @@ Son recibos de ese SHA, no validación automática de la corrección posterior.
 Build local sobre 678786d exit0: JVM, lint, JNI y APK policy ambas variantes;
 hashes APK coinciden con los ya registrados de 2a15f27 (sin cambio productivo
 Android entre ellos). Backend local 204 tests exit0.
+
+## 78c3d5f — recibos e intermitencia de adquisición UI
+
+Admission36312035687 y Password36312035670 SUCCESS. Checkout
+`405d5f885a0b62a40f2b2a9779b8b138d9bd9894`, árbol
+`8096240ea85e0c9594c555043b5ed083410d8055`, igual al HEAD publicado.
+Las cuatro combinaciones de admisión registran PASS, force-stop después de commit
+y KeyInfo securityLevel0 (software). No muerte durante commit ni TEE/StrongBox.
+204 backend,157 herramientas y HTTPS A1/A2/B1 locales exit0 sobre ese HEAD.
+
+Focused36312035674 job nearby108600133648 falló antes de RFCOMM al leer
+`/sdcard/umbra-pairing.xml` del segundo AVD. Artefacto10929182899 conserva el fallo
+y la última UI del primero. La salida de uiautomator no se registraba: no hay
+prueba de que su causa concreta fuera idle-state, permiso o almacenamiento.
+Se corrige la adquisición: elimina snapshot anterior, registra stdout/stderr,
+exige confirmación de creación, valida XML y solo reintenta el error explícito
+`could not get idle state` (máximo3, dentro del plazo global original150s).
+Errores desconocidos, lectura y XML malformado fallan. Dos regresiones cubren
+captura vieja, fallo transitorio, límite y rechazo. No se afirma que un nuevo
+verde demuestre la desaparición de toda intermitencia del emulador.
