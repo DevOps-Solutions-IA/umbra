@@ -74,6 +74,7 @@ def main() -> int:
     java_sources = sorted((sources / "core").glob("*.java")) + sorted((sources / "crypto").glob("*.java"))
     java_sources += sorted((sources / "pairing").glob("*.java"))
     java_sources += sorted((sources / "admission").glob("*.java"))
+    java_sources += [p for p in sorted((sources / "connectivity").glob("*.java")) if not p.name.startswith("Android")]
     java_sources += [ROOT / "android/app/src/androidTest/java/app/umbra/AdmissionLab.java"]
     java_sources += sorted((sources / "devices").glob("*.java"))
     java_sources += sorted((sources / "calls").glob("*.java"))

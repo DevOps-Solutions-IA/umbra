@@ -139,10 +139,12 @@ public final class VoiceEngineFixtureListener extends RunListener {
         var tls=SSLContext.getInstance("TLS"); tls.init(null,managers.getTrustManagers(),null);
         HttpsURLConnection.setDefaultSSLSocketFactory(tls.getSocketFactory()); // TEST APK only. Hostname verification unchanged.
         NativeVoiceSession voice=null;
-        try(var db=new SqliteDeviceRecords("voice-restart",false); var relay=new RelayClient(configuration.getString("base"),() -> true,new app.umbra.admission.AdmissionService(db))) {
+        try(var db=new SqliteDeviceRecords("voice-restart",false)) {
             Engine engine=new Engine(db,SystemClock::elapsedRealtime); engine.initialize("Synthetic voice "+(caller?"A":"B"));
             unadmittedRelayDenied(configuration.getString("base"));
             app.umbra.AdmissionLab.provision(engine,files,"synthetic-admission",configuration.getString("admissionRealm"));
+            engine.connectivity().vaultUnlocked(); engine.connectivity().connect(configuration.getString("base"),true);
+            try(var relay=new RelayClient(configuration.getString("base"),() -> true,engine.admission())) {
             relay.register(engine.profile(),configuration.getString("invitation")); engine.updateRelay(configuration.getString("base"),true);
             DeviceService devices=new DeviceService(db); devices.migrate();
             write("synthetic-voice-public.json",new JSONObject().put("identity",engine.id()).put("card",engine.createCard()).put("roster",devices.roster(engine.id())));
@@ -511,6 +513,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
             }
             Bundle status=new Bundle(); status.putString("engineVoice",expectedRejection?"PASS invalid TURN rejected before capture":"PASS independent Android Engine/SQLite/Signal/HTTPS + native TURN decoded synthetic peer audio");
             InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
+            }
         } finally {
             if(voice!=null) voice.close(); HttpsURLConnection.setDefaultSSLSocketFactory(original);
         }

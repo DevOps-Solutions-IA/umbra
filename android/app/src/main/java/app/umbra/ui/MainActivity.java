@@ -111,6 +111,7 @@ public final class MainActivity extends Activity {
         action(() -> {
             if (vault == null) vault = new Vault(getApplicationContext(), gate);
             engine = new Engine(vault, SystemClock::elapsedRealtime); initialised = engine.initialized();
+            engine.connectivity().vaultUnlocked();
             if (initialised) { vault.get("meta", "identity"); engine.expire(); }
             return initialised;
         }, ready -> { if (ready) { refresh(); resumeExternalResult(); } else onboarding(); });
@@ -211,7 +212,7 @@ public final class MainActivity extends Activity {
                 if (!unlocked || ticket != generation) return;
                 gate.requireUnlocked(); engine.expire();
                 JSONObject me = engine.profile();
-                boolean online = BuildConfig.ALLOW_RELAY && me.optBoolean("registered") && me.optBoolean("online") && !networkPaused;
+                boolean online = BuildConfig.ALLOW_RELAY && me.optBoolean("registered") && engine.connectivity().isNetworkSessionAllowed();
                 relay = online ? openRelay(me.getString("relay"), ticket, true) : null;
                 // Do not let an unreachable internet relay prevent offline Bluetooth delivery.
                 for (JSONObject queued : engine.outbox()) {
@@ -301,7 +302,7 @@ public final class MainActivity extends Activity {
     }
     private RelayClient openRelay(String address, int ticket, boolean requireOnline) throws Exception {
         if (!BuildConfig.ALLOW_RELAY) throw new SecurityException("Esta edición no tiene acceso a internet");
-        RelayClient relay = new RelayClient(address, () -> unlocked && ticket == generation && (!requireOnline || !networkPaused));
+        RelayClient relay = new RelayClient(address, () -> unlocked && ticket == generation && (!requireOnline || !networkPaused), engine.admission());
         activeRelay = relay;
         if (!unlocked || ticket != generation) { relay.close(); throw new AccessGate.LockedException(); }
         return relay;
@@ -344,7 +345,7 @@ public final class MainActivity extends Activity {
             @Override public void status(String text) {
                 main.post(() -> { if (unlocked && ticket == generation) { transportStatus = text; if (tab == 1) refresh(); } });
             }
-        });
+        }, engine.connectivity().startNearby(true));
         return bluetooth;
     }
     private boolean bluetoothPermission() {
@@ -361,9 +362,13 @@ public final class MainActivity extends Activity {
     private void refresh() {
         if (!unlocked || engine == null) return;
         String selected = chat;
-        action(() -> new Snapshot(engine.profile(), engine.contacts(), selected == null ? List.of() : engine.messages(selected), selected == null ? List.of() : engine.locations().received(selected)), s -> {
+        action(() -> {
+            networkPaused=!engine.connectivity().isNetworkSessionAllowed();
+            return new Snapshot(engine.profile(), engine.contacts(), selected == null ? List.of() : engine.messages(selected), selected == null ? List.of() : engine.locations().received(selected));
+        }, s -> {
             profile = s.profile;
-            if (!networkStateLoaded) { networkPaused = !BuildConfig.ALLOW_RELAY || !profile.optBoolean("online"); networkStateLoaded = true; }
+            // Persisted profile preferences never restore connectivity consent.
+            networkStateLoaded = true;
             contacts = s.contacts; if (Objects.equals(chat, selected)) { messages = s.messages; locations = s.locations; }
             render();
         });
@@ -540,8 +545,12 @@ public final class MainActivity extends Activity {
         LinearLayout status = card(page); label(status, transportStatus, 17, MINT);
         label(status, "Solo un enlace cercano a la vez. Ambos teléfonos deben mantener UMBRA abierta y desbloqueada.", 13, MUTED);
         Switch offline = new Switch(this); offline.setText(R.string.bluetooth_only); offline.setTextColor(TEXT);
-        offline.setChecked(!BuildConfig.ALLOW_RELAY || !profile.optBoolean("online")); offline.setEnabled(BuildConfig.ALLOW_RELAY); page.addView(offline);
-        offline.setOnCheckedChangeListener((v, checked) -> { networkPaused = checked; networkStateLoaded = true; if (checked) cancelRelay(); action(() -> { engine.setOnline(!checked); return true; }, ok -> refresh()); });
+        offline.setChecked(networkPaused); offline.setEnabled(BuildConfig.ALLOW_RELAY); page.addView(offline);
+        offline.setOnCheckedChangeListener((v, checked) -> {
+            if(checked) { networkPaused=true; engine.connectivity().disconnect(); cancelRelay(); }
+            action(() -> { if(!checked) app.umbra.connectivity.AndroidConnectivity.connect(this,engine.connectivity(),engine.profile().getString("relay"),true); return true; },
+                ok -> { networkPaused=checked; refresh(); });
+        });
         button(page, "Esperar un contacto verificado", () -> {
             if (!bluetoothPermission()) return;
             try { link().listen(); render(); }
@@ -665,6 +674,7 @@ public final class MainActivity extends Activity {
             String address = server.getText().toString().trim(), invite = invitation.getText().toString().trim();
             action(() -> {
                 String base = RelayClient.validate(address);
+                app.umbra.connectivity.AndroidConnectivity.connect(this,engine.connectivity(),base,true);
                 try (RelayClient relay = openRelay(base, generation, false)) { relay.register(engine.profile(), invite); }
                 engine.updateRelay(base, true); return true;
             }, ok -> { networkPaused = false; networkStateLoaded = true; invitation.setText(""); refresh(); syncNow(); });

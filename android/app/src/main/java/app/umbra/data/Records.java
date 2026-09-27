@@ -11,5 +11,7 @@ public interface Records {
     <T> T transaction(Work<T> work) throws Exception;
     /** Captures the current unlock epoch. Implementations without an access gate fail closed. */
     default Runnable authorization() { throw new SecurityException("Session authorization unavailable"); }
+    /** Optional lifecycle notification; authorization() remains mandatory on every operation. */
+    default void onInvalidation(Runnable callback) {}
     interface Work<T> { T run() throws Exception; }
 }

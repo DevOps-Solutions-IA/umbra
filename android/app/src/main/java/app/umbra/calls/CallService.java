@@ -23,6 +23,10 @@ public final class CallService {
     private final Set<String> cancelled=ConcurrentHashMap.newKeySet();
     private final Map<String,MediaLease> mediaLeases=new ConcurrentHashMap<>();
     public CallService(Records db,Engine engine,LongSupplier elapsed) { this.db=db; this.engine=engine; this.elapsed=elapsed; }
+    private Runnable sessionAuthorization() {
+        Runnable vault=db.authorization(), network=engine.connectivity().onlineEpochAuthorization();
+        return () -> { vault.run(); network.run(); };
+    }
     private void enabled() { if(!CallPlatform.ENABLED) throw new SecurityException("Calls unavailable in offline edition"); }
     private JSONObject get(String id) throws Exception { return engine.get("calls",id); }
     private void save(JSONObject row) { db.put("calls",row.optJSONObject("context").optString("callId"),Bytes.utf8(row.toString())); }
@@ -39,14 +43,14 @@ public final class CallService {
         private final CallService owner=CallService.this; private final JSONObject context; private final String accepting;
         private final NetworkPolicy policy; private final Runnable lease; private final long reviewed; private boolean used;
         private Consent(JSONObject context,String accepting,NetworkPolicy policy) throws Exception {
-            this.context=copy(context); this.accepting=accepting; this.policy=CallPayload.policy(Objects.requireNonNull(policy).name()); lease=db.authorization(); reviewed=elapsed.getAsLong();
+            this.context=copy(context); this.accepting=accepting; this.policy=CallPayload.policy(Objects.requireNonNull(policy).name()); lease=sessionAuthorization(); reviewed=elapsed.getAsLong();
         }
         public String recipient() throws Exception { return context.getString(accepting.isEmpty()?"callee":"caller"); }
         public List<String> devices() throws Exception { return targets(context); }
         public NetworkPolicy networkPolicy() { return policy; }
     }
     public Consent reviewInvite(String root,NetworkPolicy policy) throws Exception {
-        enabled(); return db.transaction(() -> {
+        enabled(); engine.connectivity().onlineAuthorization().run(); return db.transaction(() -> {
             maintain(); engine.authorizeTransportSelf();
             List<String> peers=new ArrayList<>(new DeviceService(db).recipients(root)); Collections.sort(peers);
             for(String peer:peers) engine.authorizeTransport(peer);
@@ -100,7 +104,7 @@ public final class CallService {
     private void capacity() { if(db.keys("calls").size()>=128) throw new IllegalStateException("Call retention capacity reached"); }
     private boolean hasLive() throws Exception { for(String id:db.keys("calls")) if(!terminal(get(id))) return true; return false; }
     private void authorize(JSONObject c) throws Exception {
-        enabled(); engine.authorizeTransportSelf(); String me=engine.id(),root=ownRoot();
+        enabled(); engine.connectivity().onlineAuthorization().run(); engine.authorizeTransportSelf(); String me=engine.id(),root=ownRoot();
         boolean caller=me.equals(c.getString("callerDevice"));
         if(!root.equals(c.getString(caller?"caller":"callee")) || (!caller&&!targets(c).contains(me))) throw new SecurityException("Wrong local call participant");
         if(version(c.getString("caller"))!=c.getLong("callerVersion") || version(c.getString("callee"))!=c.getLong("calleeVersion")) throw new SecurityException("Call membership changed");
@@ -165,7 +169,7 @@ public final class CallService {
     /** Only this service can authorize exact content to be encrypted by Engine. */
     public final class Permit {
         private final String payload; private final Runnable lease;
-        private Permit(JSONObject p) { payload=p.toString(); lease=db.authorization(); }
+        private Permit(JSONObject p) { payload=p.toString(); lease=sessionAuthorization(); }
         public void check(Records records,JSONObject p) throws Exception {
             if(records!=db || !payload.equals(p.toString())) throw new SecurityException("Call capability substitution"); lease.run(); enabled();
             authorize(p.getJSONObject("context"));
@@ -232,7 +236,7 @@ public final class CallService {
         authorize(c); maintain(); JSONObject row=get(id);
         if(row==null) {
             if(!fromCaller || !Set.of("INVITE","CANCEL").contains(type)) throw new SecurityException("Call context missing");
-            capacity(); boolean busy=hasLive(); row=create(c,"INCOMING",policy(p.getString("policy"))); leases.put(id,db.authorization());
+            capacity(); boolean busy=hasLive(); row=create(c,"INCOMING",policy(p.getString("policy"))); leases.put(id,sessionAuthorization());
             row.put("remotePolicy",p.getString("policy"));
             if(type.equals("INVITE")) {
                 ring(row);
@@ -349,7 +353,7 @@ public final class CallService {
             JSONObject video=row.optJSONObject("video");
             change=accepting?video.getString("change"):UUID.randomUUID().toString();
             generation=accepting?video.getInt("generation"):row.getInt("generation")+1;
-            authorization=db.authorization(); reviewed=elapsed.getAsLong();
+            authorization=sessionAuthorization(); reviewed=elapsed.getAsLong();
         }
     }
     private boolean localCaller(JSONObject row) throws Exception { return engine.id().equals(row.getJSONObject("context").getString("callerDevice")); }
@@ -479,7 +483,7 @@ public final class CallService {
         private MediaConsent(JSONObject row,String revision) throws Exception {
             id=row.getJSONObject("context").getString("callId");
             selected=row.getString("selected"); context=CallPayload.canonical(row.getJSONObject("context"));
-            this.revision=revision; authorization=db.authorization(); reviewed=elapsed.getAsLong();
+            this.revision=revision; authorization=sessionAuthorization(); reviewed=elapsed.getAsLong();
         }
     }
     private JSONObject mediaRow(String id) throws Exception {

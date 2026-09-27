@@ -16,10 +16,11 @@ public class ConnectedCallTest {
     static class Pair {
         final DeviceLinkingTest.Device a=new DeviceLinkingTest.Device("Call A"), b=new DeviceLinkingTest.Device("Call B");
         final AtomicLong time=new AtomicLong(10000); final Engine ae=new Engine(a.db,time::get), be=new Engine(b.db,time::get);
-        Pair() throws Exception { DeviceLinkingTest.pair(a,b); a.d.migrate(); b.d.migrate(); DeviceLinkingTest.approveSet(a,b); DeviceLinkingTest.approveSet(b,a); }
+        Pair() throws Exception { online(ae); online(be); DeviceLinkingTest.pair(a,b); a.d.migrate(); b.d.migrate(); DeviceLinkingTest.approveSet(a,b); DeviceLinkingTest.approveSet(b,a); }
         String invite() throws Exception { String id=ae.calls().invite(ae.calls().reviewInvite(b.e.id(),RELAY_ONLY),true); deliver(ae,be); return id; }
         String selected() throws Exception { String id=invite(); be.calls().accept(be.calls().reviewAccept(id,RELAY_ONLY),true); deliver(be,ae); deliver(ae,be); return id; }
     }
+    static void online(Engine engine) throws Exception { engine.connectivity().vaultUnlocked(); engine.connectivity().connect("https://relay.example.invalid",true); }
     static void deliver(Engine a,Engine b) throws Exception {
         for(JSONObject q:a.outbox()) if(q.getString("peer").equals(b.id())) { JSONObject e=q.getJSONObject("envelope"); a.authorizeEnvelope(e); b.receive(e); a.transported(e.getString("id"),true); }
     }
@@ -100,7 +101,7 @@ public class ConnectedCallTest {
         q.ae.calls().end(other);q.ae.receive(accept);assertEquals("CANCELLED",q.ae.calls().session(other).getString("state"));
     }
     @Test public void twoInviteesConcurrentAcceptanceOnlyOneSelected() throws Exception {
-        Pair p=new Pair(); DeviceLinkingTest.Device b2=new DeviceLinkingTest.Device("Call B2"); DeviceLinkingTest.link(p.b,b2);
+        Pair p=new Pair(); DeviceLinkingTest.Device b2=new DeviceLinkingTest.Device("Call B2"); DeviceLinkingTest.link(p.b,b2); online(b2.e);
         DeviceLinkingTest.pair(p.a,b2);DeviceLinkingTest.approveSet(p.a,p.b,b2);DeviceLinkingTest.approveSet(b2,p.a);
         String id=p.invite();deliver(p.ae,b2.e);
         p.be.calls().accept(p.be.calls().reviewAccept(id,RELAY_ONLY),true);b2.e.calls().accept(b2.e.calls().reviewAccept(id,RELAY_ONLY),true);

@@ -31,7 +31,9 @@ public final class Engine {
         admission = new app.umbra.admission.AdmissionService(records);
         locations = new app.umbra.location.LocationService(records, this, elapsed);
         calls = new app.umbra.calls.CallService(records, this, elapsed);
+        connectivity().onOnlineStopped(calls::cancelLocal);
     }
+    public app.umbra.connectivity.ConnectivityService connectivity() { return admission.connectivity(); }
     public app.umbra.admission.AdmissionService admission() { return admission; }
     public app.umbra.calls.CallService calls() { return calls; }
     public app.umbra.location.LocationService locations() { return locations; }

@@ -210,6 +210,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         } catch (AccessGate.LockedException e) { throw e; }
         catch (Exception e) { throw new IllegalStateException("Cannot enumerate locked vault", e); }
     }
+    @Override public void onInvalidation(Runnable callback) { gate.onInvalidation(callback); }
     @Override public Runnable authorization() {
         AccessGate.Lease lease = gate.enter();
         requirePasswordAccess();

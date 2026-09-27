@@ -12,16 +12,19 @@ import javax.net.ssl.HttpsURLConnection;
 /** Untrusted HTTPS courier; cancellation on lock and no redirects or plaintext fallback. */
 public final class RelayClient implements AutoCloseable {
     private final String base;
+    private final app.umbra.connectivity.ConnectivityService.Lease network;
     private final BooleanSupplier permitted;
     private final app.umbra.admission.AdmissionService admission;
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
-    private volatile HttpsURLConnection active;
-    private volatile boolean closed;
+    private final java.util.concurrent.atomic.AtomicReference<HttpsURLConnection> active=new java.util.concurrent.atomic.AtomicReference<>();
+    private final java.util.concurrent.atomic.AtomicBoolean closed=new java.util.concurrent.atomic.AtomicBoolean();
     private final java.util.ArrayDeque<app.umbra.admission.AdmissionChallenge> challenges=new java.util.ArrayDeque<>();
     public RelayClient(String address) throws Exception { this(address, () -> true); }
     public RelayClient(String address, BooleanSupplier permitted) throws Exception { this(address,permitted,null); }
     public RelayClient(String address, BooleanSupplier permitted, app.umbra.admission.AdmissionService admission) throws Exception {
         base=validate(address); this.permitted=permitted; this.admission=admission;
+        network=admission==null?null:admission.connectivity().networkLease(base);
+        if(network!=null) network.attach(this::close);
     }
     public static String validate(String address) throws Exception {
         URI uri = new URI(address.trim());
@@ -32,7 +35,9 @@ public final class RelayClient implements AutoCloseable {
         return uri.toString().replaceAll("/+$", "");
     }
     private void allowed() throws IOException {
-        if (closed || !permitted.getAsBoolean()) throw new IOException("Conexión cancelada por la política local");
+        if(network==null) throw new IOException("Explicit connectivity consent required");
+        network.check();
+        if (closed.get() || !permitted.getAsBoolean()) throw new IOException("Conexión cancelada por la política local");
     }
     private static final class HttpFailure extends IOException {
         private static final long serialVersionUID=1L;
@@ -154,11 +159,10 @@ public final class RelayClient implements AutoCloseable {
                                   java.util.Map<String,String> admissionHeaders) throws Exception {
         allowed(); authorization.check();
         HttpsURLConnection connection = (HttpsURLConnection) new URI(base + path).toURL().openConnection();
-        synchronized (this) {
-            allowed(); if (active != null) throw new IOException("Relay client already in use"); active = connection;
-        }
+        if(!active.compareAndSet(null,connection)) { connection.disconnect(); throw new IOException("Relay client already in use"); }
         ScheduledFuture<?> deadline = null;
         try {
+            allowed();
             deadline = timer.schedule(connection::disconnect, 20, TimeUnit.SECONDS);
             for(var header:admissionHeaders.entrySet()) connection.setRequestProperty(header.getKey(),header.getValue());
             connection.setRequestMethod(method); connection.setInstanceFollowRedirects(false);
@@ -191,11 +195,14 @@ public final class RelayClient implements AutoCloseable {
                     allowed(); if (output.size() + length > 5_100_000) throw new IOException("Respuesta demasiado grande");
                     output.write(chunk, 0, length);
                 }
-                allowed(); return Wire.parse(output.toByteArray(), 5_100_000);
+                allowed(); authorization.check(); return Wire.parse(output.toByteArray(), 5_100_000);
             }
+        } catch(IOException failure) {
+            if(!(failure instanceof HttpFailure)) network.failed();
+            throw failure;
         } finally {
             if (deadline != null) deadline.cancel(false);
-            connection.disconnect(); synchronized (this) { if (active == connection) active = null; }
+            connection.disconnect(); active.compareAndSet(connection,null);
         }
     }
     public void register(JSONObject profile, String invitation) throws Exception {
@@ -252,8 +259,10 @@ public final class RelayClient implements AutoCloseable {
     public void unregister(JSONObject profile) throws Exception {
         request("DELETE", "/v1/boxes/" + Wire.uuid(profile.getString("box")), profile.getString("read"), null);
     }
-    @Override public synchronized void close() {
-        closed = true; HttpsURLConnection c = active; active = null;
+    @Override public void close() {
+        if(!closed.compareAndSet(false,true)) return;
+        HttpsURLConnection c = active.getAndSet(null);
         if (c != null) c.disconnect(); timer.shutdownNow();
+        if(network!=null) network.close();
     }
 }

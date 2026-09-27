@@ -20,7 +20,7 @@ public final class SqliteDeviceRecords implements Records, AutoCloseable {
     public volatile Runnable beforeTransaction;
     public SqliteDeviceRecords() { this(null,false); }
     public SqliteDeviceRecords(String fixture, boolean existing) {
-        if(fixture!=null && !Set.of("location-restart","voice-restart","admission-restart").contains(fixture)) throw new SecurityException("Unknown synthetic fixture");
+        if(fixture!=null && !Set.of("location-restart","voice-restart","admission-restart","startup-restart").contains(fixture)) throw new SecurityException("Unknown synthetic fixture");
         var context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         if (!(BuildConfig.DEBUG && context.getPackageName().endsWith(".dev"))
                 && !context.getPackageName().equals("app.umbra.privatechat.medialab")
@@ -59,6 +59,7 @@ public final class SqliteDeviceRecords implements Records, AutoCloseable {
         try(Cursor rows=database.rawQuery("SELECT k FROM records WHERE bucket=?",new String[]{bucket})) { while(rows.moveToNext()) keys.add(rows.getString(0)); }
         return keys;
     }
+    public void onInvalidation(Runnable callback) { gate.onInvalidation(callback); }
     public Runnable authorization() { var lease=gate.enter(); return () -> gate.check(lease); }
     public <T> T transaction(Work<T> work) throws Exception {
         Runnable hook=beforeTransaction;if(hook!=null)hook.run();

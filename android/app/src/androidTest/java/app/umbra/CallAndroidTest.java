@@ -21,6 +21,7 @@ public class CallAndroidTest {
                 assertThrows(SecurityException.class,()->a.calls().reviewInvite(b.id(),RELAY_ONLY));
                 a.sendText(b.id(),"synthetic offline chat retained",600);deliver(a,b);assertEquals(1,b.messages(a.id()).size());return;
             }
+            for(Engine engine:new Engine[]{a,b}) { engine.connectivity().vaultUnlocked(); engine.connectivity().connect("https://relay.example.invalid",true); }
             String id=a.calls().invite(a.calls().reviewInvite(b.id(),RELAY_ONLY),true);deliver(a,b);
             b.calls().accept(b.calls().reviewAccept(id,RELAY_ONLY),true);
             ar.failBucket="calls";assertThrows(IllegalStateException.class,()->deliver(b,a));ar.failBucket=null;ar.reopen();
@@ -35,6 +36,7 @@ public class CallAndroidTest {
         try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
             if(!CallPlatform.ENABLED) {assertThrows(SecurityException.class,()->a.calls().receive(null,new JSONObject()));return;}
+            for(Engine engine:new Engine[]{a,b}) { engine.connectivity().vaultUnlocked(); engine.connectivity().connect("https://relay.example.invalid",true); }
             String id=a.calls().invite(a.calls().reviewInvite(b.id(),RELAY_ONLY),true);
             var auth=a.deliveryAuthorization(a.outbox().get(0).getJSONObject("envelope"));
             ar.gate.lock();ar.gate.unlock();assertThrows(SecurityException.class,auth::run);ar.reopen();

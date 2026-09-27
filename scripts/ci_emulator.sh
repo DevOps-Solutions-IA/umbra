@@ -65,7 +65,12 @@ umbra_start_avd() {
   sed -i -e 's/^hw.lcd.width[[:space:]]*=.*/hw.lcd.width=480/' \
     -e 's/^hw.lcd.height[[:space:]]*=.*/hw.lcd.height=800/' \
     -e 's/^hw.lcd.density[[:space:]]*=.*/hw.lcd.density=160/' "$avd/config.ini"
-  "$ANDROID_HOME/emulator/emulator" -avd "$name" -port "$port" -no-window -no-audio \
+  local dns_options=()
+  if [[ -n "${UMBRA_STARTUP_DNS:-}" ]]; then
+    if [[ "$UMBRA_STARTUP_DNS" != "10.0.2.2" ]]; then echo "Only loopback startup DNS fixture is allowed" >&2; return 1; fi
+    dns_options=(-dns-server "$UMBRA_STARTUP_DNS")
+  fi
+  "$ANDROID_HOME/emulator/emulator" "${dns_options[@]}" -avd "$name" -port "$port" -no-window -no-audio \
     -camera-front "$camera" -camera-back "$camera" \
     -netsim-args "--pcap" -no-boot-anim -no-snapshot -gpu swiftshader -feature -Vulkan -accel on -memory 1536 -cores 2 > "$log" 2>&1 &
   local pid=$!
