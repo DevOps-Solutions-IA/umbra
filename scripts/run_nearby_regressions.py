@@ -18,6 +18,12 @@ def main():
                 '--serial-a',paired['serial_a'],'--serial-b',paired['serial_b'],
                 '--address-a',paired['address_a'],'--address-b',paired['address_b'],
                 '--flavor',flavor,'--log-dir',str(args.reports/name)]))
+    for flavor in ('connected','offline'):
+        name=f'nearby-{flavor}-unadmitted'
+        commands.append((name,[sys.executable,'scripts/run_bluetooth_emulation.py',
+            '--serial-a',paired['serial_a'],'--serial-b',paired['serial_b'],
+            '--address-a',paired['address_a'],'--address-b',paired['address_b'],
+            '--flavor',flavor,'--unadmitted-dialer','--log-dir',str(args.reports/name)]))
     return execute(commands,args.reports)
 
 if __name__=='__main__':sys.exit(main())

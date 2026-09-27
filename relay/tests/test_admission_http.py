@@ -159,3 +159,22 @@ def test_revocation_while_handler_waits_revalidates_inside_transaction(admission
         assert future.result(timeout=5).status_code == 403
     with app.state.database.connect() as db:
         assert db.execute('SELECT count(*) FROM invites').fetchone()[0] == 0
+
+
+def test_future_websocket_route_cannot_bypass_http_gate(admission):
+    from starlette.websockets import WebSocketDisconnect
+    from fastapi import WebSocket
+    app, client, *_ = admission
+    reached = []
+
+    @app.websocket('/private-synthetic-websocket')
+    async def private_socket(socket: WebSocket):
+        reached.append(True)
+        await socket.accept()
+        await socket.close()
+
+    with pytest.raises(WebSocketDisconnect) as rejected:
+        with client.websocket_connect('/private-synthetic-websocket'):
+            raise AssertionError('Unsupported private transport accepted')
+    assert rejected.value.code == 1008
+    assert reached == []

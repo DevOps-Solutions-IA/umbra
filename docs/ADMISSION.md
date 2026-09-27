@@ -197,3 +197,7 @@ challenge validity checks. Larger or frozen clock differences fail closed. No
 challenge/credential TTL is extended. Expiry during signing or verifier restart
 permits at most one fresh challenge attempt with the frozen body and original
 lease; no ratchet is rewound and no stale proof is replayed.
+
+Admission v1 authorizes HTTP requests only. WebSocket scopes are closed with
+policy code1008 before routing, including future routes; adding another transport
+requires an explicit authenticated protocol rather than inheriting a bypass.

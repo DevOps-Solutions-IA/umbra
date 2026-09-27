@@ -25,6 +25,10 @@ class AdmissionGate:
         self.app, self.store, self.health = app, store, health
 
     async def __call__(self, scope, receive, send):
+        if scope["type"] == "websocket":
+            # v1 defines HTTP possession only. A future WebSocket route must not bypass this gate.
+            await send({"type": "websocket.close", "code": 1008})
+            return
         if scope["type"] != "http" or (scope.get("method"), scope.get("path")) in PUBLIC:
             return await self.app(scope, receive, send)
         try:

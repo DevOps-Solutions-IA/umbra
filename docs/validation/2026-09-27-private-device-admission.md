@@ -164,3 +164,16 @@ SHA256 debug connected `058d5041c024e195bcc32651cbb365d21aabb7ff0b8e77b96fb224dc
 offline `ee09c0c017a4d6a4394bbaa80e1250b8aff0ecc0b8e970d901ee24fda786575e`.
 `test_relay_integration.py` sobre ese HEAD exit0, incluyendo A1/A2/B1 y
 revocación independiente. Son artefactos locales de ese SHA, no del siguiente.
+
+Focused regressions 36310722521: los seis casos nearby fallaron antes de RFCOMM
+por `ModuleNotFoundError: nacl`: ese job separado no instalaba las dependencias
+del administrador sintético. Se añade instalación del lock con hashes; no se
+atribuye el fallo al stack Bluetooth. Las seis repeticiones se conservan y se
+agregan dos rechazos de dialer no admitido, uno por flavor. 155 herramientas
+locales pasan, incluida la composición exacta de la matriz.
+
+Modulación 36310722537 terminó: **R8 SUCCESS**, debug FAILURE por notBefore ya
+descrito; no atribuir ese verde parcial a otro HEAD. La revisión añade también
+cierre explícito de scopes WebSocket, sin protocolo de posesión definido en v1,
+para impedir que una ruta futura eluda el gate HTTP. La nueva regresión real
+TestClient confirma code1008 antes de ejecutar el handler; 17 pruebas HTTP pasan.
