@@ -20,7 +20,7 @@ public class DeviceMembershipPersistenceTest {
     @Test public void threeIdentitiesPersistIndependentSessionsAndRevocationAcrossReopen() throws Exception {
         try(var ar=new SqliteDeviceRecords();var nr=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),n=new Engine(nr),b=new Engine(br);
-            a.initialize("Synthetic A1"); n.initialize("Synthetic A2"); b.initialize("Synthetic B1"); pair(a,b);
+            a.initialize("Synthetic A1"); AdmissionFixture.enroll(a); n.initialize("Synthetic A2"); AdmissionFixture.enroll(n); b.initialize("Synthetic B1"); AdmissionFixture.enroll(b); pair(a,b);
             DeviceService ad=new DeviceService(ar),nd=new DeviceService(nr),bd=new DeviceService(br);
             ad.migrate(); bd.migrate(); String challenge=ad.challenge(nd.publicKey(),600);
             String response=nd.respond(nd.reviewChallenge(challenge),true),approval=ad.approve(ad.reviewResponse(response),true);
@@ -54,7 +54,7 @@ public class DeviceMembershipPersistenceTest {
     }
     @Test public void diskFailureAndOldUnlockConsentCannotAuthorizeDevice() throws Exception {
         try(var ar=new SqliteDeviceRecords();var nr=new SqliteDeviceRecords()) {
-            Engine a=new Engine(ar),n=new Engine(nr); a.initialize("Synthetic A1"); n.initialize("Synthetic A2");
+            Engine a=new Engine(ar),n=new Engine(nr); a.initialize("Synthetic A1"); AdmissionFixture.enroll(a); n.initialize("Synthetic A2"); AdmissionFixture.enroll(n);
             DeviceService ad=new DeviceService(ar),nd=new DeviceService(nr); ad.migrate();
             String response=nd.respond(nd.reviewChallenge(ad.challenge(nd.publicKey(),600)),true);
             var old=ad.reviewResponse(response); ar.gate.lock(); ar.gate.unlock();

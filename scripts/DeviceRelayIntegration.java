@@ -55,9 +55,12 @@ final class DeviceRelayIntegration {
         try { op.run(); throw new AssertionError("Revoked capability accepted"); }
         catch(java.io.IOException expected) { check(expected.getMessage().contains("HTTP 401)"),"revoked relay capability rejected"); }
     }
-    static void run(String base,String[] invitations) throws Exception {
+    static void run(String base,String[] invitations,java.nio.file.Path exchange) throws Exception {
         Device a1=new Device("Synthetic A1"),a2=new Device("Synthetic A2"),b1=new Device("Synthetic B1");
-        try(RelayClient relay=new RelayClient(base)) {
+        int number=0;
+        for(Device device:List.of(a1,a2,b1)) AdmissionLab.provision(device.e,exchange,"admission-device-"+(number++),
+            java.nio.file.Files.readString(exchange.resolve("admission-realm")));
+        try(RelayClient relay=new RelayClient(base, () -> true, a1.e.admission())) {
             int i=2; for(Device d:List.of(a1,a2,b1)) relay.register(d.e.profile(),invitations[i++]);
             pair(a1,b1); a1.e.sendText(b1.e.id(),"synthetic before linking",600); upload(relay,a1); download(relay,b1); upload(relay,b1); download(relay,a1);
             check(a1.e.outbox().isEmpty(),"A1/B1 verified messaging and ACK before linking");

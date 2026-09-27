@@ -7,6 +7,8 @@ execution, or Bluetooth. TLS verification stays enabled in Python and Java.
 from __future__ import annotations
 
 import argparse
+import json
+from admission_lab import AdmissionLab
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import os
 from pathlib import Path
@@ -71,6 +73,8 @@ def main() -> int:
     sources = ROOT / "android/app/src/main/java/app/umbra"
     java_sources = sorted((sources / "core").glob("*.java")) + sorted((sources / "crypto").glob("*.java"))
     java_sources += sorted((sources / "pairing").glob("*.java"))
+    java_sources += sorted((sources / "admission").glob("*.java"))
+    java_sources += [ROOT / "android/app/src/androidTest/java/app/umbra/AdmissionLab.java"]
     java_sources += sorted((sources / "devices").glob("*.java"))
     java_sources += sorted((sources / "calls").glob("*.java"))
     java_sources += [ROOT / "android/app/src/connected/java/app/umbra/calls/CallPlatform.java"]
@@ -103,7 +107,9 @@ def main() -> int:
         invitations = exchange / "invitations"
         invitations.write_text("".join(database.issue_invite() + "\n" for _ in range(5)))
         invitations.chmod(0o600)
-        environment = dict(os.environ, UMBRA_DB=database.path, PYTHONPATH=str(ROOT / "relay"))
+        admission = AdmissionLab()
+        (exchange / "admission-realm").write_text(admission.realm.encode())
+        environment = dict(os.environ, UMBRA_DB=database.path, PYTHONPATH=str(ROOT / "relay"), UMBRA_ADMISSION_REALM=admission.realm.encode())
         context = ssl.create_default_context(cafile=str(cert))
         server = test = None
         release_fixture = threading.Event()
@@ -137,6 +143,10 @@ def main() -> int:
             listener.listen(128)
             base = f"https://localhost:{listener.getsockname()[1]}"
 
+            environment["UMBRA_ADMISSION_ORIGIN"] = base
+            from umbra_relay.admission_store import AdmissionStore
+            admission.store = AdmissionStore(database, admission.realm.encode(), base)
+
             def start_server():
                 return subprocess.Popen([sys.executable, "-m", "uvicorn", "umbra_relay.app:create_app",
                                          "--factory", "--fd", str(listener.fileno()), "--workers", "1",
@@ -159,6 +169,13 @@ def main() -> int:
                     if server.poll() is not None:
                         (exchange / "server-failed").touch()
                         raise RuntimeError(f"Isolated relay failed: {server.returncode}")
+                    for request_path in exchange.glob("admission-*-request.json"):
+                        approval = admission.approve(json.loads(request_path.read_text())["request"])
+                        destination = request_path.with_name(request_path.name.replace("-request.json", "-credential.json"))
+                        temporary_result = destination.with_suffix(".tmp")
+                        temporary_result.write_text(json.dumps(approval))
+                        temporary_result.replace(destination)
+                        request_path.unlink(missing_ok=True)
                     if not restarted and (exchange / "restart-request").exists():
                         stop(server)
                         # Uvicorn re-raises a captured SIGTERM after graceful shutdown.

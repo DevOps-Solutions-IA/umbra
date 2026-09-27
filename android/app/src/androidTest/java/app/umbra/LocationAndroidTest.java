@@ -20,7 +20,7 @@ import static org.junit.Assert.*;
 @RunWith(AndroidJUnit4.class)
 public class LocationAndroidTest {
     static void pair(Engine a,Engine b,SqliteDeviceRecords ar,SqliteDeviceRecords br) throws Exception {
-        a.initialize("Synthetic Location A"); b.initialize("Synthetic Location B");
+        a.initialize("Synthetic Location A"); AdmissionFixture.enroll(a); b.initialize("Synthetic Location B"); AdmissionFixture.enroll(b);
         a.importCard(b.createCard()); b.importCard(a.createCard());
         a.verify(b.id(),Bytes.safetyCode(a.id(),b.id())); b.verify(a.id(),Bytes.safetyCode(a.id(),b.id()));
         DeviceService ad=new DeviceService(ar),bd=new DeviceService(br); ad.migrate(); bd.migrate();

@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 from test_relay_integration import stop, wait_healthy
+from admission_lab import AdmissionLab
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,17 +27,21 @@ def voice_relay():
         from umbra_relay.app import Database
         database=Database(str(root/"relay.sqlite3"))
         invitations=[database.issue_invite() for _ in range(2)]
-        environment=dict(os.environ,UMBRA_DB=database.path,PYTHONPATH=str(ROOT/"relay"))
+        admission=AdmissionLab()
+        environment=dict(os.environ,UMBRA_DB=database.path,PYTHONPATH=str(ROOT/"relay"),UMBRA_ADMISSION_REALM=admission.realm.encode())
         with socket.socket(socket.AF_INET,socket.SOCK_STREAM) as listener, (root/"server.log").open("w") as log:
             listener.bind(("127.0.0.1",0)); listener.listen(16)
             port=listener.getsockname()[1]
+            environment["UMBRA_ADMISSION_ORIGIN"]=f"https://10.0.2.2:{port}"
+            from umbra_relay.admission_store import AdmissionStore
+            admission.store=AdmissionStore(database,admission.realm.encode(),environment["UMBRA_ADMISSION_ORIGIN"])
             server=subprocess.Popen([sys.executable,"-m","uvicorn","umbra_relay.app:create_app","--factory",
                 "--fd",str(listener.fileno()),"--workers","1","--ssl-certfile",str(cert),"--ssl-keyfile",str(key),
                 "--no-access-log","--no-proxy-headers","--log-level","warning"],env=environment,
                 pass_fds=(listener.fileno(),),stdout=log,stderr=log)
             try:
                 wait_healthy(server,f"https://127.0.0.1:{port}",ssl.create_default_context(cafile=str(cert)))
-                yield {"base":f"https://10.0.2.2:{port}","certificate":cert.read_text(),"invitations":invitations}
+                yield {"base":f"https://10.0.2.2:{port}","certificate":cert.read_text(),"invitations":invitations,"admission":admission}
                 if server.poll() is not None:
                     raise RuntimeError("Isolated voice HTTPS relay died during acceptance")
             finally:

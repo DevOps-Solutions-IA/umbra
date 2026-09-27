@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from admission_lab import AdmissionLab
 import json
 import os
 from pathlib import Path
@@ -45,6 +46,7 @@ def main() -> None:
     paths = [args.log_dir / f'nearby-{role}.log' for role in ('listener', 'dialer')]
     processes, streams, started_devices = [], [], []
     successful = False
+    admission = AdmissionLab()
 
     def adb(serial: str, *command: str, **kwargs):
         return subprocess.run([args.adb, '-s', serial, *command], check=True, timeout=180, **kwargs)
@@ -79,10 +81,25 @@ def main() -> None:
         for serial, role, address, path in zip(devices, ('listener', 'dialer'), (args.address_b, args.address_a), paths):
             stream = path.open('w', encoding='utf-8'); streams.append(stream)
             processes.append(subprocess.Popen([args.adb, '-s', serial, 'shell', 'am', 'instrument', '-w', '-r',
-                '-e', 'listener', 'app.umbra.NearbyFixtureListener', '-e', 'class', 'app.umbra.DeviceSignalTest',
+                '-e', 'admissionRealm', admission.realm.encode(), '-e', 'listener', 'app.umbra.NearbyFixtureListener', '-e', 'class', 'app.umbra.DeviceSignalTest',
                 '-e', 'role', role, '-e', 'address', address,
                 package + '.test/androidx.test.runner.AndroidJUnitRunner'], stdout=stream, stderr=subprocess.STDOUT))
             started_devices.append(serial)
+            # Admission precedes the RFCOMM listener/connection, using the device's own public request.
+            admission_deadline=time.monotonic()+25
+            while True:
+                if processes[-1].poll() is not None:
+                    raise RuntimeError('Device fixture exited before admission approval')
+                request=subprocess.run([args.adb,'-s',serial,'shell','run-as',package,'cat','files/synthetic-admission-request.json'],
+                    capture_output=True,timeout=10)
+                if request.returncode==0:
+                    approval=admission.approve(json.loads(request.stdout)['request'])
+                    adb(serial,'shell','run-as',package,'sh','-c',"'umask 077; cat > files/synthetic-admission-credential.tmp && mv files/synthetic-admission-credential.tmp files/synthetic-admission-credential.json'",
+                        input=json.dumps(approval).encode(),capture_output=True)
+                    break
+                if request.returncode!=1 or time.monotonic()>=admission_deadline:
+                    raise RuntimeError('Synthetic admission provisioning failed')
+                time.sleep(0.1)
             if role == 'listener':
                 wait_for(lambda content: 'nearbyStage=listening-or-connecting' in content[0], 20, 'Listener startup failed')
         pattern = r'syntheticSafetyCode=([0-9a-f]{64})'

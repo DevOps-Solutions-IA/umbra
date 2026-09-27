@@ -39,9 +39,11 @@ public final class RelayIntegrationTest {
         MemoryRecords aStore = new MemoryRecords(), bStore = new MemoryRecords();
         Engine alice = new Engine(aStore), bob = new Engine(bStore);
         alice.initialize("Synthetic Alice"); bob.initialize("Synthetic Bob");
+        AdmissionLab.provision(alice,exchange,"admission-a",Files.readString(exchange.resolve("admission-realm")));
+        AdmissionLab.provision(bob,exchange,"admission-b",Files.readString(exchange.resolve("admission-realm")));
         JSONObject aProfile = alice.profile(), bProfile = bob.profile();
         PairingService inviter = new PairingService(aStore), joiner = new PairingService(bStore);
-        try (RelayClient client = new RelayClient(base)) {
+        try (RelayClient client = new RelayClient(base, () -> true, alice.admission())) {
             client.register(aProfile, invitations[0]); client.register(bProfile, invitations[1]);
             client.register(aProfile, invitations[0]);
             String invite = inviter.createInvitation(3600), request = joiner.request(invite);
@@ -127,11 +129,12 @@ public final class RelayIntegrationTest {
             try (RelayClient locked = new RelayClient(base, () -> false)) {
                 rejects(() -> locked.poll(bProfile, 0), "locked policy prevents network operation");
             }
-            // A separate hostile TLS fixture sends headers but withholds its body.
+            // A separate hostile TLS fixture withholds a PUBLIC realm response body.
+            // No unadmitted private API is opened to exercise cancellation.
             ExecutorService pendingExecutor = Executors.newSingleThreadExecutor();
             try (RelayClient pendingClient = new RelayClient(args[2])) {
                 Future<Boolean> failed = pendingExecutor.submit(() -> {
-                    try { pendingClient.poll(bProfile, 0); return false; }
+                    try { pendingClient.publicRealm(); return false; }
                     catch (Exception expected) { return true; }
                 });
                 long startedDeadline = System.nanoTime() + 10_000_000_000L;
@@ -148,7 +151,7 @@ public final class RelayIntegrationTest {
             rejectsHttp(() -> client.poll(bProfile, 0), 401, "revoked read capability rejected");
             rejectsHttp(() -> client.send(bobRoute, wire), 401, "revoked write capability rejected");
         }
-        DeviceRelayIntegration.run(base, invitations);
+        DeviceRelayIntegration.run(base, invitations, exchange);
         require(!Files.exists(exchange.resolve("server-failed")), "isolated relay remained healthy");
         System.out.println(checks + " real HTTPS relay integration checks passed; no Android Keystore or Bluetooth exercised.");
     }

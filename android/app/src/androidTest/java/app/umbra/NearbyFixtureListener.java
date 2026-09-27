@@ -49,6 +49,7 @@ public final class NearbyFixtureListener extends RunListener {
             require(device.getBondState() == BluetoothDevice.BOND_BONDED, "Pair the synthetic devices in Android first");
             DeviceMemoryRecords records = new DeviceMemoryRecords();
             engine = new Engine(records); engine.initialize("Synthetic " + role);
+            AdmissionLab.provision(engine,approval.getParentFile().toPath(),"synthetic-admission",arguments.getString("admissionRealm",""));
             new app.umbra.devices.DeviceService(records).migrate();
             link = new BluetoothLink(InstrumentationRegistry.getInstrumentation().getTargetContext(), new BluetoothLink.Listener() {
                 public String ownId() throws Exception { synchronized (recordsLock) { return engine.id(); } }

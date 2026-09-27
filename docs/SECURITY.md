@@ -1,5 +1,20 @@
 # Seguridad y límites de UMBRA 0.2
 
+## Private device admission — 2026-09-27, bajo validación
+
+Rama dependiente `codex/private-device-admission`, base exacta
+`0de2b102d2d09b1eeed0e4fe233d3b27976e1036`. Autoridad Ed25519 dedicada,
+credenciales por dispositivo y prueba de posesión obligatoria se añaden a las
+políticas existentes; no conceden VERIFIED ni membresía por vinculación.
+Relay cierra APIs privadas sin configuración/admisión. Bóveda, Signal, TURN y
+permisos offline se conservan. UI de Claude y MainActivity no se modifican.
+Consultar [contrato](ADMISSION.md), [ADR](adr/ADR-private-device-admission.md)
+y [evidencia nueva](validation/2026-09-27-private-device-admission.md).
+CI final, AVD y RFCOMM nuevos todavía NO EJECUTADOS en este recibo inicial;
+ningún resultado de PR #11 valida estos cambios. Rotación/recuperación de
+la autoridad y nuevas pantallas quedan fuera de alcance.
+
+
 **No utilizar para secretos reales hasta cerrar las pruebas y la auditoría pendientes.** Esta entrega no está certificada, no es invulnerable y no tiene comparación de superioridad frente a otros mensajeros.
 
 ## Activos y adversarios considerados

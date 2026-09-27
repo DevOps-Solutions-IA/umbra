@@ -201,13 +201,16 @@ def main():
                 if args.scenario=="invalid-auth": credentials["password"]="synthetic-invalid-credential"
                 if args.scenario=="unreachable": credentials["urls"]=[value.replace(":5349",":5348") if args.turn_tls else value.replace(":3478",":3479") for value in credentials["urls"]]
                 write(serial,"synthetic-voice-engine.json",{"stopVideoRace":args.scenario=="video-stop-race","initialModulation":args.modulated_start,"modulation":args.modulation,"video":args.video and args.scenario!="camera-denied","cameraDenied":args.scenario=="camera-denied","receiveOnlyCallee":args.scenario=="receive-only","incorrectFingerprint":args.scenario=="wrong-fingerprint","expectedRejection":rejection,"role":"A" if index==0 else "B","base":relay["base"],
-                    "certificate":relay["certificate"],"invitation":relay["invitations"][index],"turn":credentials})
+                    "admissionRealm":relay["admission"].realm.encode(),"certificate":relay["certificate"],"invitation":relay["invitations"][index],"turn":credentials})
                 stream=(args.reports/("engine-voice-a.log" if index==0 else "engine-voice-b.log")).open("w")
                 streams.append(stream)
                 processes[serial]=subprocess.Popen([adb,"-s",serial,"shell","am","instrument","-w","-r",
                     "-e","class","app.umbra.DeviceSignalTest","-e","listener","app.umbra.media.VoiceEngineFixtureListener",
                     PACKAGE+".test/androidx.test.runner.AndroidJUnitRunner"],stdout=stream,stderr=subprocess.STDOUT)
             deadline=time.monotonic()+(160 if args.modulation else 90)
+            for serial in (args.a,args.b):
+                request=read(serial,"synthetic-admission-request.json",processes[serial],deadline)
+                write(serial,"synthetic-admission-credential.json",relay["admission"].approve(request["request"]))
             a=read(args.a,"synthetic-voice-public.json",processes[args.a],deadline)
             b=read(args.b,"synthetic-voice-public.json",processes[args.b],deadline)
             write(args.a,"synthetic-voice-peer.json",b); write(args.b,"synthetic-voice-peer.json",a)
