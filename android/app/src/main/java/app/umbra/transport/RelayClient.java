@@ -13,11 +13,16 @@ import javax.net.ssl.HttpsURLConnection;
 public final class RelayClient implements AutoCloseable {
     private final String base;
     private final BooleanSupplier permitted;
+    private final app.umbra.admission.AdmissionService admission;
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
     private volatile HttpsURLConnection active;
     private volatile boolean closed;
+    private final java.util.ArrayDeque<app.umbra.admission.AdmissionChallenge> challenges=new java.util.ArrayDeque<>();
     public RelayClient(String address) throws Exception { this(address, () -> true); }
-    public RelayClient(String address, BooleanSupplier permitted) throws Exception { base = validate(address); this.permitted = permitted; }
+    public RelayClient(String address, BooleanSupplier permitted) throws Exception { this(address,permitted,null); }
+    public RelayClient(String address, BooleanSupplier permitted, app.umbra.admission.AdmissionService admission) throws Exception {
+        base=validate(address); this.permitted=permitted; this.admission=admission;
+    }
     public static String validate(String address) throws Exception {
         URI uri = new URI(address.trim());
         if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || uri.getUserInfo() != null ||
@@ -29,11 +34,105 @@ public final class RelayClient implements AutoCloseable {
     private void allowed() throws IOException {
         if (closed || !permitted.getAsBoolean()) throw new IOException("Conexión cancelada por la política local");
     }
+    private static final class HttpFailure extends IOException {
+        private static final long serialVersionUID=1L;
+        final boolean freshChallenge;
+        HttpFailure(int status,boolean freshChallenge) {
+            super("Servidor rechazó la operación (HTTP "+status+")"); this.freshChallenge=freshChallenge;
+        }
+    }
     @FunctionalInterface private interface Authorization { void check() throws Exception; }
     private JSONObject request(String method, String path, String token, JSONObject body) throws Exception {
         return request(method, path, token, body, () -> {});
     }
     private JSONObject request(String method, String path, String token, JSONObject body, Authorization authorization) throws Exception {
+        return admittedRequest(method,path,token,body,authorization,false);
+    }
+    private JSONObject admittedRequest(String method,String path,String token,JSONObject body,Authorization authorization,boolean renewed) throws Exception {
+        allowed(); authorization.check();
+        if(admission==null) throw new SecurityException("Admission provisioning required");
+        var lease=admission.authorization();
+        var credential=admission.requireAdmission();
+        JSONObject frozen=body==null?null:new JSONObject(body.toString());
+        byte[] raw=frozen==null?new byte[0]:Bytes.utf8(frozen.toString());
+        String operation;
+        try {
+            operation=Bytes.sha256(Bytes.utf8("UMBRA-ADMISSION-HTTP-1\n"+method+"\n"+
+                java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(Bytes.utf8(path))+"\n"+
+                Bytes.sha256(raw)+"\n"+Bytes.sha256(Bytes.utf8(token==null?"":"Bearer "+token))+"\n"));
+        } finally { java.util.Arrays.fill(raw,(byte)0); }
+        Authorization check=() -> { lease.run(); authorization.check(); };
+        app.umbra.admission.AdmissionChallenge challenge;
+        synchronized(challenges) {
+            challenges.removeIf(c -> c.expiresAt()<=Bytes.now() || !c.credentialId().equals(credential.credentialId()));
+            if(challenges.isEmpty()) {
+                JSONObject response=requestRaw("POST","/v1/admission/challenge-batch",null,
+                    new JSONObject().put("wire",credential.wire()),check,java.util.Map.of());
+                Wire.fields(response,"challenges");
+                var batch=response.getJSONArray("challenges");
+                if(batch.length()!=8) throw new SecurityException("Invalid admission challenge batch");
+                java.util.HashSet<String> nonces=new java.util.HashSet<>();
+                for(int i=0;i<batch.length();i++) {
+                    var candidate=app.umbra.admission.AdmissionChallenge.decode(batch.getString(i));
+                    if(!candidate.credentialId().equals(credential.credentialId()) || !nonces.add(candidate.nonce()))
+                        throw new SecurityException("Invalid admission challenge batch");
+                    challenges.add(candidate);
+                }
+            }
+            // Retire before attempting the request, including on failure. Never replay a possession proof.
+            challenge=challenges.removeFirst().forOperation(operation);
+        }
+        String proof=admission.prove(challenge,Bytes.sha256(Bytes.utf8(base)),operation);
+        try {
+            return requestRaw(method,path,token,frozen,check,java.util.Map.of("X-Umbra-Credential",credential.wire(),
+                "X-Umbra-Challenge",challenge.encode(),"X-Umbra-Proof",proof));
+        } catch(HttpFailure failure) {
+            if(!failure.freshChallenge || renewed) throw failure;
+            synchronized(challenges) { challenges.clear(); }
+            // One bounded fresh proof after verifier restart/expiry, with the original lease
+            // and frozen ciphertext. Business/capability failures do not trigger this path.
+            return admittedRequest(method,path,token,frozen,check,true);
+        }
+    }
+    /** Public configuration retrieval never installs or changes the pinned authority. */
+    public String publicRealm() throws Exception {
+        JSONObject response=requestRaw("GET","/v1/admission/realm",null,null,() -> {},java.util.Map.of());
+        Wire.fields(response,"realm");
+        return app.umbra.admission.RealmConfig.decode(Wire.string(response,"realm",256)).encode();
+    }
+    public JSONObject submitAdmissionRequest(String wire) throws Exception {
+        return requestRaw("POST","/v1/admission/requests",null,new JSONObject().put("wire",wire),() -> {},java.util.Map.of());
+    }
+    public JSONObject publishAdmissionCredential(String wire) throws Exception {
+        return requestRaw("POST","/v1/admission/credentials",null,new JSONObject().put("wire",wire),() -> {},java.util.Map.of());
+    }
+    public JSONObject publishAdmissionRenewal(app.umbra.admission.AdmissionService.Renewal renewal) throws Exception {
+        return requestRaw("POST","/v1/admission/renewals",null,new JSONObject().put("credential",renewal.credential().wire())
+            .put("revocation",renewal.revocation().wire()),() -> {},java.util.Map.of());
+    }
+    public JSONObject publishAdmissionRejection(String wire) throws Exception {
+        return requestRaw("POST","/v1/admission/rejections",null,new JSONObject().put("wire",wire),() -> {},java.util.Map.of());
+    }
+    public JSONObject admissionResult() throws Exception {
+        if(admission==null) throw new SecurityException("Admission provisioning required");
+        var requestLease=admission.requestAuthorization();
+        var pending=admission.pendingRequest();
+        JSONObject challengeResponse=requestRaw("POST","/v1/admission/result-challenge",null,
+            new JSONObject().put("wire",pending.wire()),() -> requestLease.run(),java.util.Map.of());
+        Wire.fields(challengeResponse,"challenge");
+        var challenge=app.umbra.admission.AdmissionChallenge.decode(Wire.string(challengeResponse,"challenge",2048));
+        String proof=admission.proveRequestResult(challenge,Bytes.sha256(Bytes.utf8(base)));
+        // A current private-key operation is rechecked before the result request; the response
+        // contains only public signed decisions and cannot unlock or auto-admit the device.
+        return requestRaw("POST","/v1/admission/result",null,new JSONObject().put("wire",pending.wire())
+            .put("challenge",challenge.encode()).put("proof",proof),
+            () -> { requestLease.run(); admission.proveRequestResult(challenge,Bytes.sha256(Bytes.utf8(base))); },java.util.Map.of());
+    }
+    public JSONObject publishAdmissionRevocation(String wire) throws Exception {
+        return requestRaw("POST","/v1/admission/revocations",null,new JSONObject().put("wire",wire),() -> {},java.util.Map.of());
+    }
+    private JSONObject requestRaw(String method,String path,String token,JSONObject body,Authorization authorization,
+                                  java.util.Map<String,String> admissionHeaders) throws Exception {
         allowed(); authorization.check();
         HttpsURLConnection connection = (HttpsURLConnection) new URI(base + path).toURL().openConnection();
         synchronized (this) {
@@ -42,6 +141,7 @@ public final class RelayClient implements AutoCloseable {
         ScheduledFuture<?> deadline = null;
         try {
             deadline = timer.schedule(connection::disconnect, 20, TimeUnit.SECONDS);
+            for(var header:admissionHeaders.entrySet()) connection.setRequestProperty(header.getKey(),header.getValue());
             connection.setRequestMethod(method); connection.setInstanceFollowRedirects(false);
             connection.setConnectTimeout(10_000); connection.setReadTimeout(10_000);
             connection.setUseCaches(false); connection.setRequestProperty("Accept", "application/json");
@@ -59,8 +159,8 @@ public final class RelayClient implements AutoCloseable {
                     try (OutputStream output = connection.getOutputStream()) { allowed(); authorization.check(); output.write(bytes); }
                 } finally { java.util.Arrays.fill(bytes, (byte) 0); }
             }
-            allowed(); int status = connection.getResponseCode();
-            if (status < 200 || status >= 300) throw new IOException("Servidor rechazó la operación (HTTP " + status + ")");
+            allowed(); authorization.check(); int status = connection.getResponseCode();
+            if (status < 200 || status >= 300) throw new HttpFailure(status,status==403 && "fresh-challenge".equals(connection.getHeaderField("X-Umbra-Admission-Retry")));
             if (status == 204) return new JSONObject();
             String type = connection.getContentType(), encoding = connection.getContentEncoding();
             if (type == null || !type.split(";", 2)[0].trim().equalsIgnoreCase("application/json") ||

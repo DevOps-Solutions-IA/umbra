@@ -3,8 +3,8 @@ import secrets
 import time
 from uuid import uuid4
 import pytest
-from fastapi.testclient import TestClient
-from umbra_relay.app import create_app, MAX_MESSAGES, MAX_TTL, MAX_BODY
+from admission_fixture import TestClient, create_app
+from umbra_relay.app import MAX_MESSAGES, MAX_TTL, MAX_BODY
 
 
 @pytest.fixture

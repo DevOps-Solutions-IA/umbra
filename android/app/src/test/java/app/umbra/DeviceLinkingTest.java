@@ -35,7 +35,7 @@ public class DeviceLinkingTest {
     }
     static final class Device {
         final Store db = new Store(); final Engine e = new Engine(db); final DeviceService d = new DeviceService(db);
-        Device(String name) throws Exception { e.initialize(name); }
+        Device(String name) throws Exception { e.initialize(name); AdmissionFixture.enroll(e); }
     }
     static void pair(Device a, Device b) throws Exception {
         a.e.importCard(b.e.createCard()); b.e.importCard(a.e.createCard());

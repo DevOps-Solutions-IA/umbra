@@ -23,6 +23,31 @@ COLUMNS = {
 UNIQUE_KEYS = {"device_revocations": {("box",)}, "pairing_invites": {("id_hash",)}, "invites": {("token_hash",)}, "boxes": {("id",)},
                "acknowledged": {("box", "id")}, "messages": {("box", "id")}}
 
+# Admission v5: only public signed material. No signing key column exists.
+COLUMNS.update({
+    "admission_realm": [("id", "INTEGER", 0, 1), ("config", "TEXT", 1, 0)],
+    "admission_requests": [("id", "TEXT", 0, 1), ("nonce", "TEXT", 1, 0), ("wire", "TEXT", 1, 0),
+                           ("expires", "INTEGER", 1, 0), ("decision", "TEXT", 0, 0)],
+    "admission_credentials": [("id", "TEXT", 0, 1), ("wire", "TEXT", 1, 0), ("expires", "INTEGER", 1, 0)],
+    "admission_revocations": [("id", "TEXT", 0, 1), ("wire", "TEXT", 1, 0), ("sequence", "INTEGER", 1, 0)],
+    "admission_challenges": [("nonce", "TEXT", 0, 1), ("credential", "TEXT", 1, 0), ("wire", "TEXT", 1, 0),
+                             ("expires", "INTEGER", 1, 0), ("deadline", "REAL", 1, 0), ("runtime", "TEXT", 1, 0),
+                             ("used", "INTEGER", 1, 0)],
+})
+UNIQUE_KEYS.update({"admission_realm": set(), "admission_requests": {("id",), ("nonce",)},
+                    "admission_credentials": {("id",)}, "admission_revocations": {("id",)},
+                    "admission_challenges": {("nonce",)}})
+ADMISSION_TABLES = {name for name in COLUMNS if name.startswith("admission_")}
+
+
+def migrate_admission(conn):
+    """Called only after full old schema validation inside the enclosing transaction."""
+    conn.execute("CREATE TABLE admission_realm(id INTEGER PRIMARY KEY, config TEXT NOT NULL)")
+    conn.execute("CREATE TABLE admission_requests(id TEXT PRIMARY KEY, nonce TEXT NOT NULL UNIQUE, wire TEXT NOT NULL, expires INTEGER NOT NULL, decision TEXT)")
+    conn.execute("CREATE TABLE admission_credentials(id TEXT PRIMARY KEY, wire TEXT NOT NULL, expires INTEGER NOT NULL)")
+    conn.execute("CREATE TABLE admission_revocations(id TEXT PRIMARY KEY, wire TEXT NOT NULL, sequence INTEGER NOT NULL)")
+    conn.execute("CREATE TABLE admission_challenges(nonce TEXT PRIMARY KEY, credential TEXT NOT NULL, wire TEXT NOT NULL, expires INTEGER NOT NULL, deadline REAL NOT NULL, runtime TEXT NOT NULL, used INTEGER NOT NULL)")
+
 
 def validate_constraints(conn: sqlite3.Connection, tables: set[str], version: int) -> None:
     """Versions 2/3 need full invariants; legacy messages are checked by migration.

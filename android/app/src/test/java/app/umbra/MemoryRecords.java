@@ -5,6 +5,9 @@ import java.util.*;
 
 /** Test-only memory backend. Never selected by the Android application. */
 final class MemoryRecords implements Records {
+    private final app.umbra.core.AccessGate gate=new app.umbra.core.AccessGate();
+    MemoryRecords() { gate.unlock(); }
+    public Runnable authorization() { var lease=gate.enter(); return () -> gate.check(lease); }
     private Map<String,byte[]> entries = new LinkedHashMap<>();
     private static String key(String bucket, String key) { return bucket + "\u0000" + key; }
     public byte[] get(String bucket, String key) { byte[] v = entries.get(key(bucket,key)); return v == null ? null : v.clone(); }

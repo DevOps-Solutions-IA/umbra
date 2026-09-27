@@ -3,8 +3,7 @@ import base64
 from contextlib import contextmanager
 import sqlite3
 
-from fastapi.testclient import TestClient
-from umbra_relay.app import create_app
+from admission_fixture import TestClient, create_app
 from test_relay import envelope, header, inbox, put, register
 
 
