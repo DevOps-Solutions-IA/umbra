@@ -482,6 +482,33 @@ public final class VoiceEngineFixtureListener extends RunListener {
             if(modulation && processingStep!=10)throw new AssertionError("Incomplete remote modulation sequence");
             if(!evidence || (!expectedRejection && !resumedEvidence)) throw new AssertionError("Missing native audio or mute/unmute evidence");
             voice.close(); pump(relay,engine);
+            if(configuration.optBoolean("admissionRevocationCheck")) {
+                // Media is already closed. Test actual AVD -> HTTPS authorization independently
+                // of local revocation knowledge; never confuse DevicePolicy revocation with this.
+                engine.admission().requireAdmission();
+                write("synthetic-voice-admission-ready.json",new JSONObject().put("ready",true));
+                waitFor("synthetic-voice-admission-change.json",SystemClock.elapsedRealtime()+20_000);
+                JSONObject change=read("synthetic-voice-admission-change.json");
+                boolean denied=false;
+                if(caller) {
+                    engine.admission().requireAdmission(); // Still locally ADMITTED.
+                    try { relay.poll(engine.profile(),0); }
+                    catch(java.io.IOException failure) {
+                        if(!"Servidor rechazó la operación (HTTP 403)".equals(failure.getMessage()))throw failure;
+                        denied=true;
+                    }
+                    if(!denied)throw new AssertionError("Relay accepted revoked admission before local synchronization");
+                    engine.admission().applyRevocation(change.getString("revocation"));
+                    if(engine.admission().getAdmissionState()!=app.umbra.admission.AdmissionService.State.REVOKED)
+                        throw new AssertionError("Revocation not persisted locally");
+                } else {
+                    if(!change.getBoolean("unaffected"))throw new AssertionError("Unexpected admission fixture command");
+                    relay.poll(engine.profile(),0);
+                    engine.admission().requireAdmission();
+                }
+                write("synthetic-voice-admission-result.json",new JSONObject().put("relayDeniedBeforeLocalSync",denied)
+                    .put("state",engine.admission().getAdmissionState().name()));
+            }
             Bundle status=new Bundle(); status.putString("engineVoice",expectedRejection?"PASS invalid TURN rejected before capture":"PASS independent Android Engine/SQLite/Signal/HTTPS + native TURN decoded synthetic peer audio");
             InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
         } finally {

@@ -221,3 +221,29 @@ exige confirmación de creación, valida XML y solo reintenta el error explícit
 Errores desconocidos, lectura y XML malformado fallan. Dos regresiones cubren
 captura vieja, fallo transitorio, límite y rechazo. No se afirma que un nuevo
 verde demuestre la desaparición de toda intermitencia del emulador.
+
+## b0f4614 — capas aprobadas y fallo de topología preservado
+
+Admission36312592409 y Password36312592458 SUCCESS, checkout
+`1ad1340408f607b31b31c2b954d9e45ad767a295`, árbol
+`8d7ed4012b06d87f55c64a45ef0600f26247d5b0` igual al publicado.
+Focused36312592452 nearby SUCCESS: las ocho repeticiones exigidas terminaron;
+no equivale a radio física ni demuestra eliminar toda intermitencia de UI.
+Controles locales completos exit0:204 backend,159 herramientas,190/150 JVM,
+compilación/lint/JNI/APK y28 comprobaciones HTTPS. Guard de historial revisó1102
+blobs alcanzables sin patrones prohibidos (no auditoría exhaustiva).
+
+VozR8 36312592339 intento1 falló antes de Engine/media: sonda UDP del AVD,
+`nc: connect: Network is unreachable`. Se solicita un único intento2 conservando
+el primero; no se cambia timeout ni política de red y un pase no se interpreta
+como corrección demostrada. La misma firma apareció en modulación debug de
+78c3d5f/36312035680 (R8 pasó). Focused78c3d5f tuvo además un EOF HTTPS en una
+repetición debug; ocho restantes y nueve R8 pasaron. Estos rojos no se ocultan.
+
+Se amplía la aceptación del siguiente SHA para unir dos capas ya probadas por
+separado: después de cerrar audio positivo, el AVD A aún localmente ADMITTED
+intenta consultar el relay tras una revocación firmada aplicada solo al servidor;
+debe recibir exactamente HTTP403. Luego aplica la revocación local y persiste
+REVOKED. B consulta correctamente y permanece ADMITTED. Se exige recibo de ambos
+sin sustituir el audio anterior, tanto debug Verify como voz R8. Compilación del
+androidTest y159 herramientas locales exit0; recorrido nuevo aún pendiente CI.
