@@ -12,6 +12,11 @@ import static app.umbra.calls.CallPayload.*;
 
 /** Persistent signaling only. No capture, ICE agent, media socket or ACTIVE state exists here. */
 public final class CallService {
+    /** Internal cancellation classification; identity, format and storage failures are distinct. */
+    private static final class Interrupted extends SecurityException {
+        private static final long serialVersionUID=1L;
+        Interrupted() { super("Call interrupted"); }
+    }
     private final Records db; private final Engine engine; private final LongSupplier elapsed;
     private final String runtime=UUID.randomUUID().toString();
     private final Map<String,Runnable> leases=new ConcurrentHashMap<>();
@@ -104,7 +109,7 @@ public final class CallService {
     }
     private void lease(JSONObject row) throws Exception {
         String id=row.getJSONObject("context").getString("callId"); Runnable lease=leases.get(id);
-        if(!runtime.equals(row.getString("runtime")) || lease==null || cancelled.contains(id)) throw new SecurityException("Call interrupted"); lease.run();
+        if(!runtime.equals(row.getString("runtime")) || lease==null || cancelled.contains(id)) throw new Interrupted(); lease.run();
         long now=elapsed.getAsLong(); JSONObject c=row.getJSONObject("context");
         if(now<row.getLong("began") || now>=row.getLong("deadline") || Bytes.now()>=c.getLong("ends") || Bytes.now()<c.getLong("created")-30) throw new SecurityException("Call expired");
         authorize(c);
@@ -238,7 +243,14 @@ public final class CallService {
         if(events.has(event)) { if(!digest.equals(events.getString(event))) throw new SecurityException("Call event collision"); return; }
         if(events.length()>=128) throw new SecurityException("Call event capacity");
         if(terminal(row)) { events.put(event,digest); save(row); return; }
-        lease(row);
+        try { lease(row); }
+        catch(Interrupted cancelledDuringIngress) {
+            // A native callback can cancel after maintain() but before this lease check.
+            // This control already passed Signal/context/membership validation. Persist
+            // terminal discard and dedup atomically; never apply its negotiation data.
+            // Storage failure still propagates and rolls back Engine's ratchet/receipt.
+            finish(row,"FAILED"); events.put(event,digest); save(row); return;
+        }
         switch(type) {
             case "INVITE" -> { if(!fromCaller) throw new SecurityException("Only caller invites"); requireState(row,"INCOMING","ACCEPTING"); ring(row); }
             case "ACCEPT" -> {

@@ -247,3 +247,29 @@ debe recibir exactamente HTTP403. Luego aplica la revocación local y persiste
 REVOKED. B consulta correctamente y permanece ADMITTED. Se exige recibo de ambos
 sin sustituir el audio anterior, tanto debug Verify como voz R8. Compilación del
 androidTest y159 herramientas locales exit0; recorrido nuevo aún pendiente CI.
+
+## 26b4f0f — cancelación concurrente de control entrante
+
+Admission36313512006, Password36313512013, Modulation36313512043,
+Focused36313512009 yVoiceR8 36313512001 SUCCESS. Checkout
+`c31332f1c6d3966c46e3dc969eb43576247fffb6`, árbol
+`755d6c51af853c9a4e06d89304abfaac44b53674` igual al HEAD.
+Voz R8 produjo15 recibos y la nueva prueba AVD: HTTP403 antes de sincronizar
+revocación local en A, luego REVOKED; B conserva acceso y ADMITTED.
+Focused contiene9/9 video debug,9/9 R8 y8/8 RFCOMM. El verde es de ese SHA.
+
+Verify36313512049 falló en Android, caso credential-expiry. Los otros tres jobs
+pasaron. Stack real: CallService.lease→receive→Engine.receive→pump del extremoB,
+`Call interrupted`. Se reprodujo determinísticamente con libsignal: cancelar
+entre maintain() y la siguiente comprobación de lease del control entrante.
+Dos regresiones nuevas fallaron antes de la corrección (Gradle exit1,2/2 rojas).
+
+La corrección clasifica internamente esa cancelación específica. Tras verificar
+Signal, contexto, membresía, formato y colisiones, persiste estado FAILED y
+registro de descarte/deduplicación, como ya ocurre si la cancelación precede a
+maintain(). No aplica negociación ni restablece el lease. No captura errores de
+identidad/formato/almacenamiento. Fallar al persistir revierte ratchet y receipt;
+el mismo ciphertext reintentado termina descartado y no revive la llamada.
+Ambas suites JVM y androidTest después del cambio exit0:192 connected /150 offline,
+0 fallos/omisiones. La nueva regresión comprueba identidad intacta, descripción
+vacía, deduplicación, rollback y reintento inmutable. Su CI propia sigue pendiente.

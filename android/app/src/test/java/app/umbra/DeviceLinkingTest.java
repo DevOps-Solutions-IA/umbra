@@ -18,8 +18,13 @@ public class DeviceLinkingTest {
     static final class Store implements Records {
         final MemoryRecords memory = new MemoryRecords(); final AccessGate gate = new AccessGate();
         String failBucket; Work<Void> before; int remainingOutboxWrites = -1;
+        java.util.function.BiConsumer<String,String> afterRead;
         Store() { gate.unlock(); }
-        public synchronized byte[] get(String b, String k) { gate.requireUnlocked(); return memory.get(b,k); }
+        public synchronized byte[] get(String b, String k) {
+            gate.requireUnlocked(); byte[] value=memory.get(b,k);
+            if(afterRead!=null) afterRead.accept(b,k);
+            return value;
+        }
         public synchronized void put(String b, String k, byte[] v) {
             gate.requireUnlocked();
             if (b.equals("outbox") && remainingOutboxWrites >= 0 && remainingOutboxWrites-- == 0) throw new IllegalStateException("Synthetic second delivery failure");
