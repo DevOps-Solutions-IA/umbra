@@ -394,6 +394,8 @@ public final class Ui {
         e.setHint(hint); e.setHintTextColor(UmbraColors.TEXT_TERTIARY);
         e.setBackground(outlined(UmbraColors.SURFACE, UmbraColors.OUTLINE, 14));
         e.setPadding(dp(14), dp(12), dp(14), dp(12)); e.setMinHeight(dp(52));
+        // setSingleLine() replaces TextView's line/pixel minimum; retain the View touch target.
+        e.setMinimumHeight(dp(52));
         e.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         e.setImeOptions(EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
         e.setSaveEnabled(false); e.setSaveFromParentEnabled(false);

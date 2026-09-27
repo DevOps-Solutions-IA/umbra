@@ -71,6 +71,7 @@ public final class HomeScreens {
         search.setContentDescription("Buscar conversaciones por alias");
         List<ConversationItem> filtered = new ArrayList<>(shown);
         ListView list = Lists.of(ui, filtered, c -> conversationRow(ui, c, a), false);
+        list.setContentDescription("Conversaciones");
         search.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence t, int st, int c, int af) {}
             public void onTextChanged(CharSequence t, int st, int b, int c) {
