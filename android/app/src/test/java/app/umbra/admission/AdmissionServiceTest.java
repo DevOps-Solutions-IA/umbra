@@ -50,6 +50,15 @@ public class AdmissionServiceTest {
     private static void denied(Records.Work<?> action) throws Exception {
         try { action.run(); fail("Expected admission rejection"); } catch(SecurityException expected) { /* required rejection */ }
     }
+    @Test public void missingRealmWithRevocationCannotReinitialize()throws Exception {
+        Setup s=new Setup(); AdmissionCredential c=s.enroll(s.a);
+        AdmissionRevocation r=s.admin.admission.revokeAdmission(c.wire(),true,"policy");
+        s.a.admission.applyRevocation(r.wire());
+        s.a.db.rows.keySet().removeIf(k->k.startsWith("admission") && !k.startsWith("admission-revoked:"));
+        assertEquals(AdmissionService.State.INVALID,s.a.admission.getAdmissionState());
+        denied(()->{s.a.admission.installRealmConfig(s.realm.encode(),true);return null;});
+        denied(()->s.a.admission.createAdmissionRealm(true));
+    }
     @Test public void realmImportAndContactIdentityDoNotAdmit()throws Exception {
         Setup s=new Setup(); assertEquals(AdmissionService.State.NOT_ADMITTED,s.a.admission.getAdmissionState());
         denied(s.a.admission::requireAdmission); assertTrue(s.a.engine.initialized());

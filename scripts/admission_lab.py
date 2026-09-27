@@ -38,3 +38,13 @@ class AdmissionLab:
             self.store.submit(request.wire)
             self.store.publish(credential)
         return {"credential": credential}
+
+    def revoke(self, wire):
+        from umbra_relay.admission_protocol import Credential, body, encode
+        credential=Credential.parse(wire,self.realm)
+        fields=[self.realm.realm_id,credential.credential_id,credential.device_public_key,self.realm.authority_key_id,
+                "1",str(int(time.time())),"policy"]
+        raw=body("revocation",fields)
+        revoked="umbra:admission:revocation:1:"+encode(raw)+"."+encode(self._authority.sign(raw).signature)
+        self.store.revoke(revoked)
+        return {"revocation":revoked}

@@ -25,6 +25,9 @@ class AdmissionStore:
             if row and row[0] != self.realm.encode():
                 raise AdmissionError()
             if not row:
+                for table in ("admission_requests", "admission_credentials", "admission_revocations", "admission_challenges"):
+                    if conn.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone():
+                        raise AdmissionError()
                 conn.execute("INSERT INTO admission_realm VALUES (1,?)", (self.realm.encode(),))
 
     def submit(self, wire):

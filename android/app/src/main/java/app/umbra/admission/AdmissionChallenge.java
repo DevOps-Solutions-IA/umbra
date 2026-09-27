@@ -36,7 +36,9 @@ public record AdmissionChallenge(String realmId,String credentialId,String crede
     public void validate(AdmissionCredential c,String verifier,String operation,long now) {
         if(!realmId.equals(c.realmId()) || !credentialId.equals(c.credentialId()) ||
                 !credentialHash.equals(Bytes.sha256(Bytes.utf8(c.wire()))) || !verifierHash.equals(verifier) ||
-                !operationHash.equals(operation) || now<issuedAt || now>=expiresAt) throw AdmissionCodec.invalid();
+                !operationHash.equals(operation)) throw AdmissionCodec.invalid();
+        if(now<issuedAt) throw new SecurityException("Admission challenge not yet valid");
+        if(now>=expiresAt) throw new SecurityException("Admission challenge expired");
     }
     static String prove(byte[] seed,AdmissionChallenge challenge) { return AdmissionCodec.sign("proof",seed,challenge.fields()); }
     public void verifyProof(AdmissionCredential credential,String wire) {

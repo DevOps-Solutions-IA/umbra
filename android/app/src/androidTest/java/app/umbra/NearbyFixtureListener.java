@@ -22,6 +22,7 @@ public final class NearbyFixtureListener extends RunListener {
     private Engine engine;
     private BluetoothLink link;
     private volatile Throwable receiveFailure;
+    private volatile boolean helloReceived, authenticated, closedOrRejected, admissionDenied;
     private static void require(boolean value, String reason) { if (!value) throw new AssertionError(reason); }
     private void status(String key, String value) { Bundle b = new Bundle(); b.putString(key, value); InstrumentationRegistry.getInstrumentation().sendStatus(0, b); }
     private interface Condition { boolean ready() throws Exception; }
@@ -42,6 +43,7 @@ public final class NearbyFixtureListener extends RunListener {
             String role = arguments.getString("role", "");
             require(role.equals("listener") || role.equals("dialer"), "Specify listener or dialer role");
             boolean dialer = role.equals("dialer");
+            boolean negative="true".equals(arguments.getString("unadmittedDialer","false"));
             BluetoothAdapter adapter = InstrumentationRegistry.getInstrumentation().getTargetContext().getSystemService(BluetoothManager.class).getAdapter();
             require(adapter != null && adapter.isEnabled(), "Bluetooth adapter must be enabled");
             require(!adapter.isDiscovering(), "Leave Settings discovery before RFCOMM enrollment");
@@ -49,7 +51,8 @@ public final class NearbyFixtureListener extends RunListener {
             require(device.getBondState() == BluetoothDevice.BOND_BONDED, "Pair the synthetic devices in Android first");
             DeviceMemoryRecords records = new DeviceMemoryRecords();
             engine = new Engine(records); engine.initialize("Synthetic " + role);
-            AdmissionLab.provision(engine,approval.getParentFile().toPath(),"synthetic-admission",arguments.getString("admissionRealm",""));
+            if(negative && dialer) engine.admission().installRealmConfig(arguments.getString("admissionRealm",""),true);
+            else AdmissionLab.provision(engine,approval.getParentFile().toPath(),"synthetic-admission",arguments.getString("admissionRealm",""));
             new app.umbra.devices.DeviceService(records).migrate();
             link = new BluetoothLink(InstrumentationRegistry.getInstrumentation().getTargetContext(), new BluetoothLink.Listener() {
                 public String ownId() throws Exception { synchronized (recordsLock) { return engine.id(); } }
@@ -66,7 +69,15 @@ public final class NearbyFixtureListener extends RunListener {
                     }
                 }
                 public byte[] prove(boolean d, String peer, byte[] a, byte[] b) throws Exception {
-                    synchronized (recordsLock) { return engine.proveNearby(d, peer, a, b); }
+                    synchronized (recordsLock) {
+                        try { return engine.proveNearby(d, peer, a, b); }
+                        catch(SecurityException denied) {
+                            if(negative && dialer && engine.admission().getAdmissionState()==app.umbra.admission.AdmissionService.State.NOT_ADMITTED) {
+                                admissionDenied=true; NearbyFixtureListener.this.status("nearbyAdmissionDenied","NOT_ADMITTED");
+                            }
+                            throw denied;
+                        }
+                    }
                 }
                 public void verify(boolean d, String peer, byte[] a, byte[] b, byte[] proof, boolean enrolling) throws Exception {
                     synchronized (recordsLock) { engine.verifyNearby(d, peer, a, b, proof, enrolling); }
@@ -79,7 +90,11 @@ public final class NearbyFixtureListener extends RunListener {
                         catch (Exception failure) { receiveFailure = failure; throw failure; }
                     }
                 }
-                public void stage(BluetoothLink.Stage stage) { NearbyFixtureListener.this.status("nearbyHandshakeStage",stage.name()); }
+                public void stage(BluetoothLink.Stage stage) {
+                    if(stage==BluetoothLink.Stage.HELLO_RECEIVED) helloReceived=true;
+                    if(stage==BluetoothLink.Stage.AUTHENTICATED) authenticated=true;
+                    NearbyFixtureListener.this.status("nearbyHandshakeStage",stage.name());
+                }
                 public void status(String text) {
                     // Test-only, fixed vocabulary. Never echo transport text or payloads.
                     String stage=switch(text) {
@@ -91,11 +106,19 @@ public final class NearbyFixtureListener extends RunListener {
                         case "Clave del dispositivo comprobada · verifica el código del contacto", "Bluetooth: contacto verificado conectado" -> "CONNECTED";
                         default -> "UNCLASSIFIED";
                     };
+                    if(stage.equals("CLOSED_OR_REJECTED")) closedOrRejected=true;
                     NearbyFixtureListener.this.status("nearbyTransportStage",stage);
                 }
             });
             if (dialer) link.connect(device, true); else link.listen(true);
             status("nearbyStage", "listening-or-connecting");
+            if(negative) {
+                await(() -> helloReceived && closedOrRejected,30000,"Unadmitted RFCOMM rejection not observed after hello exchange");
+                require(!authenticated && link.connectedPeer()==null,"Unadmitted peer authenticated");
+                if(dialer) require(admissionDenied,"Missing admission-specific proof rejection");
+                status("nearbyResult","PASS: actual RFCOMM hello exchange rejected before admission authentication");
+                return;
+            }
             await(() -> link.connectedPeer() != null, 30000, "RFCOMM enrollment handshake failed");
             String peer = link.connectedPeer(), code;
             synchronized (recordsLock) { code = Bytes.safetyCode(engine.id(), peer); }

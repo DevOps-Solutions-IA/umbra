@@ -22,6 +22,7 @@ def both_drained(reports: list[str]) -> bool:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--unadmitted-dialer', action='store_true')
     parser.add_argument('--serial-a', required=True)
     parser.add_argument('--serial-b', required=True)
     parser.add_argument('--address-a', required=True)
@@ -46,7 +47,6 @@ def main() -> None:
     paths = [args.log_dir / f'nearby-{role}.log' for role in ('listener', 'dialer')]
     processes, streams, started_devices = [], [], []
     successful = False
-    admission = AdmissionLab()
 
     def adb(serial: str, *command: str, **kwargs):
         return subprocess.run([args.adb, '-s', serial, *command], check=True, timeout=180, **kwargs)
@@ -69,6 +69,7 @@ def main() -> None:
             probe = adb(serial, 'shell', 'getprop', 'ro.kernel.qemu', capture_output=True, text=True)
             if probe.stdout.strip() != '1':
                 raise RuntimeError(f'{serial} is not an Android emulator; refusing radio changes')
+        admission = AdmissionLab()
         for serial in devices:
             for apk in (app, test):
                 if not apk.is_file():
@@ -81,11 +82,13 @@ def main() -> None:
         for serial, role, address, path in zip(devices, ('listener', 'dialer'), (args.address_b, args.address_a), paths):
             stream = path.open('w', encoding='utf-8'); streams.append(stream)
             processes.append(subprocess.Popen([args.adb, '-s', serial, 'shell', 'am', 'instrument', '-w', '-r',
-                '-e', 'admissionRealm', admission.realm.encode(), '-e', 'listener', 'app.umbra.NearbyFixtureListener', '-e', 'class', 'app.umbra.DeviceSignalTest',
+                '-e', 'unadmittedDialer', str(args.unadmitted_dialer).lower(), '-e', 'admissionRealm', admission.realm.encode(), '-e', 'listener', 'app.umbra.NearbyFixtureListener', '-e', 'class', 'app.umbra.DeviceSignalTest',
                 '-e', 'role', role, '-e', 'address', address,
                 package + '.test/androidx.test.runner.AndroidJUnitRunner'], stdout=stream, stderr=subprocess.STDOUT))
             started_devices.append(serial)
             # Admission precedes the RFCOMM listener/connection, using the device's own public request.
+            if args.unadmitted_dialer and role == 'dialer':
+                continue
             admission_deadline=time.monotonic()+25
             while True:
                 if processes[-1].poll() is not None:
@@ -102,28 +105,42 @@ def main() -> None:
                 time.sleep(0.1)
             if role == 'listener':
                 wait_for(lambda content: 'nearbyStage=listening-or-connecting' in content[0], 20, 'Listener startup failed')
-        pattern = r'syntheticSafetyCode=([0-9a-f]{64})'
-        wait_for(lambda content: all(re.search(pattern, text) for text in content), 45, 'RFCOMM handshake failed')
-        codes = [re.search(pattern, text).group(1) for text in texts()]
-        if codes[0] != codes[1]:
-            raise RuntimeError('Synthetic out-of-band safety-code comparison failed')
-        # Shell text contains only a validated package literal and hex digest, never arbitrary caller text.
-        for serial in devices:
-            adb(serial, 'shell', f"run-as {package} sh -c 'printf %s {codes[0]} > files/nearby-synthetic-approval'")
-        wait_for(lambda content: all('nearbyStage=verified' in text for text in content), 15, 'Verification barrier failed')
-        for serial in devices:
-            adb(serial, 'shell', f"run-as {package} sh -c 'printf go > files/nearby-synthetic-approval'")
-        wait_for(both_drained, 60, 'Both RFCOMM endpoints must flush all receipts before shutdown')
-        for serial in devices:
-            adb(serial, 'shell', f"run-as {package} sh -c 'printf finish > files/nearby-synthetic-approval'")
+        if not args.unadmitted_dialer:
+            pattern = r'syntheticSafetyCode=([0-9a-f]{64})'
+            wait_for(lambda content: all(re.search(pattern, text) for text in content), 45, 'RFCOMM handshake failed')
+            codes = [re.search(pattern, text).group(1) for text in texts()]
+            if codes[0] != codes[1]:
+                raise RuntimeError('Synthetic out-of-band safety-code comparison failed')
+            # Shell text contains only a validated package literal and hex digest, never arbitrary caller text.
+            for serial in devices:
+                adb(serial, 'shell', f"run-as {package} sh -c 'printf %s {codes[0]} > files/nearby-synthetic-approval'")
+            wait_for(lambda content: all('nearbyStage=verified' in text for text in content), 15, 'Verification barrier failed')
+            for serial in devices:
+                adb(serial, 'shell', f"run-as {package} sh -c 'printf go > files/nearby-synthetic-approval'")
+            wait_for(both_drained, 60, 'Both RFCOMM endpoints must flush all receipts before shutdown')
+            for serial in devices:
+                adb(serial, 'shell', f"run-as {package} sh -c 'printf finish > files/nearby-synthetic-approval'")
         for process in processes:
             if process.wait(timeout=90) != 0:
                 raise RuntimeError('adb instrumentation failed')
         for text in texts():
+            if args.unadmitted_dialer:
+                if ('nearbyResult=PASS: actual RFCOMM hello exchange rejected before admission authentication' not in text
+                    or 'nearbyHandshakeStage=HELLO_RECEIVED' not in text or 'nearbyHandshakeStage=AUTHENTICATED' in text
+                    or not re.search(r'^OK \(3 tests\)$',text,re.M) or 'INSTRUMENTATION_CODE: -1' not in text
+                    or re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b',text) or 'nearbyResult=FAIL:' in text):
+                    raise RuntimeError('Unadmitted RFCOMM rejection or JNI tests not proven')
+                continue
             if ('nearbyResult=PASS:' not in text or 'authenticated device roster' not in text or 'encrypted location' not in text or not re.search(r'^OK \(3 tests\)$', text, re.MULTILINE)
                 or 'INSTRUMENTATION_CODE: -1' not in text or 'nearbyResult=FAIL:' in text
                 or re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)):
                 raise RuntimeError('Bluetooth fixture or subsequent JNI tests failed; inspect device logs')
+        if args.unadmitted_dialer:
+            if 'nearbyAdmissionDenied=NOT_ADMITTED' not in texts()[1]:
+                raise RuntimeError('Missing unadmitted device proof rejection')
+            successful=True
+            print('PASS: actual emulated RFCOMM hello exchange; unadmitted dialer denied before authentication. No physical radio claim.')
+            return
         successful = True
         print(f'PASS: actual emulated Bluetooth RFCOMM on {devices}; both directions, host code comparison, authenticated device roster, encrypted location, text, attachment, duplicates and receipts. Not physical Bluetooth or Vault persistence.')
     finally:

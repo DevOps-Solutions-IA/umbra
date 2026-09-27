@@ -17,10 +17,12 @@ import sys
 reports = Path(sys.argv[1])
 paired = json.loads((reports / 'pairing/pairing.json').read_text())
 for flavor in ('connected', 'offline'):
-    subprocess.run([sys.executable, 'scripts/run_bluetooth_emulation.py',
-        '--serial-a', paired['serial_a'], '--serial-b', paired['serial_b'],
-        '--address-a', paired['address_a'], '--address-b', paired['address_b'],
-        '--flavor', flavor, '--log-dir', str(reports / ('bluetooth-' + flavor))], check=True, timeout=360)
+    for negative in (False, True):
+        subprocess.run([sys.executable, 'scripts/run_bluetooth_emulation.py',
+            '--serial-a', paired['serial_a'], '--serial-b', paired['serial_b'],
+            '--address-a', paired['address_a'], '--address-b', paired['address_b'],
+            '--flavor', flavor, '--log-dir', str(reports / ('bluetooth-' + flavor + ('-unadmitted' if negative else '')))] +
+            (['--unadmitted-dialer'] if negative else []), check=True, timeout=360)
 PYTHON
 free -m | tee "$UMBRA_DEVICE_REPORTS/memory-after-bluetooth.txt"
 ps -eo pid,rss,args > "$UMBRA_DEVICE_REPORTS/process-memory.txt"

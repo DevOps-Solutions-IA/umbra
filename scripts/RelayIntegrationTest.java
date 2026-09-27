@@ -152,6 +152,7 @@ public final class RelayIntegrationTest {
             rejectsHttp(() -> client.send(bobRoute, wire), 401, "revoked write capability rejected");
         }
         DeviceRelayIntegration.run(base, invitations, exchange);
+        AdmissionRelayIntegration.run(base,invitations,exchange);
         require(!Files.exists(exchange.resolve("server-failed")), "isolated relay remained healthy");
         System.out.println(checks + " real HTTPS relay integration checks passed; no Android Keystore or Bluetooth exercised.");
     }

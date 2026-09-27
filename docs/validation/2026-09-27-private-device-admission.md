@@ -76,3 +76,32 @@ expira la credencial. Rotación de autoridad y recuperación fuera de alcance.
 No garantía frente a OS comprometido, anonimato ni borrado remoto. Sin prueba
 física de radio/Keystore TEE/StrongBox nueva. UI pendiente de conectar las APIs;
 no se conserva un acceso legacy sin admisión para mantener pantallas funcionando.
+
+## Primera CI publicada: d63b73b, no aceptación final
+
+PR #13 abierta en borrador hacia #11. HEAD `d63b73b940807e0cfa117ff3a771daa640ef9bfc`,
+checkout de integración `11c5a0ecccc5f37d169a4bef997de16d81fc1d34`.
+Admission laboratory **36309626249 SUCCESS**, debug/R8 × connected/offline:
+los tres casos se ejecutaron en cada variante. Android reportó KeyInfo nivel0
+(software) en la prueba aislada; no hardware-backed. Artefactos 10929170524 y
+10928536039 descargados y conservados. Password laboratory **36309626214 SUCCESS**.
+
+Verify **36309626184 FAILURE**: prueba de rechazo de dispositivo físico cargaba
+PyNaCl antes de comprobar que era emulador. Corregido el orden de inicialización;
+153 herramientas pasan también en entorno sin dependencias del relay. No se
+instalan dependencias en la guarda para ocultar esa regresión.
+Voz R8 **36309626231 FAILURE** y modulación **36309626187 FAILURE**: validación
+de challenge de admisión durante bombeo de controles; stack debug localiza
+AdmissionChallenge.validate. Causa temporal exacta aún no demostrada, diagnóstico
+con categorías fijas añadido; no se amplían TTL ni se acepta un desafío inválido.
+Video/focused consultados aún en ejecución al escribir esta entrada; revisar
+estado terminado antes de informar resultado final.
+
+La nueva aceptación JVM comprueba A2 vinculado sin admisión, aprobación posterior
+independiente y entrega explícita de la credencial a A1. Se añade caso RFCOMM
+negativo real al arnés, pendiente de la siguiente CI. Se rechaza reinicializar
+un realm cuyo pin falta pero conserva registros, con regresiones Java/SQLite.
+
+Benchmark local sintético (`python scripts/benchmark_admission.py`, exit0,
+100 muestras): p95 verificación credential 0,147 ms, proof 0,100 ms, autorización
+SQLite 4,168 ms. No medición Android ni prueba de carga o capacidad productiva.

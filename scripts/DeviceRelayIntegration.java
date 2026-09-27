@@ -57,17 +57,29 @@ final class DeviceRelayIntegration {
     }
     static void run(String base,String[] invitations,java.nio.file.Path exchange) throws Exception {
         Device a1=new Device("Synthetic A1"),a2=new Device("Synthetic A2"),b1=new Device("Synthetic B1");
+        a2.e.admission().installRealmConfig(java.nio.file.Files.readString(exchange.resolve("admission-realm")),true);
         int number=0;
-        for(Device device:List.of(a1,a2,b1)) AdmissionLab.provision(device.e,exchange,"admission-device-"+(number++),
+        for(Device device:List.of(a1,b1)) AdmissionLab.provision(device.e,exchange,"admission-device-"+(number++),
             java.nio.file.Files.readString(exchange.resolve("admission-realm")));
         try(RelayClient relay=new RelayClient(base, () -> true, a1.e.admission())) {
-            int i=2; for(Device d:List.of(a1,a2,b1)) relay.register(d.e.profile(),invitations[i++]);
+            relay.register(a1.e.profile(),invitations[2]); relay.register(b1.e.profile(),invitations[4]);
             pair(a1,b1); a1.e.sendText(b1.e.id(),"synthetic before linking",600); upload(relay,a1); download(relay,b1); upload(relay,b1); download(relay,a1);
             check(a1.e.outbox().isEmpty(),"A1/B1 verified messaging and ACK before linking");
             a1.d.migrate(); b1.d.migrate();
             String challenge=a1.d.challenge(a2.d.publicKey(),600);
             String response=a2.d.respond(a2.d.reviewChallenge(challenge),true);
             String approval=a1.d.approve(a1.d.reviewResponse(response),true); a2.d.complete(approval);
+            check(a2.e.admission().getAdmissionState()==app.umbra.admission.AdmissionService.State.NOT_ADMITTED,"linked A2 does not inherit realm admission");
+            try(RelayClient unadmitted=new RelayClient(base,()->true,a2.e.admission())) {
+                try { unadmitted.register(a2.e.profile(),invitations[3]); throw new AssertionError("Unadmitted A2 registered"); }
+                catch(SecurityException expected) { check(true,"linked A2 private relay API fails before possession"); }
+            }
+            AdmissionLab.provision(a2.e,exchange,"admission-device-2",java.nio.file.Files.readString(exchange.resolve("admission-realm")));
+            try(RelayClient admitted=new RelayClient(base,()->true,a2.e.admission())) { admitted.register(a2.e.profile(),invitations[3]); }
+            check(a2.e.admission().getAdmissionState()==app.umbra.admission.AdmissionService.State.ADMITTED,"A2 independently approved and proved possession over HTTPS");
+            try { a1.e.admission().requirePeer(a2.e.id()); throw new AssertionError("Admission appeared without delivery"); }
+            catch(SecurityException expected) { check(true,"A1 needs the separately delivered authority credential for linked A2"); }
+            a1.e.admission().installPeerCredential(a2.e.admission().requireAdmission().wire(),a2.e.id());
             JSONObject grant=a2.d.relayDelegation(); relay.delegateDeviceRevocation(a2.e.profile(),grant.getString("token"));
             a2.e.sendDeviceDelegation(); upload(relay,a2); download(relay,a1); upload(relay,a1); download(relay,a2);
             check(a1.e.messages(a2.e.id()).isEmpty(),"deletion capability travels only in Signal ciphertext, not visible chat");

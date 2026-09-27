@@ -165,3 +165,12 @@ def test_atomic_renewal_keeps_other_devices_independent(store, objects):
     with pytest.raises(AdmissionError):
         store.challenge(old.wire, digest(b"operation"))
     store.challenge(next_credential, digest(b"operation"))
+
+
+def test_missing_pin_with_existing_records_cannot_reinitialize(store, objects):
+    with store.database.connect(write=True) as db:
+        db.execute("DELETE FROM admission_realm")
+    with pytest.raises(AdmissionError):
+        AdmissionStore(store.database, objects[2].encode(), "https://relay.test")
+    with store.database.connect() as db:
+        assert db.execute("SELECT count(*) FROM admission_realm").fetchone()[0] == 0

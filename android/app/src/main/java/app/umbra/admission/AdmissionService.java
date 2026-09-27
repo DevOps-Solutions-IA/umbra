@@ -23,12 +23,18 @@ public final class AdmissionService {
         byte[] seed=db.get("admission-secret",key);
         if(seed==null || seed.length!=32) throw AdmissionCodec.invalid(); return seed;
     }
+    private boolean hasAdmissionRecords() {
+        for(String bucket:new String[]{"admission","admission-secret","admission-peers","admission-revoked",
+                "admission-decisions","admission-nonces","admission-challenges"})
+            if(!db.keys(bucket).isEmpty()) return true;
+        return false;
+    }
     private Runnable lease() { Runnable check=db.authorization(); check.run(); return check; }
     public RealmConfig getRealmInfo() throws Exception { return db.transaction(this::realm); }
     public State getAdmissionState() throws Exception {
         return db.transaction(() -> {
             if(read("realm")==null) {
-                if(!db.keys("admission").isEmpty() || !db.keys("admission-secret").isEmpty()) return State.INVALID;
+                if(hasAdmissionRecords()) return State.INVALID;
                 return State.UNCONFIGURED;
             }
             try {
@@ -55,7 +61,7 @@ public final class AdmissionService {
             String old=read("realm");
             if(old!=null && !old.equals(proposed.encode())) throw new SecurityException("Admission authority mismatch");
             if(old==null) {
-                if(!db.keys("admission").isEmpty() || !db.keys("admission-secret").isEmpty()) throw AdmissionCodec.invalid();
+                if(hasAdmissionRecords()) throw AdmissionCodec.invalid();
                 byte[] key=Bytes.random(32);
                 try { db.put("admission-secret","device",key); write("realm",proposed.encode()); }
                 finally { Arrays.fill(key,(byte)0); }
@@ -66,7 +72,7 @@ public final class AdmissionService {
     public RealmConfig createAdmissionRealm(boolean confirmed) throws Exception {
         Runnable check=lease();
         return db.transaction(() -> {
-            check.run(); if(!confirmed || !db.keys("admission").isEmpty() || !db.keys("admission-secret").isEmpty()) throw AdmissionCodec.invalid();
+            check.run(); if(!confirmed || hasAdmissionRecords()) throw AdmissionCodec.invalid();
             signalPublic(); byte[] authority=Bytes.random(32),device=Bytes.random(32);
             try {
                 RealmConfig r=RealmConfig.create(authority);

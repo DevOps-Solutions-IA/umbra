@@ -83,7 +83,7 @@ def main() -> int:
     java_sources += [sources / "protocol/Wire.java", sources / "data/Records.java",
                      sources / "transport/RelayClient.java",
                      ROOT / "android/app/src/test/java/app/umbra/MemoryRecords.java",
-                     ROOT / "scripts/RelayIntegrationTest.java", ROOT / "scripts/DeviceRelayIntegration.java"]
+                     ROOT / "scripts/RelayIntegrationTest.java", ROOT / "scripts/DeviceRelayIntegration.java", ROOT / "scripts/AdmissionRelayIntegration.java"]
     with tempfile.TemporaryDirectory(prefix="umbra-https-integration-") as directory:
         temporary = Path(directory)
         classes = temporary / "classes"
@@ -105,7 +105,7 @@ def main() -> int:
         exchange = temporary / "exchange"
         exchange.mkdir(mode=0o700)
         invitations = exchange / "invitations"
-        invitations.write_text("".join(database.issue_invite() + "\n" for _ in range(5)))
+        invitations.write_text("".join(database.issue_invite() + "\n" for _ in range(8)))
         invitations.chmod(0o600)
         admission = AdmissionLab()
         (exchange / "admission-realm").write_text(admission.realm.encode())
@@ -176,6 +176,13 @@ def main() -> int:
                         temporary_result.write_text(json.dumps(approval))
                         temporary_result.replace(destination)
                         request_path.unlink(missing_ok=True)
+                    revocation_request=exchange / "membership-revoke.json"
+                    if revocation_request.exists():
+                        result=admission.revoke(json.loads(revocation_request.read_text())["credential"])
+                        temporary_result=exchange / "membership-revoked.tmp"
+                        temporary_result.write_text(json.dumps(result))
+                        temporary_result.replace(exchange / "membership-revoked.json")
+                        revocation_request.unlink()
                     if not restarted and (exchange / "restart-request").exists():
                         stop(server)
                         # Uvicorn re-raises a captured SIGTERM after graceful shutdown.
