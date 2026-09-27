@@ -166,10 +166,17 @@ public final class ConnectivityService {
         private final java.util.concurrent.atomic.AtomicBoolean bound=new java.util.concurrent.atomic.AtomicBoolean();
         private Lease(Frame granted,boolean nearby) { this.granted=granted; this.nearby=nearby; }
         public void checkNearby() { if(!nearby) throw denied(); check(); }
+        /** Full membership validation at operation boundaries, in addition to epoch checks. */
         public void check() {
+            checkEpoch();
+            if(!nearby) try { granted.admission.run(); }
+            catch(RuntimeException invalid) { stop(granted,State.OFFLINE_ERROR); throw invalid; }
+            checkEpoch();
+        }
+        /** Cheap cancellation check for I/O chunks; does not replace operation admission validation. */
+        public void checkEpoch() {
             if(closed) throw denied();
             try { granted.vault.run(); } catch(RuntimeException invalid) {
-                // An old epoch must never lock a newly authenticated session.
                 invalidateVault(granted.vault);
                 throw invalid;
             }
@@ -177,8 +184,6 @@ public final class ConnectivityService {
             else {
                 Frame now=online.get();
                 if(now.state!=State.CONNECTED || now.generation!=granted.generation) throw denied();
-                try { granted.admission.run(); } catch(RuntimeException invalid) { stop(granted,State.OFFLINE_ERROR); throw invalid; }
-                now=online.get(); if(now.state!=State.CONNECTED || now.generation!=granted.generation) throw denied();
             }
             if(closed) throw denied();
         }

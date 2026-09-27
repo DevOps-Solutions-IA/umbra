@@ -10,6 +10,31 @@ import static app.umbra.connectivity.ConnectivityService.State.*;
 /** Real admission signatures and access epochs; no assertion of physical network observation. */
 public class ConnectivityServiceTest {
     private static final String ORIGIN="https://no-dns-before-consent.example.invalid";
+    @Test public void socketEpochChecksDoNotRepeatCryptographicStorageWorkButBoundariesValidate() throws Exception {
+        var device=new DeviceLinkingTest.Device("Synthetic bounded checks");var service=device.e.connectivity();
+        service.vaultUnlocked();service.connect(ORIGIN,true);var lease=service.networkLease(ORIGIN);
+        var reads=new AtomicInteger();device.db.afterRead=(bucket,key)->reads.incrementAndGet();
+        try {
+            for(int index=0;index<100;index++)lease.checkEpoch();
+            assertEquals(0,reads.get());
+            lease.check();assertTrue(reads.get()>0);
+            System.out.println("Synthetic membership reads: full="+reads.get()+", 100 epoch checks=0");
+            // Unexpected storage failure is still rejected at the next operation boundary.
+            device.db.afterRead=(bucket,key)->{throw new IllegalStateException("Synthetic unreadable membership");};
+            assertThrows(SecurityException.class,lease::check);
+            assertThrows(SecurityException.class,lease::checkEpoch);
+        } finally {device.db.afterRead=null;service.disconnect();}
+    }
+
+    @Test public void relayStillChecksMembershipBeforeAnyDnsOrSocket() throws Exception {
+        var device=new DeviceLinkingTest.Device("Synthetic transport boundary");var service=device.e.connectivity();
+        service.vaultUnlocked();service.connect(ORIGIN,true);
+        try(var relay=new app.umbra.transport.RelayClient(ORIGIN,()->true,device.e.admission())) {
+            device.db.afterRead=(bucket,key)->{throw new IllegalStateException("Synthetic corrupt membership");};
+            assertThrows(SecurityException.class,relay::publicRealm);
+        } finally {device.db.afterRead=null;service.disconnect();}
+    }
+
     @Test public void admissionAndUnlockNeverConnectOrEnableNearby() throws Exception {
         var device=new DeviceLinkingTest.Device("Synthetic startup"); var service=device.e.connectivity();
         assertEquals(LOCKED_PRIVATE,service.getConnectivityState());

@@ -214,3 +214,36 @@ la clase nueva ausente del source jar de TraceReferences. Se añadió únicament
 `DecodedAudioWindow*.class` a ese conjunto de fixtures y el build R8 posterior
 pasó (21 s, exit 0), conservando minificación y optimización. La aceptación
 AVD de esta medición todavía requiere la ejecución del commit publicado.
+
+## Coste de autorización del gate
+
+`854cfaf` Focused R8 y Nearby pasaron, pero Focused debug agotó plazos de
+negociación en varias repeticiones. La inspección identificó trabajo nuevo
+redundante: cada comprobación de fragmento de RelayClient ejecutaba de nuevo
+`requireAdmission()` (lectura, binding y firma), además de la autorización
+completa ya existente en la operación. CallService repetía también esa
+validación antes de `Engine.authorizeTransportSelf()`, que la realiza de nuevo.
+La regresión mide seis lecturas de registros por comprobación completa.
+
+Se separan `Lease.checkEpoch()` (bóveda, generación y cancelación; cero lecturas
+en 100 comprobaciones) y `Lease.check()` (validación completa). Relay conserva
+validación completa antes de crear URLConnection y antes de aceptar respuestas,
+incluido HTTP 204; conserva además sus pruebas de admisión/posesión existentes
+antes de escribir. Cada fragmento sigue comprobando cancelación y generación.
+CallService conserva la validación completa de Engine y usa el gate de época
+sin duplicarla. Revocación conocida/lock desconectan e invalidan la época.
+No se cachean credenciales ni se amplía su TTL.
+
+Regresiones: rechazo antes de DNS/socket si membresía es ilegible; la época
+invalidada sigue rechazada; revisión de invitación que espera almacenamiento
+no puede tomar prestada una conexión nueva. Los plazos multimedia y del arnés
+no se amplían. La correlación con los retrasos debug requiere repetición AVD;
+los errores históricos no se reclasifican como aprobados.
+
+La repetición acotada de modulación debug sobre `854cfaf` (run 36356592527,
+intento 2) también falló, esta vez durante video después de completar voz.
+No se considera resuelta por reintentar. Se conserva antes de la corrección
+de coste. La implementación corregida pasó 207 JVM connected/150 offline,
+167 herramientas, build debug/release/lint/JNI/APK policies y los 28 controles
+de integración HTTPS real (todos exit 0). La nueva carrera de invitación
+aprobó el rechazo de reconexión mientras espera una transacción.

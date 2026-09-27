@@ -37,6 +37,14 @@ public class ConnectedCallTest {
             }
         };
     }
+    @Test public void inviteReviewCannotBorrowReconnectedEpochAfterWaitingForStorage() throws Exception {
+        Pair p=new Pair();String peer=p.be.id();
+        p.a.db.before=()->{p.ae.connectivity().disconnect();p.ae.connectivity().connect("https://relay.example.invalid",true);return null;};
+        assertThrows(SecurityException.class,()->p.ae.calls().reviewInvite(peer,RELAY_ONLY));
+        assertTrue(p.ae.calls().sessions().isEmpty());
+        assertTrue(p.ae.outbox().isEmpty());
+    }
+
     @Test public void cancellationBetweenMaintenanceAndAuthenticatedIngressPersistsTerminalDiscard() throws Exception {
         Pair p=new Pair(); String id=p.selected();
         byte[] identity=p.b.db.get("meta","identity");

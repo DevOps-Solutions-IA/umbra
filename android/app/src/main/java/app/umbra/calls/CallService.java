@@ -50,15 +50,15 @@ public final class CallService {
         public NetworkPolicy networkPolicy() { return policy; }
     }
     public Consent reviewInvite(String root,NetworkPolicy policy) throws Exception {
-        enabled(); engine.connectivity().onlineAuthorization().run(); return db.transaction(() -> {
-            maintain(); engine.authorizeTransportSelf();
+        enabled(); Runnable connection=engine.connectivity().onlineEpochAuthorization(); connection.run(); return db.transaction(() -> {
+            connection.run(); maintain(); engine.authorizeTransportSelf();
             List<String> peers=new ArrayList<>(new DeviceService(db).recipients(root)); Collections.sort(peers);
             for(String peer:peers) engine.authorizeTransport(peer);
             long now=Bytes.now(); JSONObject c=new JSONObject().put("callId",UUID.randomUUID().toString()).put("caller",ownRoot())
                 .put("callerDevice",engine.id()).put("callee",root).put("targets",new JSONArray(peers))
                 .put("callerVersion",version(ownRoot())).put("calleeVersion",version(root))
                 .put("created",now).put("inviteUntil",now+RING_SECONDS).put("ends",now+SESSION_SECONDS);
-            return new Consent(c,"",policy);
+            Consent consent=new Consent(c,"",policy); connection.run(); return consent;
         });
     }
     public Consent reviewAccept(String id,NetworkPolicy policy) throws Exception {
@@ -104,7 +104,7 @@ public final class CallService {
     private void capacity() { if(db.keys("calls").size()>=128) throw new IllegalStateException("Call retention capacity reached"); }
     private boolean hasLive() throws Exception { for(String id:db.keys("calls")) if(!terminal(get(id))) return true; return false; }
     private void authorize(JSONObject c) throws Exception {
-        enabled(); engine.connectivity().onlineAuthorization().run(); engine.authorizeTransportSelf(); String me=engine.id(),root=ownRoot();
+        enabled(); engine.connectivity().onlineEpochAuthorization().run(); engine.authorizeTransportSelf(); String me=engine.id(),root=ownRoot();
         boolean caller=me.equals(c.getString("callerDevice"));
         if(!root.equals(c.getString(caller?"caller":"callee")) || (!caller&&!targets(c).contains(me))) throw new SecurityException("Wrong local call participant");
         if(version(c.getString("caller"))!=c.getLong("callerVersion") || version(c.getString("callee"))!=c.getLong("calleeVersion")) throw new SecurityException("Call membership changed");

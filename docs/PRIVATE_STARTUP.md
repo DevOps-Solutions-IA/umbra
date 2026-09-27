@@ -84,3 +84,9 @@ El perfil R8 de laboratorio mantiene optimización/ofuscación con firma sintét
 no es el APK exacto de producción. Contadores IPv6 sin tráfico no prueban una ruta
 IPv6 positiva. Los resultados ejecutados y los pendientes se registran en el recibo,
 no se deducen de la presencia del código o de CI de entregas anteriores.
+
+Las comprobaciones de cancelación por fragmento usan la época de conexión y
+bóveda; no repiten firmas criptográficas por cada lectura de socket. La admisión
+completa se verifica en los límites de cada operación y al aceptar la respuesta.
+Esto no es una caché de autorización: revocaciones conocidas invalidan la época
+y las operaciones nuevas vuelven a validar membresía y caducidad.

@@ -36,7 +36,7 @@ public final class RelayClient implements AutoCloseable {
     }
     private void allowed() throws IOException {
         if(network==null) throw new IOException("Explicit connectivity consent required");
-        network.check();
+        network.checkEpoch();
         if (closed.get() || !permitted.getAsBoolean()) throw new IOException("Conexión cancelada por la política local");
     }
     private static final class HttpFailure extends IOException {
@@ -157,7 +157,7 @@ public final class RelayClient implements AutoCloseable {
     }
     private JSONObject requestRaw(String method,String path,String token,JSONObject body,Authorization authorization,
                                   java.util.Map<String,String> admissionHeaders) throws Exception {
-        allowed(); authorization.check();
+        allowed(); network.check(); authorization.check();
         HttpsURLConnection connection = (HttpsURLConnection) new URI(base + path).toURL().openConnection();
         if(!active.compareAndSet(null,connection)) { connection.disconnect(); throw new IOException("Relay client already in use"); }
         ScheduledFuture<?> deadline = null;
@@ -184,7 +184,7 @@ public final class RelayClient implements AutoCloseable {
             }
             allowed(); authorization.check(); int status = connection.getResponseCode();
             if (status < 200 || status >= 300) throw new HttpFailure(status,status==403 && "fresh-challenge".equals(connection.getHeaderField("X-Umbra-Admission-Retry")));
-            if (status == 204) return new JSONObject();
+            if (status == 204) { network.check(); authorization.check(); return new JSONObject(); }
             String type = connection.getContentType(), encoding = connection.getContentEncoding();
             if (type == null || !type.split(";", 2)[0].trim().equalsIgnoreCase("application/json") ||
                 (encoding != null && !encoding.equalsIgnoreCase("identity"))) throw new IOException("Formato de respuesta no permitido");
@@ -195,7 +195,7 @@ public final class RelayClient implements AutoCloseable {
                     allowed(); if (output.size() + length > 5_100_000) throw new IOException("Respuesta demasiado grande");
                     output.write(chunk, 0, length);
                 }
-                allowed(); authorization.check(); return Wire.parse(output.toByteArray(), 5_100_000);
+                allowed(); network.check(); authorization.check(); return Wire.parse(output.toByteArray(), 5_100_000);
             }
         } catch(IOException failure) {
             if(!(failure instanceof HttpFailure)) network.failed();
