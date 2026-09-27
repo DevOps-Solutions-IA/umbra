@@ -73,6 +73,7 @@ public class CryptoAuditRegressionTest {
 
     private static final class FailingRecords implements Records {
         final MemoryRecords memory = new MemoryRecords();
+        public Runnable authorization() { return memory.authorization(); }
         String failingBucket;
         public byte[] get(String b, String k) { return memory.get(b, k); }
         public void put(String b, String k, byte[] v) {
@@ -85,6 +86,7 @@ public class CryptoAuditRegressionTest {
     }
     private static void connect(Engine alice, Engine bob) throws Exception {
         alice.initialize("Synthetic Alice"); bob.initialize("Synthetic Bob");
+        AdmissionFixture.enroll(alice); AdmissionFixture.enroll(bob);
         alice.importCard(bob.createCard()); bob.importCard(alice.createCard());
         String code = Bytes.safetyCode(alice.id(), bob.id());
         alice.verify(bob.id(), code); bob.verify(alice.id(), code);

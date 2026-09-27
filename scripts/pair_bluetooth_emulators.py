@@ -80,13 +80,27 @@ class Pairing:
             raise TimeoutError('Pairing deadline expired')
         result = subprocess.run([self.adb, '-s', serial, *args], check=True,
                                 capture_output=True, text=True, timeout=min(20, remaining))
-        return result.stdout
+        return result.stdout + (result.stderr if args[:3] == ('shell', 'uiautomator', 'dump') else '')
 
     def ui(self, serial: str) -> list[ET.Element]:
-        self.command(serial, 'shell', 'uiautomator', 'dump', '/sdcard/umbra-pairing.xml')
-        xml = self.command(serial, 'shell', 'cat', '/sdcard/umbra-pairing.xml')
-        (self.logs / f'{serial}-last-ui.xml').write_text(xml, encoding='utf-8')
-        return nodes(xml)
+        path = '/sdcard/umbra-pairing.xml'
+        # uiautomator can exit zero without producing XML while Settings is changing.
+        # Never consume a stale snapshot or treat missing observation as confirmation.
+        # Retry only its explicit idle-state failure, within the original global deadline.
+        for attempt in range(3):
+            self.command(serial, 'shell', 'rm', '-f', path)
+            report = self.command(serial, 'shell', 'uiautomator', 'dump', path)
+            with (self.logs / f'{serial}-ui-acquisition.txt').open('a', encoding='utf-8') as log:
+                log.write(f'attempt={attempt+1}\n{report}\n')
+            if 'UI hierchary dumped to: ' + path in report:
+                xml = self.command(serial, 'shell', 'cat', path)
+                tree = nodes(xml)
+                (self.logs / f'{serial}-last-ui.xml').write_text(xml, encoding='utf-8')
+                return tree
+            if 'ERROR: could not get idle state.' not in report:
+                raise RuntimeError('UI dump did not confirm a fresh snapshot; inspect acquisition report')
+            time.sleep(0.25)
+        raise RuntimeError('UI remained non-idle during bounded snapshot acquisition')
 
     def tap(self, serial: str, tree: list[ET.Element], text: str) -> bool:
         matches = [n for n in tree if n.get('text') == text and n.get('enabled') == 'true']

@@ -5,8 +5,8 @@ import sqlite3
 import time
 
 import pytest
-from fastapi.testclient import TestClient
-from umbra_relay.app import Database, create_app
+from admission_fixture import TestClient, create_app
+from umbra_relay.app import Database
 from test_relay import register, header, envelope, put, inbox
 
 
@@ -156,13 +156,17 @@ def test_v2_migration_preserves_mailboxes_and_messages(context):
     with app.state.database.connect(write=True) as db:
         db.execute('DROP TABLE pairing_invites')
         db.execute('DROP TABLE device_revocations')
+        # Construct the actual legacy schema, without later admission tables.
+        from umbra_relay.schema import ADMISSION_TABLES
+        for table in sorted(ADMISSION_TABLES):
+            db.execute(f'DROP TABLE {table}')  # Fixed schema constants.
         db.execute('PRAGMA user_version=2')
     migrated = create_app(app.state.database.path)
     with TestClient(migrated) as restarted:
         assert inbox(restarted, box).json()['messages'] == [message]
         assert create(restarted, box, invitation()).status_code == 201
     with migrated.state.database.connect() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 4
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 5
 
 
 def test_missing_v3_pairing_table_rejected(context):
@@ -178,6 +182,10 @@ def test_v2_migration_failure_rolls_back_pairing_table(context):
     with app.state.database.connect(write=True) as db:
         db.execute('DROP TABLE pairing_invites')
         db.execute('DROP TABLE device_revocations')
+        # Construct the actual legacy schema, without later admission tables.
+        from umbra_relay.schema import ADMISSION_TABLES
+        for table in sorted(ADMISSION_TABLES):
+            db.execute(f'DROP TABLE {table}')  # Fixed schema constants.
         db.execute('PRAGMA user_version=2')
         db.execute('CREATE VIEW pairing_expiry AS SELECT 1')
     with pytest.raises(sqlite3.OperationalError):

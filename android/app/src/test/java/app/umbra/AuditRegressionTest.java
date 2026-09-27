@@ -17,7 +17,7 @@ public class AuditRegressionTest {
     @Before public void setup() throws Exception {
         aliceRecords = new MemoryRecords(); bobRecords = new MemoryRecords();
         alice = new Engine(aliceRecords); bob = new Engine(bobRecords);
-        alice.initialize("Alice audit"); bob.initialize("Bob audit");
+        alice.initialize("Alice audit"); AdmissionFixture.enroll(alice); bob.initialize("Bob audit"); AdmissionFixture.enroll(bob);
         alice.importCard(bob.createCard()); bob.importCard(alice.createCard());
         String code = Bytes.safetyCode(alice.id(), bob.id());
         alice.verify(bob.id(), code); bob.verify(alice.id(), code);

@@ -164,7 +164,7 @@ public class DeviceVaultPasswordTest {
         vault.transaction(() -> { vault.remove("meta", "identity"); vault.remove("session", "ratchet"); return null; });
         var alice = new app.umbra.crypto.Engine(vault);
         var bob = new app.umbra.crypto.Engine(new DeviceMemoryRecords());
-        alice.initialize("Synthetic vault Alice"); bob.initialize("Synthetic vault Bob");
+        alice.initialize("Synthetic vault Alice"); AdmissionFixture.enroll(alice); bob.initialize("Synthetic vault Bob"); AdmissionFixture.enroll(bob);
         alice.importCard(bob.createCard()); bob.importCard(alice.createCard());
         String code = app.umbra.core.Bytes.safetyCode(alice.id(), bob.id());
         alice.verify(bob.id(), code); bob.verify(alice.id(), code);

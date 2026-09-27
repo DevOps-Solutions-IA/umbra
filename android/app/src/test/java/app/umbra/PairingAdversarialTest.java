@@ -15,6 +15,7 @@ public class PairingAdversarialTest {
     private static final class SerializedRecords implements Records {
         private final MemoryRecords delegate = new MemoryRecords();
         private final Set<String> buckets = new HashSet<>();
+        public Runnable authorization() { return delegate.authorization(); }
         String failBucket;
         Work<Void> beforeNextTransaction;
         public synchronized byte[] get(String bucket, String key) { return delegate.get(bucket, key); }
@@ -40,7 +41,7 @@ public class PairingAdversarialTest {
         final SerializedRecords records = new SerializedRecords();
         final Engine engine = new Engine(records);
         final PairingService pairing = new PairingService(records);
-        Person(String alias) throws Exception { engine.initialize(alias); }
+        Person(String alias) throws Exception { engine.initialize(alias); AdmissionFixture.enroll(engine); }
     }
     private interface Operation { void run() throws Exception; }
     private static void reject(Operation operation) throws Exception {

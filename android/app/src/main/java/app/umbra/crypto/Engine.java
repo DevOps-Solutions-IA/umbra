@@ -22,14 +22,17 @@ public final class Engine {
     public static final int MAX_OUTBOX = 256, MAX_MESSAGES = 4096, MAX_SEEN = 8192;
     private final Records db;
     private final SignalStore signal;
+    private final app.umbra.admission.AdmissionService admission;
     private final app.umbra.location.LocationService locations;
     private final app.umbra.calls.CallService calls;
     public Engine(Records records) { this(records, () -> System.nanoTime()/1_000_000L); }
     public Engine(Records records, java.util.function.LongSupplier elapsed) {
         db = records; signal = new SignalStore(records);
+        admission = new app.umbra.admission.AdmissionService(records);
         locations = new app.umbra.location.LocationService(records, this, elapsed);
         calls = new app.umbra.calls.CallService(records, this, elapsed);
     }
+    public app.umbra.admission.AdmissionService admission() { return admission; }
     public app.umbra.calls.CallService calls() { return calls; }
     public app.umbra.location.LocationService locations() { return locations; }
     public JSONObject get(String bucket, String key) throws Exception {
@@ -42,7 +45,7 @@ public final class Engine {
             // A missing identity is only a fresh install when no application records remain.
             // Never offer re-enrollment over a partially lost or damaged vault.
             for (String bucket : new String[]{"meta", "contact", "trusted", "session", "prekey", "signed", "kyber",
-                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export", "pairing-issued", "pairing-pending", "device-roster", "device-index", "device-issued", "device-pending", "device-relay", "location-out", "location-in", "calls"})
+                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export", "pairing-issued", "pairing-pending", "device-roster", "device-index", "device-issued", "device-pending", "device-relay", "location-out", "location-in", "calls", "admission", "admission-secret", "admission-peers", "admission-revoked", "admission-decisions", "admission-nonces", "admission-challenges"})
                 if (!db.keys(bucket).isEmpty()) throw new IllegalStateException("Identity missing from existing vault");
             return false;
         }
@@ -107,19 +110,24 @@ public final class Engine {
                 .put("kem", Bytes.b64(kem.getPublicKey().serialize())).put("kemSig", Bytes.b64(kemSignature))
                 .put("box", me.getString("box")).put("write", me.getString("write"))
                 .put("created", created).put("expires", expiry);
+            String credential=admission.getAdmissionState()==app.umbra.admission.AdmissionService.State.ADMITTED
+                ? admission.requireAdmission().wire() : "";
+            body.put("admission",credential);
             byte[] raw = Bytes.utf8(body.toString());
-            return new JSONObject().put("format", "umbra-contact-v1").put("body", Bytes.b64(raw))
+            return new JSONObject().put("format", "umbra-contact-v2").put("body", Bytes.b64(raw))
                 .put("signature", Bytes.b64(identity.getPrivateKey().calculateSignature(raw)));
         });
     }
     public String importCard(JSONObject card) throws Exception {
         return db.transaction(() -> {
-            if (!"umbra-contact-v1".equals(card.getString("format")) || card.toString().length() > 16_000)
+            if (!java.util.Set.of("umbra-contact-v1","umbra-contact-v2").contains(card.getString("format")) || card.toString().length() > 16_000)
                 throw new SecurityException("Tarjeta no compatible");
             byte[] raw = Bytes.unb64(card.getString("body"));
             JSONObject body = Wire.parse(raw, 12_000);
             Wire.fields(card, "format", "body", "signature");
-            Wire.fields(body, "v", "id", "alias", "identity", "registration", "keyId", "oneTime", "signed", "signedSig", "kem", "kemSig", "box", "write", "created", "expires");
+            boolean admissionCard="umbra-contact-v2".equals(card.getString("format"));
+            if(admissionCard) Wire.fields(body, "v", "id", "alias", "identity", "registration", "keyId", "oneTime", "signed", "signedSig", "kem", "kemSig", "box", "write", "created", "expires", "admission");
+            else Wire.fields(body, "v", "id", "alias", "identity", "registration", "keyId", "oneTime", "signed", "signedSig", "kem", "kemSig", "box", "write", "created", "expires");
             for (String f : new String[]{"v", "registration", "keyId", "created", "expires"}) Wire.integer(body, f);
             for (String f : new String[]{"id", "alias", "identity", "oneTime", "signed", "signedSig", "kem", "kemSig", "box", "write"}) Wire.string(body, f, 4096);
             if (Wire.integer(body, "v") != 1) throw new SecurityException("Versión de contacto no compatible");
@@ -127,6 +135,10 @@ public final class Engine {
             ECPublicKey key = new ECPublicKey(Bytes.unb64(body.getString("identity")));
             if (!peer.equals(Bytes.identity(key.serialize())) || peer.equals(id())) throw new SecurityException("Identidad inválida");
             if (!key.verifySignature(raw, Bytes.unb64(card.getString("signature")))) throw new SecurityException("Firma de contacto inválida");
+            if(admissionCard) {
+                String credential=Wire.string(body,"admission",4096);
+                if(!credential.isEmpty()) admission.installPeerCredential(credential,peer);
+            }
             if (!key.verifySignature(Bytes.unb64(body.getString("signed")), Bytes.unb64(body.getString("signedSig"))) ||
                 !key.verifySignature(Bytes.unb64(body.getString("kem")), Bytes.unb64(body.getString("kemSig"))))
                 throw new SecurityException("Firma de preclave inválida");
@@ -212,12 +224,13 @@ public final class Engine {
         app.umbra.devices.DevicePolicy.authorize(db, id(), peer);
         JSONObject contact = get("contact", peer);
         if (contact == null || contact.optBoolean("blocked") || contact.optBoolean("identityChanged")) throw new SecurityException("Contacto desconocido o bloqueado");
+        if (verified) { admission.requireAdmission(); admission.requirePeer(peer); }
         if (verified && !contact.optBoolean("verified")) throw new SecurityException("Verifique el código de seguridad antes de conversar");
         return contact;
     }
     /** Recheck immediately before a transport starts a queued write. Already emitted bytes cannot be recalled. */
     public void authorizeTransportSelf() throws Exception {
-        db.transaction(() -> { app.umbra.devices.DevicePolicy.authorize(db, id(), id()); return null; });
+        db.transaction(() -> { admission.requireAdmission(); app.umbra.devices.DevicePolicy.authorize(db, id(), id()); return null; });
     }
     /** A queued network write must not acquire a fresh authorization after lock/reopen. */
     public Records.Work<Void> deliveryAuthorization(String peer) throws Exception {
@@ -544,18 +557,26 @@ public final class Engine {
     /** Sign only a bounded, domain-separated application challenge; not an arbitrary signing oracle. */
     public byte[] proveNearby(boolean dialer, String peer, byte[] ownNonce, byte[] peerNonce) throws Exception {
         return db.transaction(() -> {
-            requiredContact(peer, false); // Explicit enrollment must have imported the peer card first.
-            return signal.getIdentityKeyPair().getPrivateKey().calculateSignature(
-                app.umbra.core.NearbyTranscript.encode(dialer, id(), ownNonce, peer, peerNonce));
+            requiredContact(peer, false);
+            byte[] transcript=app.umbra.core.NearbyTranscript.encode(dialer,id(),ownNonce,peer,peerNonce);
+            String credential=admission.requireAdmission().wire();
+            byte[] signalProof=signal.getIdentityKeyPair().getPrivateKey().calculateSignature(transcript);
+            return Bytes.utf8(new JSONObject().put("v",1).put("credential",credential)
+                .put("signal",Bytes.b64(signalProof)).put("admission",admission.proveNearby(transcript)).toString());
         });
     }
-    public void verifyNearby(boolean peerIsDialer, String peer, byte[] peerNonce, byte[] ownNonce, byte[] signature, boolean enrolling) throws Exception {
+    public void verifyNearby(boolean peerIsDialer, String peer, byte[] peerNonce, byte[] ownNonce, byte[] proof, boolean enrolling) throws Exception {
         db.transaction(() -> {
-            JSONObject c = requiredContact(peer, !enrolling);
-            byte[] publicKey = Bytes.unb64(c.getJSONObject("card").getString("identity"));
-            if (signature.length != 64 || !peer.equals(Bytes.identity(publicKey)) || !new ECPublicKey(publicKey).verifySignature(
-                app.umbra.core.NearbyTranscript.encode(peerIsDialer, peer, peerNonce, id(), ownNonce), signature))
+            JSONObject c=requiredContact(peer,false);
+            if(!enrolling && !c.optBoolean("verified")) throw new SecurityException("Contact verification required");
+            JSONObject p=Wire.parse(proof,6000); Wire.fields(p,"v","credential","signal","admission");
+            if(Wire.integer(p,"v")!=1) throw new SecurityException("Nearby admission version");
+            byte[] signature=Bytes.unb64(Wire.string(p,"signal",88));
+            byte[] publicKey=Bytes.unb64(c.getJSONObject("card").getString("identity"));
+            byte[] transcript=app.umbra.core.NearbyTranscript.encode(peerIsDialer,peer,peerNonce,id(),ownNonce);
+            if(signature.length!=64 || !peer.equals(Bytes.identity(publicKey)) || !new ECPublicKey(publicKey).verifySignature(transcript,signature))
                 throw new SecurityException("No se pudo autenticar el dispositivo cercano");
+            admission.verifyNearby(Wire.string(p,"credential",4096),Wire.string(p,"admission",2048),peer,transcript);
             return null;
         });
     }

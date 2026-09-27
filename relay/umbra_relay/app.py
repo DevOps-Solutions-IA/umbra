@@ -18,8 +18,11 @@ from fastapi import FastAPI, Header, HTTPException, Request, Response, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from .guard import RequestLimits
+from .admission_context import revalidate
+from .admission_store import AdmissionStore
+from .admission_http import AdmissionGate, install_admission
 from .maintenance import RetentionHealth, retention_loop
-from .schema import validate_constraints
+from .schema import validate_constraints, migrate_admission, ADMISSION_TABLES
 from .pairing import install_pairing
 from .devices import install_devices
 
@@ -83,7 +86,9 @@ class Database:
             conn.execute("CREATE INDEX IF NOT EXISTS pairing_expiry ON pairing_invites(expires)")
             conn.execute("CREATE INDEX IF NOT EXISTS pairing_box ON pairing_invites(box)")
             conn.execute("CREATE TABLE IF NOT EXISTS device_revocations(box TEXT PRIMARY KEY, cap_hash TEXT NOT NULL, revoked INTEGER NOT NULL, created INTEGER NOT NULL)")
-            conn.execute("PRAGMA user_version=4")
+            if conn.execute("PRAGMA user_version").fetchone()[0] < 5:
+                migrate_admission(conn)
+            conn.execute("PRAGMA user_version=5")
 
     @staticmethod
     def validate_schema(conn: sqlite3.Connection) -> None:
@@ -96,7 +101,9 @@ class Database:
             expected.add("device_revocations")
         tables = {row[0] for row in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
-        if version not in (0, 1, 2, 3, 4) or not tables <= expected:
+        if version >= 5:
+            expected.update(ADMISSION_TABLES)
+        if version not in (0, 1, 2, 3, 4, 5) or not tables <= expected:
             raise ValueError("Unsupported database schema; explicit migration required")
         if version == 0 and not tables:
             return  # The only path allowed to initialize an empty database.
@@ -120,7 +127,9 @@ class Database:
         try:
             if write:
                 connection.execute("BEGIN IMMEDIATE")
+            revalidate(connection)
             yield connection
+            revalidate(connection)
             if write:
                 connection.commit()
         except BaseException:
@@ -227,7 +236,8 @@ class Envelope(BaseModel):
         return self
 
 
-def create_app(database_path: str | None = None, *, rate_limit: int = 240) -> FastAPI:
+def create_app(database_path: str | None = None, *, rate_limit: int = 240,
+               realm_config: str | None = None, verifier_origin: str | None = None) -> FastAPI:
     db = Database(database_path or os.environ.get("UMBRA_DB", "/data/umbra.sqlite3"))
 
     @asynccontextmanager
@@ -250,6 +260,15 @@ def create_app(database_path: str | None = None, *, rate_limit: int = 240) -> Fa
                   redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.state.database = db
     app.state.retention_health = RetentionHealth()
+    realm_config = realm_config or os.environ.get("UMBRA_ADMISSION_REALM")
+    verifier_origin = verifier_origin or os.environ.get("UMBRA_ADMISSION_ORIGIN")
+    if bool(realm_config) != bool(verifier_origin):
+        raise ValueError("Both public realm and HTTPS verifier origin are required")
+    admission = AdmissionStore(db, realm_config, verifier_origin) if realm_config else None
+    app.state.admission = admission
+    install_admission(app, admission)
+    app.add_middleware(AdmissionGate, store=admission, health=app.state.retention_health)
+    # Outer middleware limits even unauthenticated admission requests.
     app.add_middleware(RequestLimits, per_minute=rate_limit, max_body=MAX_BODY)
 
     def authorize(conn, box: str, authorization: str | None, mode: str):

@@ -17,7 +17,7 @@ public class DeviceSignalTest {
     @Before public void setUp() throws Exception {
         aliceRecords = new DeviceMemoryRecords();
         alice = new Engine(aliceRecords); bob = new Engine(new DeviceMemoryRecords());
-        alice.initialize("Synthetic Alice"); bob.initialize("Synthetic Bob");
+        alice.initialize("Synthetic Alice"); AdmissionFixture.enroll(alice); bob.initialize("Synthetic Bob"); AdmissionFixture.enroll(bob);
         alice.importCard(bob.createCard()); bob.importCard(alice.createCard());
         String code = Bytes.safetyCode(alice.id(), bob.id());
         alice.verify(bob.id(), code); bob.verify(alice.id(), code);

@@ -40,6 +40,21 @@ public final class VoiceEngineFixtureListener extends RunListener {
     }
     private long nextPoll;
     private int expiredDeliveriesRejected;
+    /** Deliberately bypass the client gate in this test to verify backend default denial from Android. */
+    private static void unadmittedRelayDenied(String base) throws Exception {
+        for(String path:new String[]{"/v1/boxes","/v1/turn/credentials"}) {
+            HttpsURLConnection connection=(HttpsURLConnection)new java.net.URL(base+path).openConnection();
+            try {
+                connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(5000);connection.setReadTimeout(5000);
+                connection.setRequestMethod("POST");connection.setDoOutput(true);connection.setRequestProperty("Content-Type","application/json");
+                try(var output=connection.getOutputStream()) { output.write(Bytes.utf8("{}")); }
+                if(connection.getResponseCode()!=403)throw new AssertionError("Unadmitted private relay request was not denied");
+                if(connection.getErrorStream()!=null)connection.getErrorStream().close();
+            } finally { connection.disconnect(); }
+        }
+        // TURN URL has no production issuer in this version: this tests default-deny routing,
+        // not successful production TURN issuance or a replacement for the real lab provider.
+    }
     private void pump(RelayClient relay,Engine engine) throws Exception { pump(relay,engine,null,null,false,Long.MAX_VALUE); }
     private void pump(RelayClient relay,Engine engine,String callId,NativeVoiceSession voice,boolean expiryExpected,long credentialExpiry) throws Exception {
         for(JSONObject q:engine.outbox()) {
@@ -124,8 +139,10 @@ public final class VoiceEngineFixtureListener extends RunListener {
         var tls=SSLContext.getInstance("TLS"); tls.init(null,managers.getTrustManagers(),null);
         HttpsURLConnection.setDefaultSSLSocketFactory(tls.getSocketFactory()); // TEST APK only. Hostname verification unchanged.
         NativeVoiceSession voice=null;
-        try(var db=new SqliteDeviceRecords("voice-restart",false); var relay=new RelayClient(configuration.getString("base"))) {
+        try(var db=new SqliteDeviceRecords("voice-restart",false); var relay=new RelayClient(configuration.getString("base"),() -> true,new app.umbra.admission.AdmissionService(db))) {
             Engine engine=new Engine(db,SystemClock::elapsedRealtime); engine.initialize("Synthetic voice "+(caller?"A":"B"));
+            unadmittedRelayDenied(configuration.getString("base"));
+            app.umbra.AdmissionLab.provision(engine,files,"synthetic-admission",configuration.getString("admissionRealm"));
             relay.register(engine.profile(),configuration.getString("invitation")); engine.updateRelay(configuration.getString("base"),true);
             DeviceService devices=new DeviceService(db); devices.migrate();
             write("synthetic-voice-public.json",new JSONObject().put("identity",engine.id()).put("card",engine.createCard()).put("roster",devices.roster(engine.id())));
@@ -465,6 +482,33 @@ public final class VoiceEngineFixtureListener extends RunListener {
             if(modulation && processingStep!=10)throw new AssertionError("Incomplete remote modulation sequence");
             if(!evidence || (!expectedRejection && !resumedEvidence)) throw new AssertionError("Missing native audio or mute/unmute evidence");
             voice.close(); pump(relay,engine);
+            if(configuration.optBoolean("admissionRevocationCheck")) {
+                // Media is already closed. Test actual AVD -> HTTPS authorization independently
+                // of local revocation knowledge; never confuse DevicePolicy revocation with this.
+                engine.admission().requireAdmission();
+                write("synthetic-voice-admission-ready.json",new JSONObject().put("ready",true));
+                waitFor("synthetic-voice-admission-change.json",SystemClock.elapsedRealtime()+20_000);
+                JSONObject change=read("synthetic-voice-admission-change.json");
+                boolean denied=false;
+                if(caller) {
+                    engine.admission().requireAdmission(); // Still locally ADMITTED.
+                    try { relay.poll(engine.profile(),0); }
+                    catch(java.io.IOException failure) {
+                        if(!"Servidor rechazó la operación (HTTP 403)".equals(failure.getMessage()))throw failure;
+                        denied=true;
+                    }
+                    if(!denied)throw new AssertionError("Relay accepted revoked admission before local synchronization");
+                    engine.admission().applyRevocation(change.getString("revocation"));
+                    if(engine.admission().getAdmissionState()!=app.umbra.admission.AdmissionService.State.REVOKED)
+                        throw new AssertionError("Revocation not persisted locally");
+                } else {
+                    if(!change.getBoolean("unaffected"))throw new AssertionError("Unexpected admission fixture command");
+                    relay.poll(engine.profile(),0);
+                    engine.admission().requireAdmission();
+                }
+                write("synthetic-voice-admission-result.json",new JSONObject().put("relayDeniedBeforeLocalSync",denied)
+                    .put("state",engine.admission().getAdmissionState().name()));
+            }
             Bundle status=new Bundle(); status.putString("engineVoice",expectedRejection?"PASS invalid TURN rejected before capture":"PASS independent Android Engine/SQLite/Signal/HTTPS + native TURN decoded synthetic peer audio");
             InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
         } finally {

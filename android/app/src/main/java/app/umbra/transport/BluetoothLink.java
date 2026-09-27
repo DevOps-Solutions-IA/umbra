@@ -111,7 +111,7 @@ public final class BluetoothLink implements AutoCloseable {
             if (active.getRemoteDevice().getBondState() != BluetoothDevice.BOND_BONDED)
                 throw new SecurityException("Paired device required");
             String local = Wire.identity(listener.ownId()); byte[] nonce = Bytes.random(32);
-            JSONObject hello = new JSONObject().put("kind", "hello").put("v", 2).put("id", local)
+            JSONObject hello = new JSONObject().put("kind", "hello").put("v", 3).put("id", local)
                 .put("nonce", Bytes.b64(nonce)).put("role", dialer ? "dialer" : "listener").put("enroll", enroll);
             if (enroll) hello.put("card", listener.ownCard()); // Never sent automatically on ordinary reconnect.
             write(active, hello);
@@ -120,7 +120,7 @@ public final class BluetoothLink implements AutoCloseable {
             listener.stage(Stage.HELLO_RECEIVED);
             Wire.fields(remoteHello, enroll ? new String[]{"kind", "v", "id", "nonce", "role", "enroll", "card"}
                 : new String[]{"kind", "v", "id", "nonce", "role", "enroll"});
-            if (!"hello".equals(Wire.string(remoteHello, "kind", 16)) || Wire.integer(remoteHello, "v") != 2 ||
+            if (!"hello".equals(Wire.string(remoteHello, "kind", 16)) || Wire.integer(remoteHello, "v") != 3 ||
                 !(remoteHello.get("enroll") instanceof Boolean) || remoteHello.getBoolean("enroll") != enroll ||
                 !(dialer ? "listener" : "dialer").equals(Wire.string(remoteHello, "role", 16)))
                 throw new SecurityException("Incompatible nearby handshake");
@@ -133,10 +133,10 @@ public final class BluetoothLink implements AutoCloseable {
             byte[] proof = listener.prove(dialer, remote, nonce, otherNonce);
             write(active, new JSONObject().put("kind", "proof").put("signature", Bytes.b64(proof)));
             listener.stage(Stage.PROOF_SENT);
-            JSONObject remoteProof = Wire.parse(Framing.read(active.getInputStream(), 512), 512);
+            JSONObject remoteProof = Wire.parse(Framing.read(active.getInputStream(), 8192), 8192);
             Wire.fields(remoteProof, "kind", "signature");
             if (!"proof".equals(Wire.string(remoteProof, "kind", 16))) throw new SecurityException("Missing identity proof");
-            listener.verify(!dialer, remote, otherNonce, nonce, Bytes.unb64(Wire.string(remoteProof, "signature", 88)), enroll);
+            listener.verify(!dialer, remote, otherNonce, nonce, Bytes.unb64(Wire.string(remoteProof, "signature", 8000)), enroll);
             synchronized (this) {
                 if (closed.get() || socket != active || epoch != expectedEpoch || System.nanoTime() - started > TimeUnit.SECONDS.toNanos(20))
                     throw new IOException("Handshake no longer active");

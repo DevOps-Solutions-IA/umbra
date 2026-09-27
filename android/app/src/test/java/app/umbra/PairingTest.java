@@ -12,7 +12,7 @@ public class PairingTest {
     private static final class Person {
         final MemoryRecords db = new MemoryRecords(); final Engine engine = new Engine(db);
         final PairingService pairing = new PairingService(db);
-        Person(String alias) throws Exception { engine.initialize(alias); }
+        Person(String alias) throws Exception { engine.initialize(alias); AdmissionFixture.enroll(engine); }
     }
     private static void reject(Throwing operation) throws Exception {
         try { operation.run(); fail("Expected rejection"); } catch (SecurityException | IllegalArgumentException expected) { }

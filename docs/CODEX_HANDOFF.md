@@ -1,5 +1,20 @@
 # Transferencia técnica a Codex
 
+## Private device admission — 2026-09-27, bajo validación
+
+Rama dependiente `codex/private-device-admission`, base exacta
+`0de2b102d2d09b1eeed0e4fe233d3b27976e1036`. Autoridad Ed25519 dedicada,
+credenciales por dispositivo y prueba de posesión obligatoria se añaden a las
+políticas existentes; no conceden VERIFIED ni membresía por vinculación.
+Relay cierra APIs privadas sin configuración/admisión. Bóveda, Signal, TURN y
+permisos offline se conservan. UI de Claude y MainActivity no se modifican.
+Consultar [contrato](ADMISSION.md), [ADR](adr/ADR-private-device-admission.md)
+y [evidencia nueva](validation/2026-09-27-private-device-admission.md).
+CI final, AVD y RFCOMM nuevos todavía NO EJECUTADOS en este recibo inicial;
+ningún resultado de PR #11 valida estos cambios. Rotación/recuperación de
+la autoridad y nuevas pantallas quedan fuera de alcance.
+
+
 ## Personal vault password — ejecución #11, 2026-09-26
 
 PARTIAL: nueva rama `codex/personal-vault-password` desde PR #10 verde `6b0a844`.

@@ -114,6 +114,8 @@ jobs:
         run: |
           set -euo pipefail
           sdkmanager "platforms;android-36" "build-tools;35.0.0" "emulator" "system-images;android-35;default;x86_64" 2>&1 | tee android/app/build/reports/nearby-focused/sdk-install.log
+      - name: Install pinned synthetic admission signing dependency
+        run: python -m pip install -r relay/requirements-hashed.lock
       - name: Build actual debug or isolated optimized target
         shell: bash
         run: |

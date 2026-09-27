@@ -16,6 +16,7 @@ from voice_network_evidence import summarize, summarize_tls, summarize_ipv6_turn
 from turn_lab import TurnLab, docker
 from voice_relay_lab import voice_relay
 from android_apk_install import ensure_apk
+from admission_lab import reset_exchange
 from voice_direct_route import probe_udp
 from check_optimized_media import inspect as inspect_optimized_media
 
@@ -88,6 +89,7 @@ def main():
     if args.modulated_start and not args.modulation:parser.error("Initial mode acceptance requires --modulation")
     if args.modulation and (args.scenario not in ("audio","lock","device-revoked") or args.turn_tls or args.turn_ipv6):parser.error("Modulation acceptance uses the isolated positive UDP topology")
     rejection=args.scenario in ("expired-auth","invalid-auth","unreachable","unauthorized-redirect","wrong-fingerprint") or tls_rejection
+    admission_revocation_check=args.scenario=="audio" and not args.video and not args.modulation
     optimized_evidence=inspect_optimized_media() if args.optimized else None
     PACKAGE="app.umbra.privatechat.medialab" if args.optimized else "app.umbra.privatechat.dev"
     app_uids={}
@@ -140,12 +142,13 @@ def main():
             if len(uids)!=1 or not 10000<=int(uids[0])<=19999: raise RuntimeError("Unknown isolated mediaLab UID")
             app_uids[serial]=uids[0]
         run(serial,"shell","run-as",PACKAGE,"mkdir","-p","files")
+        reset_exchange(run,serial,PACKAGE)
         if args.scenario in ("permission-revoked","camera-permission-revoked"):
             run(serial,"shell","pm","grant",PACKAGE,"android.permission.CAMERA" if args.scenario=="camera-permission-revoked" else "android.permission.RECORD_AUDIO")
         if args.scenario=="camera-denied":run(serial,"shell","pm","revoke",PACKAGE,"android.permission.CAMERA")
         # Explicit names only, confined to this disposable debug UID.
         run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-")])
-        for suffix in ("public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
+        for suffix in ("admission-ready","admission-change","admission-result","public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
             run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
     args.reports.mkdir(parents=True,exist_ok=True)
     if optimized_evidence:
@@ -201,13 +204,18 @@ def main():
                 if args.scenario=="invalid-auth": credentials["password"]="synthetic-invalid-credential"
                 if args.scenario=="unreachable": credentials["urls"]=[value.replace(":5349",":5348") if args.turn_tls else value.replace(":3478",":3479") for value in credentials["urls"]]
                 write(serial,"synthetic-voice-engine.json",{"stopVideoRace":args.scenario=="video-stop-race","initialModulation":args.modulated_start,"modulation":args.modulation,"video":args.video and args.scenario!="camera-denied","cameraDenied":args.scenario=="camera-denied","receiveOnlyCallee":args.scenario=="receive-only","incorrectFingerprint":args.scenario=="wrong-fingerprint","expectedRejection":rejection,"role":"A" if index==0 else "B","base":relay["base"],
-                    "certificate":relay["certificate"],"invitation":relay["invitations"][index],"turn":credentials})
+                    "admissionRevocationCheck":admission_revocation_check,"admissionRealm":relay["admission"].realm.encode(),"certificate":relay["certificate"],"invitation":relay["invitations"][index],"turn":credentials})
                 stream=(args.reports/("engine-voice-a.log" if index==0 else "engine-voice-b.log")).open("w")
                 streams.append(stream)
                 processes[serial]=subprocess.Popen([adb,"-s",serial,"shell","am","instrument","-w","-r",
                     "-e","class","app.umbra.DeviceSignalTest","-e","listener","app.umbra.media.VoiceEngineFixtureListener",
                     PACKAGE+".test/androidx.test.runner.AndroidJUnitRunner"],stdout=stream,stderr=subprocess.STDOUT)
             deadline=time.monotonic()+(160 if args.modulation else 90)
+            approvals={}
+            for serial in (args.a,args.b):
+                request=read(serial,"synthetic-admission-request.json",processes[serial],deadline)
+                approvals[serial]=relay["admission"].approve(request["request"])
+                write(serial,"synthetic-admission-credential.json",approvals[serial])
             a=read(args.a,"synthetic-voice-public.json",processes[args.a],deadline)
             b=read(args.b,"synthetic-voice-public.json",processes[args.b],deadline)
             write(args.a,"synthetic-voice-peer.json",b); write(args.b,"synthetic-voice-peer.json",a)
@@ -340,6 +348,12 @@ def main():
                         raise RuntimeError("SQLite/native voice restart rejection did not execute successfully")
             else:
                 for serial in (args.a,args.b): write(serial,"synthetic-voice-stop.json",{"stop":True})
+                if admission_revocation_check:
+                    for serial in (args.a,args.b):
+                        if read(serial,"synthetic-voice-admission-ready.json",processes[serial],time.monotonic()+20)!={"ready":True}:
+                            raise RuntimeError("Android admission revocation barrier missing")
+                    write(args.a,"synthetic-voice-admission-change.json",relay["admission"].revoke(approvals[args.a]["credential"]))
+                    write(args.b,"synthetic-voice-admission-change.json",{"unaffected":True})
                 for serial in (args.a,args.b):
                     if processes[serial].wait(timeout=30)!=0: raise RuntimeError("Voice instrumentation process failed")
                 for stream in streams: stream.flush()
@@ -347,6 +361,11 @@ def main():
                     report=(args.reports/name).read_text()
                     if not valid_report(report):
                         raise RuntimeError("Missing/failed authenticated voice evidence: "+name)
+            if admission_revocation_check:
+                admission_results=[json.loads(run(serial,"shell","run-as",PACKAGE,"cat","files/synthetic-voice-admission-result.json").stdout) for serial in (args.a,args.b)]
+                if admission_results!=[{"relayDeniedBeforeLocalSync":True,"state":"REVOKED"},{"relayDeniedBeforeLocalSync":False,"state":"ADMITTED"}]:
+                    raise RuntimeError("Android independent relay revocation evidence missing")
+                (args.reports/"admission-revocation.json").write_text(json.dumps(admission_results,indent=2)+"\n")
             if allocation_evidence is not None:
                 elapsed=time.monotonic()-clients_started
                 if elapsed>=90:raise RuntimeError("Expiry fixture exceeded the pre-refresh window; do not infer a 180-second allocation")
@@ -423,7 +442,7 @@ def main():
                 except Exception as failure: errors.append(failure)
                 try: run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-")])
                 except Exception as failure: errors.append(failure)
-                for suffix in ("engine","public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
+                for suffix in ("engine","admission-ready","admission-change","admission-result","public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
                     try: run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
                     except Exception as failure: errors.append(failure)
                 # These exact files belong solely to this named synthetic fixture, including failed runs.

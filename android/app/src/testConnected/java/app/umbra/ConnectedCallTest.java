@@ -26,6 +26,45 @@ public class ConnectedCallTest {
     static JSONObject control(Engine e,String type) throws Exception { return e.outbox().stream().filter(q->q.optString("callType").equals(type)).findFirst().orElseThrow().getJSONObject("envelope"); }
     static String fingerprint(String who) { return Bytes.sha256(Bytes.utf8(who)); }
     static String sdp(String role) { return "v=0\r\ns=synthetic signaling "+role+"; no media executed\r\nt=0 0\r\n"; }
+    private static void cancelAfterMaintenance(Pair pair,String id,boolean failStorage) {
+        var reads=new java.util.concurrent.atomic.AtomicInteger();
+        pair.b.db.afterRead=(bucket,key)->{
+            if(bucket.equals("calls") && key.equals(id) && reads.incrementAndGet()==2) {
+                pair.b.db.afterRead=null;
+                pair.be.calls().cancelPending(id);
+                if(failStorage) pair.b.db.failBucket="calls";
+            }
+        };
+    }
+    @Test public void cancellationBetweenMaintenanceAndAuthenticatedIngressPersistsTerminalDiscard() throws Exception {
+        Pair p=new Pair(); String id=p.selected();
+        byte[] identity=p.b.db.get("meta","identity");
+        int events=p.be.calls().session(id).getJSONObject("events").length();
+        p.ae.calls().description(id,1,"offer",sdp("cancel-race"),fingerprint("A"));
+        JSONObject envelope=control(p.ae,"DESCRIPTION");
+        cancelAfterMaintenance(p,id,false);
+        p.be.receive(envelope);
+        assertNull("The intended race boundary executed",p.b.db.afterRead);
+        JSONObject terminal=p.be.calls().session(id);
+        assertEquals("FAILED",terminal.getString("state"));
+        assertEquals(0,terminal.getJSONObject("descriptions").length());
+        assertEquals(events+1,terminal.getJSONObject("events").length());
+        p.be.receive(envelope);
+        assertEquals(events+1,p.be.calls().session(id).getJSONObject("events").length());
+        assertArrayEquals(identity,p.b.db.get("meta","identity"));
+        assertTrue(p.be.outbox().stream().noneMatch(q->q.has("callSession")));
+    }
+    @Test public void cancellationIngressStorageFailureRollsBackAndImmutableRetryCannotRevive() throws Exception {
+        Pair p=new Pair(); String id=p.selected();
+        p.ae.calls().description(id,1,"offer",sdp("disk-race"),fingerprint("A"));
+        JSONObject envelope=control(p.ae,"DESCRIPTION"); String ciphertext=envelope.toString();
+        cancelAfterMaintenance(p,id,true);
+        assertThrows(IllegalStateException.class,()->p.be.receive(envelope));
+        assertNull(p.b.db.afterRead); p.b.db.failBucket=null;
+        p.be.receive(new JSONObject(ciphertext));
+        assertEquals("FAILED",p.be.calls().session(id).getString("state"));
+        assertEquals(0,p.be.calls().session(id).getJSONObject("descriptions").length());
+    }
     @Test public void inviteAcceptSelectNegotiateEndRealSignal() throws Exception {
         Pair p=new Pair(); String id=p.selected();
         assertEquals("SELECTED",p.be.calls().session(id).getString("state"));

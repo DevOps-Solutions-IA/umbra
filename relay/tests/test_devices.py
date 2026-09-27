@@ -4,8 +4,8 @@ import secrets
 import sqlite3
 
 import pytest
-from fastapi.testclient import TestClient
-from umbra_relay.app import Database, create_app
+from admission_fixture import TestClient, create_app
+from umbra_relay.app import Database
 from test_relay import register, header, envelope, put, inbox
 
 
@@ -100,9 +100,13 @@ def test_schema_three_migration_preserves_mailboxes(context):
     app, client, box = context
     with app.state.database.connect(write=True) as db:
         db.execute('DROP TABLE device_revocations')
+        # Construct the actual legacy schema, without later admission tables.
+        from umbra_relay.schema import ADMISSION_TABLES
+        for table in sorted(ADMISSION_TABLES):
+            db.execute(f'DROP TABLE {table}')  # Fixed schema constants.
         db.execute('PRAGMA user_version=3')
     migrated = Database(app.state.database.path)
     with migrated.connect() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 4
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 5
         assert db.execute('SELECT id FROM boxes').fetchone()[0] == box['id']
         assert db.execute('SELECT COUNT(*) FROM device_revocations').fetchone()[0] == 0
