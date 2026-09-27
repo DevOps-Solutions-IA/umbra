@@ -142,3 +142,25 @@ Pruebas locales posteriores: 203 backend exit0 (incluye revocación mientras un
 handler HTTP espera antes de escribir), suites JVM de ambas variantes y builds
 androidTest exit0. Laboratorio R8 con listener de reinicio compilado, aún no
 se cuenta ejecutado. Los recibos de CI anteriores permanecen históricos.
+
+## 2a15f27 — recibo intermedio
+
+HEAD `2a15f2757dac95ef3925eebe970c64b2c25d1db0`, checkout de Actions
+`014c176c14a443568d73a7f531d5198060cce1fc`. Admission laboratory **36310722519
+SUCCESS**: ambas variantes debug/R8, incluyendo force-stop real después de
+commit y rechazo de admisión revocada en el nuevo proceso. Password laboratory
+**36310722472 SUCCESS**. Otros workflows se consultarán al terminar.
+
+Modulación debug 36310722537 falló al **instalar** la credencial, antes de media:
+AdmissionCredential.validate/notBefore. No fue la comprobación del desafío.
+El arnés recibía la aprobación cuando el segundo del reloj del host aún estaba
+por delante del AVD. Se conserva el rechazo productivo y se espera notBefore
+solo en el provisioning sintético, con límite2,5s, diferencia máxima2s y lease
+de solicitud original. Nuevo test demuestra que instalar antes de notBefore
+no almacena credential ni permite autenticación, y sí funciona al llegar el plazo.
+
+`build_android.py` sobre 2a15f27 exit0: 189/149 JVM, lint, JNI, políticas APK.
+SHA256 debug connected `058d5041c024e195bcc32651cbb365d21aabb7ff0b8e77b96fb224dc74a4830b`;
+offline `ee09c0c017a4d6a4394bbaa80e1250b8aff0ecc0b8e970d901ee24fda786575e`.
+`test_relay_integration.py` sobre ese HEAD exit0, incluyendo A1/A2/B1 y
+revocación independiente. Son artefactos locales de ese SHA, no del siguiente.

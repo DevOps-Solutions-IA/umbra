@@ -66,6 +66,14 @@ public class AdmissionServiceTest {
         s.enroll(s.a); assertEquals(AdmissionService.State.ADMITTED,s.a.admission.getAdmissionState());
         assertTrue(s.a.db.keys("trusted").isEmpty()); assertEquals(AdmissionService.State.NOT_ADMITTED,s.b.admission.getAdmissionState());
     }
+    @Test public void credentialNotBeforeCannotBeBypassedByImmediateInstallation()throws Exception {
+        Setup s=new Setup(); AdmissionRequest request=s.a.admission.createAdmissionRequest();
+        AdmissionCredential c=s.admin.admission.approveAdmission(s.admin.admission.reviewAdmissionRequest(request.wire()),true,3600);
+        s.a.clock.set(NOW-1);
+        denied(()->{s.a.admission.installAdmissionCredential(c.wire());return null;});
+        denied(s.a.admission::requireAdmission);assertNull(s.a.db.get("admission","credential"));
+        s.a.clock.set(NOW);s.a.admission.installAdmissionCredential(c.wire());s.a.admission.requireAdmission();
+    }
     @Test public void copiedCredentialCannotOpenDifferentDevice()throws Exception {
         Setup s=new Setup(); AdmissionCredential c=s.enroll(s.a); s.b.admission.createAdmissionRequest();
         denied(()->{s.b.admission.installAdmissionCredential(c.wire()); return null;});
