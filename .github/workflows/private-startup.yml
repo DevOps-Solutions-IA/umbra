@@ -59,7 +59,7 @@ jobs:
           sudo chgrp "$(id -gn)" /dev/kvm
           sudo chmod g+rw /dev/kvm
           export UMBRA_DEVICE_REPORTS=android/app/build/reports/private-startup
-          export UMBRA_STARTUP_DNS=10.0.2.2
+          export UMBRA_STARTUP_DNS=127.0.0.1
           source scripts/ci_emulator.sh
           umbra_start_avd umbra-private-startup 5554
           . .venv/bin/activate

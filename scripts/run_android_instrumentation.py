@@ -36,8 +36,8 @@ def main() -> None:
             package + '.test/androidx.test.runner.AndroidJUnitRunner'], stdout=stream,
             stderr=subprocess.STDOUT, timeout=180)
     output = args.log.read_text(encoding='utf-8')
-    # Existing 36/34 cases plus three DeviceAdmissionTest cases, all discovered and required.
-    expected=39 if args.flavor=='connected' else 37
+    # Existing 39/37 cases plus three PrivateStartupTest cases, all discovered and required.
+    expected=42 if args.flavor=='connected' else 40
     failed = result.returncode != 0 or not re.search(r'^OK \('+str(expected)+r' tests\)$', output, re.MULTILINE)
     failed |= 'INSTRUMENTATION_CODE: -1' not in output
     failed |= bool(re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', output))

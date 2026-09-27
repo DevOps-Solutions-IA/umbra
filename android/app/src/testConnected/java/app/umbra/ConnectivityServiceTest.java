@@ -79,6 +79,7 @@ public class ConnectivityServiceTest {
         service.networkLease(ORIGIN).attach(()->{throw new IllegalStateException("Synthetic cleanup failure");});
         service.networkLease(ORIGIN).attach(second::incrementAndGet);
         service.disconnect(); assertTrue(service.cleanupFailed()); assertEquals(1,second.get());
+        assertFalse(service.canConnect()); assertThrows(SecurityException.class,()->service.connect(ORIGIN,true));
         assertFalse(service.isNetworkSessionAllowed());
     }
     @Test public void lockDuringCleanupCannotExposeNewEpochAheadOfOldCallbacks() throws Exception {
@@ -118,5 +119,13 @@ public class ConnectivityServiceTest {
         service.vaultUnlocked();service.connect(ORIGIN,true);
         try {assertThrows(SecurityException.class,service.networkLease(ORIGIN)::checkNearby);}
         finally {service.disconnect();}
+    }
+    @Test public void failedAdmissionReadNeverLeavesConnectingOrAnOpenGrant() throws Exception {
+        var device=new DeviceLinkingTest.Device("Synthetic storage failure");var service=device.e.connectivity();service.vaultUnlocked();
+        device.db.before=()->{throw new IllegalStateException("Synthetic disk read failure");};
+        assertThrows(IllegalStateException.class,()->service.connect(ORIGIN,true));
+        assertEquals(UNLOCKED_OFFLINE,service.getConnectivityState());
+        assertThrows(SecurityException.class,()->service.networkLease(ORIGIN));
+        service.connect(ORIGIN,true);service.disconnect();
     }
 }

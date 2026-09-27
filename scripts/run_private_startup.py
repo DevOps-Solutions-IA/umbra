@@ -170,14 +170,28 @@ def main():
                 if process.wait(timeout=60) or not valid_report(after.read_text()):raise RuntimeError('Restart instrumentation failed')
             evidence['result']='PASS';evidence['limits']=['AOSP emulator, no physical Keystore claim','Synthetic SQLite integration; encrypted Vault covered separately','IPv6 absence counters, no positive IPv6 route claim','No media or sensor acquisition requested'];save()
         finally:
-            run('shell','am','force-stop',package)
-            if process is not None and process.poll() is None:process.terminate();process.wait(timeout=15)
+            # Attempt every cleanup even if ADB or the fixture has failed. Errors
+            # are reported together; none is converted into successful acceptance.
+            actions=[]
+            if dns is not None and dns.poll() is None:
+                actions.append(lambda: (dns.terminate(),dns.wait(timeout=10)))
+            actions.append(lambda: run('shell','am','force-stop',package))
+            if process is not None and process.poll() is None:
+                actions.append(lambda: (process.terminate(),process.wait(timeout=15)))
             for tool in chains:
-                run('shell','su','0',tool,'-D','OUTPUT','-m','owner','--uid-owner',uid,'-j','UMBRA_STARTUP')
-                run('shell','su','0',tool,'-F','UMBRA_STARTUP');run('shell','su','0',tool,'-X','UMBRA_STARTUP')
-            if dns is not None and dns.poll() is None:dns.terminate();dns.wait(timeout=10)
-            run('shell','svc','wifi','enable');run('shell','svc','data','enable')
-            app('sh','-c','rm -f files/synthetic-startup-*')
+                actions.extend([
+                    lambda tool=tool: run('shell','su','0',tool,'-D','OUTPUT','-m','owner','--uid-owner',uid,'-j','UMBRA_STARTUP'),
+                    lambda tool=tool: run('shell','su','0',tool,'-F','UMBRA_STARTUP'),
+                    lambda tool=tool: run('shell','su','0',tool,'-X','UMBRA_STARTUP')])
+            actions.extend([lambda: run('shell','svc','wifi','enable'),lambda: run('shell','svc','data','enable'),
+                            lambda: app('sh','-c','rm -f files/synthetic-startup-*'),
+                            lambda: run('shell','pm','clear',package)])
+            errors=[]
+            for action in actions:
+                try: action()
+                except Exception as failure: errors.append(failure)
+            if dns_log.exists(): (args.reports/'dns-fixture.log').write_text(dns_log.read_text())
+            if errors: raise ExceptionGroup('Private startup cleanup failed',errors)
 
 
 if __name__=='__main__':main()

@@ -62,3 +62,53 @@ son sintéticos y el perfil R8 instrumentable no es el APK exacto de producción
 - No nueva dependencia ni cambio de permisos. Laboratorio nuevo preparado para
   debug/R8 con UID IPv4/IPv6, DNS NXDOMAIN loopback con control positivo, HTTPS/Signal
   y force-stop. Su primera ejecución CI permanece pendiente.
+
+## Primer HEAD publicado / primer rojo conservado
+
+HEAD `5163497ac7fdf2591d1ee2753d57a1c4dade3aee`, árbol
+`4969197321dbb2a2e3bf69ca9847ff00e7488176`; PR #14 draft contra admisión.
+La compilación local `python scripts/build_android.py --release` terminó con 0:
+203 JVM connected / 150 offline; políticas debug/release y Signal JNI aprobadas.
+SHA-256 locales de ese commit:
+
+- connected debug: `9af8dc6db507ce403fb536ea8714b0480852077763c407055bf309e5355febb4`
+- connected release sin firma: `5ded6e1de530223fcc07844bda2a16b7a2f362a5ba66f76c15f0e4ecdfcb1636`
+- offline debug: `a927ca6c568fff751906f9896809138f3df7c22339a929487bd744257f2ad46a`
+- offline release sin firma: `709e1046d67ea1ee53a065fee26a6428ce13503eac4798d02a94d858fd7f0f07`
+
+Nueva integración HTTPS sobre ese commit: 0. No instrumentación local (KVM).
+
+Actions **36353247177** falló en el laboratorio nuevo:
+
+- Debug, job **108715839299**: tres pruebas de dominio aprobadas; UID con cero
+  paquetes IPv4/IPv6 en Activity fría, Engine frío y después del desbloqueo,
+  ventanas de ~5 s; sin acceso a sensores/scan observado. Tras connect hubo
+  23 paquetes IPv4 / 19659 bytes y el fixture alcanzó el intercambio HTTPS/Signal.
+  El control positivo DNS dio cero: **no se acepta ausencia de DNS** cuando falla
+  ese control. Configuración equivocada del arnés: `-dns-server` recibe la IP
+  del servidor del host, no el alias del host visto desde Android. Se corrige
+  `10.0.2.2` a `127.0.0.1`, manteniendo el servidor ligado exclusivamente a loopback.
+  Documentación y ayuda del emulator verificadas; requiere repetición real.
+- R8, job **108715839501**: tres fallos `NoSuchMethodError` (`Engine.connectivity`
+  y `setOnline`). Las nuevas clases de test no estaban incluidas en TraceReferences;
+  R8 eliminó/integró entradas que el APK de test externo llamaba. Se añaden solo
+  PrivateStartupTest, PrivateStartupFixtureListener y su AdmissionLab al trazado
+  del perfil de laboratorio. Se mantiene optimización y ofuscación; no keep global.
+
+Checkout de Actions de este intento: `aa1f62a61af7b07c3b0f76fe51d5fdd76fc405d4`.
+Los artefactos del intento rojo se conservan en Actions; no se reinterpretan como
+aceptación. Se refuerza además cleanup para intentar todas las acciones y reportar
+los fallos juntos aunque falle ADB; el diagnóstico DNS sintético se conserva.
+
+Verify **36353247132** también quedó rojo: el runner exigía el total antiguo de
+39 casos connected. El artefacto confirma **OK (42 tests)**, sin fallos, tras añadir
+los tres PrivateStartupTest. Se actualizan los totales exigidos a 42 connected /
+40 offline (39/37 anteriores + tres), sin reducir ni omitir pruebas. Offline y
+RFCOMM de ese job no llegaron a ejecutarse después del rechazo del verificador.
+Los tres jobs no Android de Verify pasaron. Los laboratorios password y admission
+completaron ambas matrices en este primer HEAD; no validan el siguiente commit.
+
+La reconstrucción local corregida del perfil vaultLab R8 de ambos flavors y sus
+APK de instrumentación terminó con 0. Las reglas generadas contienen específicamente
+`Engine.connectivity()` y `setOnline(boolean)` manteniendo allowoptimization y
+allowobfuscation. La ejecución del binario corregido en AVD sigue pendiente.

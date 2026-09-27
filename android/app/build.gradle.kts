@@ -164,7 +164,7 @@ if (vaultLab) {
             archiveFileName.set("$variant-fixture.jar")
             destinationDirectory.set(layout.buildDirectory.dir("generated/vaultLab"))
             from(layout.buildDirectory.dir("intermediates/javac/${variant}AndroidTest/compile${capital}AndroidTestJavaWithJavac/classes")) {
-                include("app/umbra/DeviceSignalTest*.class", "app/umbra/AdmissionRestartFixtureListener*.class", "app/umbra/DeviceAdmissionTest*.class", "app/umbra/lab/SqliteDeviceRecords*.class", "app/umbra/AdmissionFixture*.class", "app/umbra/DeviceVaultPasswordTest*.class", "app/umbra/PasswordRestartFixtureListener*.class",
+                include("app/umbra/PrivateStartupTest*.class", "app/umbra/PrivateStartupFixtureListener*.class", "app/umbra/AdmissionLab*.class", "app/umbra/DeviceSignalTest*.class", "app/umbra/AdmissionRestartFixtureListener*.class", "app/umbra/DeviceAdmissionTest*.class", "app/umbra/lab/SqliteDeviceRecords*.class", "app/umbra/AdmissionFixture*.class", "app/umbra/DeviceVaultPasswordTest*.class", "app/umbra/PasswordRestartFixtureListener*.class",
                     "app/umbra/DeviceSignalTest*.class", "app/umbra/DeviceMemoryRecords*.class")
             }
         }

@@ -50,6 +50,7 @@ public final class PrivateStartupFixtureListener extends RunListener {
         require(engine.connectivity().getConnectivityState()==ConnectivityService.State.LOCKED_PRIVATE,"Initial state");
         denied(engine,trap);checkpoint("cold");
         AdmissionLab.provision(engine,files,"synthetic-startup-admission",config.getString("realm"));
+        engine.setOnline(true); // Legacy persisted preference must never restore consent.
         engine.connectivity().vaultUnlocked();denied(engine,trap);checkpoint("unlocked");
         if(!app.umbra.calls.CallPlatform.ENABLED) {
             try {engine.connectivity().connect(base,true);throw new AssertionError("Offline edition connected");}
