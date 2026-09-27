@@ -191,3 +191,26 @@ eliminan al inicio y al final del escenario para evitar evidencia residual.
 La regresión del coordinador prueba una confirmación tardía y rechazo de
 índice anterior. El efecto nativo sigue requiriendo evidencia remota real;
 esta prueba de herramientas no se contabiliza como audio ejecutado.
+
+`2609d35` startup/password/admission terminaron SUCCESS. Modulación debug
+36355889735 reprodujo `Processing transition observation began too late`:
+la observación se temporizaba en el bucle que también ejecuta HTTPS síncrono.
+Se separó la medición del coordinador: `DecodedAudioWindow` (solo androidTest)
+recibe contadores y reloj monotónico del callback de audio ya decodificado.
+No retiene PCM. El controlador lee un resultado inmutable; una lectura tardía
+no cambia el intervalo observado. Si los callbacks mismos llegan tarde,
+la prueba sigue fallando con los límites originales (settle 1200–2500 ms,
+observación 2000–3500 ms). Ausencia de callbacks nunca produce éxito.
+Se utiliza también para mute con sus ventanas positivas. Una regresión Java
+real reproduce lectura tardía del coordinador, callback tardío, contadores
+inválidos y ventana incompleta. No modifica DSP, Opus ni código productivo.
+
+Focused histórico 36354688712/nearby falló antes de RFCOMM: UiAutomator
+informó `null root node` al obtener la pantalla del segundo AVD. No existe
+resultado de handshake en ese intento; no se atribuye al protocolo.
+
+Esta iteración pasó 167 pruebas de herramientas. El primer build R8 rechazó
+la clase nueva ausente del source jar de TraceReferences. Se añadió únicamente
+`DecodedAudioWindow*.class` a ese conjunto de fixtures y el build R8 posterior
+pasó (21 s, exit 0), conservando minificación y optimización. La aceptación
+AVD de esta medición todavía requiere la ejecución del commit publicado.

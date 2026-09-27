@@ -189,6 +189,10 @@ public final class VoiceEngineFixtureListener extends RunListener {
             var lease=engine.calls().prepareMedia(consent,true);
             NativeVoiceSession.initialize(context);
             AtomicInteger decoded=new AtomicInteger(),captured=new AtomicInteger(),modified=new AtomicInteger(),loud=new AtomicInteger(),playbackSamples=new AtomicInteger(),playbackRate=new AtomicInteger();
+            var processingObservation=new java.util.concurrent.atomic.AtomicReference<DecodedAudioWindow>();
+            var muteObservation=new java.util.concurrent.atomic.AtomicReference<DecodedAudioWindow>();
+            AtomicInteger videoCaptured=new AtomicInteger();
+            SyntheticVideoCapturer.Decoded videoDecoded=new SyntheticVideoCapturer.Decoded(caller);
             long[] sample={0}; long[] nextFrame={0}; int inputTone=caller?1000:2000,expectedTone=caller?2000:1000;
             var adm=JavaAudioDeviceModule.builder(context).setSampleRate(48000)
                 .setUseHardwareAcousticEchoCanceler(false).setUseHardwareNoiseSuppressor(false)
@@ -211,6 +215,11 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         }
                         if(bands[0]>0.12 && bands[1]>0.12 && bands[0]+bands[1]>0.55 && 2*(re*re+im*im)/(count*energy)<0.10)modified.incrementAndGet();
                     }
+                    long observedAt=SystemClock.elapsedRealtime();
+                    DecodedAudioWindow processingSample=processingObservation.get();
+                    if(processingSample!=null)processingSample.sample(observedAt,decoded.get(),modified.get(),loud.get(),videoDecoded.frames.get());
+                    DecodedAudioWindow muteSample=muteObservation.get();
+                    if(muteSample!=null)muteSample.sample(observedAt,decoded.get(),modified.get(),loud.get(),videoDecoded.frames.get());
                 }).createAudioDeviceModule();
             adm.setAudioRecordEnabled(false);
             JSONObject credential=configuration.getJSONObject("turn");
@@ -237,17 +246,15 @@ public final class VoiceEngineFixtureListener extends RunListener {
                 lease.description(generation,role,sdp,configuration.optBoolean("incorrectFingerprint")?Bytes.sha256(Bytes.utf8(fingerprint)):fingerprint);
             };
             voice=new NativeVoiceSession(context,lease,turn,adm,false,verifier,hostile,caller&&initialModulation);
-            AtomicInteger videoCaptured=new AtomicInteger();
-            SyntheticVideoCapturer.Decoded videoDecoded=new SyntheticVideoCapturer.Decoded(caller);
             if(withVideo) { voice.syntheticVideo(()->new SyntheticVideoCapturer(caller,videoCaptured));voice.setRemoteVideoSink(videoDecoded); }
             int videoStage=0,videoAudioBaseline=0,videoFrameBaseline=0,videoCaptureBaseline=0;long videoOffAt=0,videoOffRequestedNanos=0;
             boolean videoRequested=false,videoAccepted=false;
             boolean evidence=false,muting=false,mutedEvidence=false,resuming=false,resumedEvidence=false,terminationApplied=false,localLockApplied=false;
             boolean initialProcessingEvidence=false,initialNatural=false;
             boolean cameraDeniedChecked=false,cameraDeniedEvidence=false;int cameraDeniedBaseline=0;
-            int processingStep=0,processingNatural=0,processingModified=0,processingLoud=0,processingVideo=0;
-            long processingAt=0,processingWindow=0;String processingExpected="",processingDiagnostic="";
-            long muteAt=0,quietWindowAt=0; int quietBaseline=-1,resumeBaseline=0;
+            int processingStep=0;
+            long processingAt=0;String processingExpected="",processingDiagnostic="";
+            int resumeBaseline=0;
             while(SystemClock.elapsedRealtime()<deadline) {
                 boolean expiryExpected=evidence &&
                     Files.exists(files.resolve("synthetic-voice-loss.json")) &&
@@ -345,16 +352,15 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     write("synthetic-voice-mute-applied.json",new JSONObject().put("applied",true).put("elapsedMillis",SystemClock.elapsedRealtime()));
                 }
                 if(muting && !mutedEvidence && Files.exists(files.resolve("synthetic-voice-mute-observe.json"))) {
-                    long now=SystemClock.elapsedRealtime();
                     // Host releases this barrier only after BOTH native mute calls returned.
-                    if(muteAt==0)muteAt=now;
-                    if(now-muteAt>=2000 && quietBaseline<0) {quietBaseline=decoded.get();quietWindowAt=now;}
-                    if(quietWindowAt!=0 && now-quietWindowAt>=1200) {
-                        long observed=now-quietWindowAt;
-                        if(observed>2500)throw new AssertionError("Mute observation window overran: "+observed);
-                        int tones=decoded.get()-quietBaseline;
-                        if(tones>3) throw new AssertionError("Decoded peer tone continued after both native mute confirmations: tones="+tones+", observedMillis="+observed);
-                        write("synthetic-voice-muted.json",new JSONObject().put("quiet",true).put("observedMillis",observed).put("decodedTones",tones));mutedEvidence=true;
+                    if(muteObservation.get()==null)muteObservation.set(new DecodedAudioWindow(SystemClock.elapsedRealtime(),2000,3500,1200,2500));
+                    DecodedAudioWindow.Result observation=muteObservation.get().result();
+                    if(observation!=null) {
+                        if(!observation.failure().isEmpty())throw new AssertionError(observation.failure());
+                        int tones=observation.natural();
+                        if(tones>3) throw new AssertionError("Decoded peer tone continued after both native mute confirmations: tones="+tones+", observedMillis="+observation.observedMillis());
+                        write("synthetic-voice-muted.json",new JSONObject().put("quiet",true).put("observedMillis",observation.observedMillis()).put("decodedTones",tones));mutedEvidence=true;
+                        muteObservation.set(null);
                     }
                 }
                 if(mutedEvidence && !resuming && Files.exists(files.resolve("synthetic-voice-resume.json"))) {
@@ -463,28 +469,25 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     }
                     if(processingAt==0 && Files.exists(files.resolve("synthetic-voice-processing-observe-"+processingStep+".json"))) {
                         if(!Files.exists(files.resolve("synthetic-voice-processing-applied-"+processingStep+".json")))throw new AssertionError("Processing observation preceded local action");
-                        processingAt=SystemClock.elapsedRealtime();processingWindow=0;
+                        processingAt=SystemClock.elapsedRealtime();
+                        processingObservation.set(new DecodedAudioWindow(processingAt,1200,2500,2000,3500));
                     }
                     if(processingAt!=0) {
-                        long now=SystemClock.elapsedRealtime();
-                        if(processingWindow==0 && now-processingAt>=1200) {
-                            if(now-processingAt>2500)throw new AssertionError("Processing transition observation began too late");
-                            processingWindow=now;processingNatural=decoded.get();processingModified=modified.get();processingLoud=loud.get();processingVideo=videoDecoded.frames.get();
-                        }
-                        if(processingWindow!=0 && now-processingWindow>=2000) {
-                            if(now-processingWindow>3500)throw new AssertionError("Processing observation window overran");
-                            int natural=decoded.get()-processingNatural,changed=modified.get()-processingModified,energy=loud.get()-processingLoud;
+                        DecodedAudioWindow.Result observation=processingObservation.get().result();
+                        if(observation!=null) {
+                            if(!observation.failure().isEmpty())throw new AssertionError(observation.failure());
+                            int natural=observation.natural(),changed=observation.modified(),energy=observation.loud();
                             String expected=caller?"natural":processingExpected;
                             if(expected.equals("natural") && (natural<40 || changed>3) ||
                                expected.equals("modified") && (changed<40 || natural>3) ||
                                expected.equals("quiet") && (natural>3 || changed>3 || energy>3))
                                 throw new AssertionError("Remote processing mismatch step="+processingStep+", expected="+expected+", natural="+natural+", modified="+changed+", loud="+energy+", effective="+voice.modulationStatus());
-                            if(withVideo && videoDecoded.frames.get()-processingVideo<5)throw new AssertionError("Video stopped during local modulation");
+                            if(withVideo && observation.video()<5)throw new AssertionError("Video stopped during local modulation");
                             JSONObject result=new JSONObject().put("step",processingStep).put("natural",natural).put("modified",changed).put("loud",energy)
-                                .put("settleMillis",processingWindow-processingAt).put("observedMillis",now-processingWindow).put("effective",voice.modulationStatus())
-                                .put("videoFrames",videoDecoded.frames.get()-processingVideo).put("playbackSamplesPerCallback",playbackSamples.get()).put("playbackRate",playbackRate.get()).put("processPssKiB",android.os.Debug.getPss()).put("nativeHeapAllocatedBytes",android.os.Debug.getNativeHeapAllocatedSize());
+                                .put("settleMillis",observation.settleMillis()).put("observedMillis",observation.observedMillis()).put("effective",voice.modulationStatus())
+                                .put("videoFrames",observation.video()).put("playbackSamplesPerCallback",playbackSamples.get()).put("playbackRate",playbackRate.get()).put("processPssKiB",android.os.Debug.getPss()).put("nativeHeapAllocatedBytes",android.os.Debug.getNativeHeapAllocatedSize());
                             JSONArray metrics=new JSONArray();for(int index=0;index<34;index++)metrics.put(voice.processingMetric(index));result.put("metrics",metrics);
-                            write("synthetic-voice-processing-result-"+processingStep+".json",result);processingStep++;processingAt=0;
+                            write("synthetic-voice-processing-result-"+processingStep+".json",result);processingStep++;processingAt=0;processingObservation.set(null);
                         }
                     }
                 }
