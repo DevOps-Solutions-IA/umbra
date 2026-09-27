@@ -54,7 +54,7 @@ public class UiDesignTokensTest {
     }
     @Test public void xmlThemeMirrorsJavaTokens() throws Exception {
         Path colors = Path.of("src/main/res/values/colors.xml");
-        String xml = Files.readString(colors);
+        String xml = UiTestFiles.read(colors);
         assertTrue(xml.contains(hex("umbra_background_primary", BACKGROUND_PRIMARY)));
         assertTrue(xml.contains(hex("umbra_surface", SURFACE)));
         assertTrue(xml.contains(hex("umbra_accent_primary", ACCENT_PRIMARY)));

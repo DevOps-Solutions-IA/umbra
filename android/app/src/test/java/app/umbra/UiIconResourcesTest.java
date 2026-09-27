@@ -69,12 +69,12 @@ public class UiIconResourcesTest {
             }
             assertEquals("#FF0E120F", values.get(((Element) root.getElementsByTagName("background").item(0)).getAttributeNS(A, "drawable")));
         }
-        String manifest = Files.readString(SRC.resolve("main/AndroidManifest.xml"));
+        String manifest = UiTestFiles.read(SRC.resolve("main/AndroidManifest.xml"));
         assertTrue(manifest.contains("android:icon=\"@mipmap/ic_launcher\""));
         assertTrue(manifest.contains("android:roundIcon=\"@mipmap/ic_launcher_round\""));
         for (String flavor : new String[]{"connected", "offline"}) {
             Path overlay = SRC.resolve(flavor + "/AndroidManifest.xml");
-            if (Files.exists(overlay)) assertFalse(flavor + " must not override the icon", Files.readString(overlay).contains("android:icon"));
+            if (Files.exists(overlay)) assertFalse(flavor + " must not override the icon", UiTestFiles.read(overlay).contains("android:icon"));
             assertTrue(flavor + " must not ship its own launcher", files(SRC.resolve(flavor + "/res"), ".xml").stream().noneMatch(p -> p.getFileName().toString().startsWith("ic_launcher")));
             assertTrue(flavor + " must not ship raster icons", files(SRC.resolve(flavor + "/res"), ".png").isEmpty());
         }
@@ -85,8 +85,8 @@ public class UiIconResourcesTest {
         String path = values().get("@string/umbra_symbol_path");
         assertNotNull(path);
         for (String d : new String[]{"umbra_symbol", "ic_launcher_foreground", "ic_notification_umbra"})
-            assertTrue(d, Files.readString(RES.resolve("drawable/" + d + ".xml")).contains("android:pathData=\"@string/umbra_symbol_path\""));
-        for (Path p : files(RES, ".xml")) assertFalse(p + " duplicates the symbol geometry", Files.readString(p).contains(path) && !p.endsWith("brand.xml"));
+            assertTrue(d, UiTestFiles.read(RES.resolve("drawable/" + d + ".xml")).contains("android:pathData=\"@string/umbra_symbol_path\""));
+        for (Path p : files(RES, ".xml")) assertFalse(p + " duplicates the symbol geometry", UiTestFiles.read(p).contains(path) && !p.endsWith("brand.xml"));
         Element group = (Element) xml(RES.resolve("drawable/ic_launcher_foreground.xml")).getDocumentElement().getElementsByTagName("group").item(0);
         double s = Double.parseDouble(group.getAttributeNS(A, "scaleX")), tx = Double.parseDouble(group.getAttributeNS(A, "translateX")), ty = Double.parseDouble(group.getAttributeNS(A, "translateY"));
         double max = 0;
@@ -112,8 +112,8 @@ public class UiIconResourcesTest {
         assertClose("vertically centered", 12.0, (top + bottom) / 2, 0.1);
         // The discarded proposals must not remain in production resources.
         for (String discarded : new String[]{"L7.6,13.3 L12,17.1", "A9.5,9.5 0 0,0 21.5,10", "M3.5,3.5 L7.6,3.5 L7.6,20.5"})
-            for (Path p : files(SRC, ".xml")) assertFalse(p + " still contains a discarded symbol", Files.readString(p).contains(discarded));
-        String styles = Files.readString(RES.resolve("values/styles.xml"));
+            for (Path p : files(SRC, ".xml")) assertFalse(p + " still contains a discarded symbol", UiTestFiles.read(p).contains(discarded));
+        String styles = UiTestFiles.read(RES.resolve("values/styles.xml"));
         assertTrue(styles.contains("windowSplashScreenAnimatedIcon\">@drawable/ic_launcher_foreground"));
         assertTrue(styles.contains("windowSplashScreenBackground\">@color/ic_launcher_background"));
     }
@@ -135,7 +135,7 @@ public class UiIconResourcesTest {
     }
 
     @Test public void notificationIconIsAWhiteSilhouette() throws Exception {
-        String text = Files.readString(RES.resolve("drawable/ic_notification_umbra.xml"));
+        String text = UiTestFiles.read(RES.resolve("drawable/ic_notification_umbra.xml"));
         Element root = xml(RES.resolve("drawable/ic_notification_umbra.xml")).getDocumentElement();
         assertEquals("vector", root.getTagName());
         NodeList paths = root.getElementsByTagName("path");
@@ -153,7 +153,7 @@ public class UiIconResourcesTest {
         List<Path> xmls = new ArrayList<>(files(RES, ".xml")); xmls.add(SRC.resolve("main/AndroidManifest.xml"));
         for (Path p : xmls) {
             xml(p); // Well-formed.
-            Matcher m = ref.matcher(Files.readString(p));
+            Matcher m = ref.matcher(UiTestFiles.read(p));
             while (m.find()) assertTrue(p + " references missing " + m.group(1), exists(m.group(1), values));
         }
         for (Path p : files(RES.resolve("drawable"), ".xml")) {
@@ -163,13 +163,13 @@ public class UiIconResourcesTest {
         }
         Pattern java = Pattern.compile("R\\.(drawable|mipmap)\\.([a-z0-9_]+)");
         for (Path p : files(SRC.resolve("main/java"), ".java")) {
-            Matcher m = java.matcher(Files.readString(p));
+            Matcher m = java.matcher(UiTestFiles.read(p));
             while (m.find()) assertTrue(p + " uses missing R." + m.group(1) + "." + m.group(2), exists("@" + m.group(1) + "/" + m.group(2), values));
         }
     }
 
     @Test public void internalIconsShareOneGridAndStroke() throws Exception {
-        String icons = Files.readString(SRC.resolve("main/java/app/umbra/ui/design/Icons.java"));
+        String icons = UiTestFiles.read(SRC.resolve("main/java/app/umbra/ui/design/Icons.java"));
         int count = 0;
         for (Path p : files(RES.resolve("drawable"), ".xml")) {
             String name = p.getFileName().toString().replace(".xml", "");
@@ -198,7 +198,7 @@ public class UiIconResourcesTest {
 
     @Test public void noEmojiOrSymbolCharactersAreUsedAsProductIcons() throws Exception {
         for (Path p : files(SRC.resolve("main/java"), ".java")) {
-            String text = Files.readString(p);
+            String text = UiTestFiles.read(p);
             text.codePoints().forEach(c -> {
                 boolean emoji = (c >= 0x1F000 && c <= 0x1FAFF) || (c >= 0x2600 && c <= 0x27BF) || c == 0xFE0F || (c >= 0x2B00 && c <= 0x2BFF);
                 assertFalse(p + " contains U+" + Integer.toHexString(c), emoji);

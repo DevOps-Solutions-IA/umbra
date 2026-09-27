@@ -22,20 +22,20 @@ public class UiSourcePolicyTest {
         String[] forbidden = {"android.util.Log", "Log.d(", "Log.i(", "Log.w(", "Log.e(", "Log.v(", "printStackTrace", "System.out", "System.err",
             "ClipboardManager", "setPrimaryClip", "setTextIsSelectable(true)", "Linkify", "setAutoLinkMask", "java.net.", "android.webkit"};
         for (Path file : files) {
-            String text = Files.readString(file);
+            String text = UiTestFiles.read(file);
             for (String f : forbidden) assertFalse(file + " uses " + f, text.contains(f));
         }
     }
     @Test public void modelLayerIsFreeOfAndroidAndEngineTypes() throws Exception {
         for (Path file : sources("model")) {
-            String text = Files.readString(file);
+            String text = UiTestFiles.read(file);
             assertFalse(file + " imports Android", text.contains("import android."));
             assertFalse(file + " imports the engine", text.contains("app.umbra.crypto") || text.contains("org.signal"));
         }
     }
     @Test public void screensNeverTouchTheEngineOrStorage() throws Exception {
         for (Path file : sources("screens")) {
-            String text = Files.readString(file);
+            String text = UiTestFiles.read(file);
             for (String f : new String[]{"app.umbra.crypto", "app.umbra.data", "app.umbra.transport", "app.umbra.devices.DeviceService", "Engine ", "Vault", "SharedPreferences"})
                 assertFalse(file + " references " + f, text.contains(f));
         }
