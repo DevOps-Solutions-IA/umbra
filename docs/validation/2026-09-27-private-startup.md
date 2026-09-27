@@ -178,3 +178,16 @@ permanece FAILURE por su matriz debug. La corrección de barrera compila
 con `-PumbraMediaLab=true` (exit 0, R8 real) y 165 pruebas de herramientas
 pasan. La primera invocación Gradle sin esa propiedad falló porque el
 build de laboratorio está deliberadamente deshabilitado por defecto.
+
+En `0b33802`, modulación debug 36355391928 pasó el mute inicial pero falló
+más adelante: `Remote processing mismatch step=1, expected=quiet,
+natural=0, modified=21, loud=22`. El ciclo de cambios del modulador también
+carecía de confirmación del emisor antes de iniciar la ventana del receptor.
+Se extendió la barrera a cada paso, con índice validado y tiempos locales
+registrados; se rechazan confirmaciones de otro paso. La acción se aplica
+una sola vez. No se cambian los límites de settle/observación ni el máximo
+de tres buffers inesperados. Todos los archivos nuevos de coordinación se
+eliminan al inicio y al final del escenario para evitar evidencia residual.
+La regresión del coordinador prueba una confirmación tardía y rechazo de
+índice anterior. El efecto nativo sigue requiriendo evidencia remota real;
+esta prueba de herramientas no se contabiliza como audio ejecutado.

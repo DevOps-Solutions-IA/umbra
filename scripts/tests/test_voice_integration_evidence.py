@@ -4,7 +4,7 @@ import sys
 import unittest
 from unittest.mock import patch, Mock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing, coordinate_mute
+from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing, coordinate_mute, processing_barrier
 import voice_network_evidence as network
 
 class VoiceEvidenceTest(unittest.TestCase):
@@ -59,6 +59,18 @@ class VoiceEvidenceTest(unittest.TestCase):
             bad=good.copy();del bad[field];self.assertFalse(valid_audio(bad))
         for field in ("decodedBuffers","capturedBuffers","receivedAudioPackets"):
             bad=good.copy();bad[field]=0;self.assertFalse(valid_audio(bad))
+
+    def test_processing_waits_for_both_actions_and_rejects_old_step(self):
+        writes=[]
+        def read(serial,*unused):
+            self.assertEqual([],writes)
+            return {"step":1,"applied":True,"elapsedMillis":100 if serial=="a" else 9000}
+        result=processing_barrier(("a","b"),{"a":1,"b":2},10,1,lambda *args:writes.append(args),read)
+        self.assertEqual(2,len(writes));self.assertEqual(9000,result[1]["elapsedMillis"])
+        write=Mock()
+        with self.assertRaises(RuntimeError):
+            processing_barrier(("a","b"),{"a":1,"b":2},10,2,write,lambda *args:{"step":1,"applied":True,"elapsedMillis":100})
+        write.assert_not_called()
 
     def test_mute_waits_for_both_native_confirmations_before_observing(self):
         events=[]

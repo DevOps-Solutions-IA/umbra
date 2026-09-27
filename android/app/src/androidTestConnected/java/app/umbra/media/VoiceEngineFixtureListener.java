@@ -443,7 +443,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                 }
                 if(modulation && resumedEvidence && (!withVideo || videoStage==5)) {
                     String command="synthetic-voice-processing-"+processingStep+".json";
-                    if(processingAt==0 && Files.exists(files.resolve(command))) {
+                    if(processingAt==0 && !Files.exists(files.resolve("synthetic-voice-processing-applied-"+processingStep+".json")) && Files.exists(files.resolve(command))) {
                         JSONObject action=read(command);processingExpected=action.getString("expected");
                         if(caller) {
                             switch(action.getString("action")) {
@@ -459,6 +459,10 @@ public final class VoiceEngineFixtureListener extends RunListener {
                                 default -> throw new AssertionError("Unknown synthetic processing action");
                             }
                         }
+                        write("synthetic-voice-processing-applied-"+processingStep+".json",new JSONObject().put("step",processingStep).put("applied",true).put("elapsedMillis",SystemClock.elapsedRealtime()));
+                    }
+                    if(processingAt==0 && Files.exists(files.resolve("synthetic-voice-processing-observe-"+processingStep+".json"))) {
+                        if(!Files.exists(files.resolve("synthetic-voice-processing-applied-"+processingStep+".json")))throw new AssertionError("Processing observation preceded local action");
                         processingAt=SystemClock.elapsedRealtime();processingWindow=0;
                     }
                     if(processingAt!=0) {
