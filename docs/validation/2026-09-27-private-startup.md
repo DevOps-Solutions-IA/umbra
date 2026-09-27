@@ -112,3 +112,32 @@ La reconstrucción local corregida del perfil vaultLab R8 de ambos flavors y sus
 APK de instrumentación terminó con 0. Las reglas generadas contienen específicamente
 `Engine.connectivity()` y `setOnline(boolean)` manteniendo allowoptimization y
 allowobfuscation. La ejecución del binario corregido en AVD sigue pendiente.
+
+## Modulación: contrato de cierre del arnés
+
+Run **36353247133**, debug y R8, rojo en `lock`. La evidencia previa de voz y
+modulación remota sí se produjo; `closure-observation` registra 1000 ms hasta la
+ventana, 500 ms observados y cero callbacks tardíos. El fallo posterior está en
+`VoiceEngineFixtureListener:486`, `voice.close(); pump(relay,engine)`: después de
+lock/unlock, el fixture intenta hacer fetch con el RelayClient de la generación
+anterior. El nuevo gate rechaza correctamente esa operación. No se habilita una
+reconexión para conservar el comportamiento anterior.
+
+Corrección del fixture: solo en el escenario cuyo lock local realmente se aplicó,
+se exige LOCKED_PRIVATE, media terminal, transmisión denegada y rechazo explícito
+de `relay.poll` con el cliente viejo. Las demás salidas siguen ejecutando su pump
+normal y no toleran errores inesperados. El host exige un marcador adicional de
+esta aserción para aceptar `lock`. Se preservan todos los criterios de audio,
+modulación, ventanas de captura y cancelación. Nueve pruebas del verificador pasan;
+el perfil mediaLab R8 corregido compila. Reejecución real todavía pendiente.
+
+Validación intermedia Android: run 36353999933, HEAD
+`46d6fbc8103acc73088392dd64574a4a1a211901`, checkout
+`962da28827a7e1c924376c84204743ef5ff346b3`, completó ambas matrices
+(debug/R8), connected y offline. Los cuatro recibos descargados indican PASS.
+Las ventanas de observación de aproximadamente 5 segundos registraron cero
+paquetes del UID, cero consultas al hostname controlado y ningún acceso AppOps
+a sensores/scan antes de conectar, después de desconectar y tras force-stop.
+El control positivo connected obtuvo dos consultas DNS en ambas matrices y
+tráfico HTTPS/Signal (26/27 paquetes respectivamente). Esto valida este SHA,
+no sustituye la ejecución final de la corrección del fixture de media.

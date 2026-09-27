@@ -63,6 +63,8 @@ class VoiceEvidenceTest(unittest.TestCase):
     def test_empty_crashed_or_failed_instrumentation_never_passes(self):
         good="engineVoice=PASS\nOK (3 tests)\nINSTRUMENTATION_CODE: -1\n"
         self.assertTrue(valid_report(good))
+        self.assertFalse(valid_report(good,private_lock=True))
+        self.assertTrue(valid_report(good+"\nprivateStartupLock=PASS old relay rejected; no reconnect",private_lock=True))
         for text in ("",good.replace("3 tests","0 tests"),good.replace("engineVoice=PASS",""),good+"INSTRUMENTATION_STATUS_CODE: -2",good+"Process crashed"):
             self.assertFalse(valid_report(text))
 

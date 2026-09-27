@@ -84,6 +84,17 @@ public final class VoiceEngineFixtureListener extends RunListener {
             relay.acknowledge(engine.profile(),envelope.getString("id"));
         }
     }
+    private void finishTransport(RelayClient relay,Engine engine,NativeVoiceSession voice,boolean localLockApplied) throws Exception {
+        if(!localLockApplied) { pump(relay,engine); return; }
+        if(engine.connectivity().getConnectivityState()!=app.umbra.connectivity.ConnectivityService.State.LOCKED_PRIVATE ||
+                voice.transmitVoiceAllowed() || (voice.state()!=NativeVoiceSession.State.FAILED && voice.state()!=NativeVoiceSession.State.ENDED))
+            throw new AssertionError("Lock did not revoke connectivity and native media");
+        // The synthetic gate was unlocked again above to prove old grants stay dead.
+        // Evaluate local records separately: the required failure must be in RelayClient.
+        JSONObject profile=engine.profile();
+        try { relay.poll(profile,0);throw new AssertionError("Old relay resumed after lock/unlock"); }
+        catch(SecurityException expected) { /* Exact negative transport assertion; no reauthorization or I/O. */ }
+    }
     // Assertions over output generated and parsed by the pinned native library, not an SDP parser.
     private static void auditNativeDescriptions(JSONObject row,String turnUrl,String relayOverride) throws Exception {
         boolean tls=turnUrl.startsWith("turns:");
@@ -231,7 +242,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
             if(withVideo) { voice.syntheticVideo(()->new SyntheticVideoCapturer(caller,videoCaptured));voice.setRemoteVideoSink(videoDecoded); }
             int videoStage=0,videoAudioBaseline=0,videoFrameBaseline=0,videoCaptureBaseline=0;long videoOffAt=0,videoOffRequestedNanos=0;
             boolean videoRequested=false,videoAccepted=false;
-            boolean evidence=false,muting=false,mutedEvidence=false,resuming=false,resumedEvidence=false,terminationApplied=false;
+            boolean evidence=false,muting=false,mutedEvidence=false,resuming=false,resumedEvidence=false,terminationApplied=false,localLockApplied=false;
             boolean initialProcessingEvidence=false,initialNatural=false;
             boolean cameraDeniedChecked=false,cameraDeniedEvidence=false;int cameraDeniedBaseline=0;
             int processingStep=0,processingNatural=0,processingModified=0,processingLoud=0,processingVideo=0;
@@ -241,7 +252,10 @@ public final class VoiceEngineFixtureListener extends RunListener {
                 boolean expiryExpected=evidence &&
                     Files.exists(files.resolve("synthetic-voice-loss.json")) &&
                     read("synthetic-voice-loss.json").optString("action").equals("credential-expiry");
-                pump(relay,engine,id,voice,expiryExpected,credential.getLong("expires"));
+                if(localLockApplied) {
+                    if(engine.connectivity().getConnectivityState()!=app.umbra.connectivity.ConnectivityService.State.LOCKED_PRIVATE)
+                        throw new AssertionError("Connectivity restored during native closure");
+                } else pump(relay,engine,id,voice,expiryExpected,credential.getLong("expires"));
                 if(voice.state()==NativeVoiceSession.State.FAILED && !evidence) {
                     if(!expectedRejection) throw new AssertionError("Native authenticated voice failed before audio: "+voice.failureStage()+"; "+voice.negotiationDiagnostic()+"; captured="+captured.get()+", decoded="+decoded.get());
                     if(captured.get()!=0 || decoded.get()!=0 || videoCaptured.get()!=0) throw new AssertionError("Rejected TURN path captured or decoded audio");
@@ -279,7 +293,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     if(action.equals("device-revoked")) devices.revoke(engine.id());
                     if(action.equals("storage-failure")) { db.failBucket="calls";voice.close(); }
                     if(action.equals("lock")) {
-                        engine.calls().cancelLocal();db.gate.lock();db.gate.unlock();
+                        localLockApplied=true;engine.calls().cancelLocal();db.gate.lock();db.gate.unlock();
                         try { lease.snapshot();throw new AssertionError("Old media authorization survived lock/unlock"); }
                         catch(SecurityException expected) { /* New unlock cannot restore old consent. */ }
                     }
@@ -476,14 +490,14 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     }
                 }
                 if(Files.exists(files.resolve("synthetic-voice-stop.json"))) {
-                    voice.close(); pump(relay,engine); break;
+                    voice.close(); finishTransport(relay,engine,voice,localLockApplied); break;
                 }
                 Thread.sleep(100);
             }
             if(withVideo && !expectedRejection && videoStage!=5)throw new AssertionError("Missing decoded bidirectional video/off/reactivation evidence; stage="+videoStage+", native="+voice.videoStatus()+", failure="+voice.failureStage()+", sourceFrames="+videoCaptured.get()+", sinkFrames="+voice.decodedVideoFrames()+", validPatterns="+videoDecoded.frames.get()+", phaseMask="+videoDecoded.phases.get()+", counters="+voice.videoStats());
             if(modulation && processingStep!=10)throw new AssertionError("Incomplete remote modulation sequence");
             if(!evidence || (!expectedRejection && !resumedEvidence)) throw new AssertionError("Missing native audio or mute/unmute evidence");
-            voice.close(); pump(relay,engine);
+            voice.close(); finishTransport(relay,engine,voice,localLockApplied);
             if(configuration.optBoolean("admissionRevocationCheck")) {
                 // Media is already closed. Test actual AVD -> HTTPS authorization independently
                 // of local revocation knowledge; never confuse DevicePolicy revocation with this.
@@ -512,6 +526,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     .put("state",engine.admission().getAdmissionState().name()));
             }
             Bundle status=new Bundle(); status.putString("engineVoice",expectedRejection?"PASS invalid TURN rejected before capture":"PASS independent Android Engine/SQLite/Signal/HTTPS + native TURN decoded synthetic peer audio");
+            if(localLockApplied) status.putString("privateStartupLock","PASS old relay rejected; no reconnect");
             InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
             }
         } finally {

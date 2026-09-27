@@ -63,8 +63,9 @@ def valid_processing(value, expected, *, video=False):
     return False
 
 
-def valid_report(report):
-    return ("engineVoice=PASS" in report and re.search(r"^OK \(3 tests\)$",report,re.M)
+def valid_report(report, *, private_lock=False):
+    return ((not private_lock or "privateStartupLock=PASS old relay rejected; no reconnect" in report)
+            and "engineVoice=PASS" in report and re.search(r"^OK \(3 tests\)$",report,re.M)
             and "INSTRUMENTATION_CODE: -1" in report
             and not re.search(r"INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b",report)
             and not any(x in report for x in ("FAILURES!!!","INSTRUMENTATION_FAILED","Process crashed")))
@@ -359,7 +360,7 @@ def main():
                 for stream in streams: stream.flush()
                 for name in ("engine-voice-a.log","engine-voice-b.log"):
                     report=(args.reports/name).read_text()
-                    if not valid_report(report):
+                    if not valid_report(report,private_lock=args.scenario=="lock"):
                         raise RuntimeError("Missing/failed authenticated voice evidence: "+name)
             if admission_revocation_check:
                 admission_results=[json.loads(run(serial,"shell","run-as",PACKAGE,"cat","files/synthetic-voice-admission-result.json").stdout) for serial in (args.a,args.b)]
