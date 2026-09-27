@@ -131,3 +131,31 @@ def test_pooled_challenge_proofs_bind_operation_and_remain_one_use(admission):
                            "X-Umbra-Proof": sign("proof", device, bound.fields)})
     assert client.send(target).status_code == 401  # Passed admission, missing mailbox capability.
     assert client.send(target).status_code == 403
+
+
+def test_revocation_while_handler_waits_revalidates_inside_transaction(admission):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    app, client, device, request, credential, revoke = admission
+    assert client.post('/v1/admission/requests', json={'wire': request}).status_code == 201
+    assert client.post('/v1/admission/credentials', json={'wire': credential}).status_code == 201
+    entered, release = threading.Event(), threading.Event()
+
+    @app.post('/private-synthetic-wait')
+    def private_wait():
+        entered.set()
+        assert release.wait(5), 'Synthetic transaction barrier was not released'
+        app.state.database.issue_invite()
+        return {'written': True}
+
+    pending = authenticate(client, device, credential, client.build_request('POST', '/private-synthetic-wait'))
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(client.send, pending)
+        try:
+            assert entered.wait(5), 'Authenticated handler never reached barrier'
+            assert client.post('/v1/admission/revocations', json={'wire': revoke}).status_code == 201
+        finally:
+            release.set()
+        assert future.result(timeout=5).status_code == 403
+    with app.state.database.connect() as db:
+        assert db.execute('SELECT count(*) FROM invites').fetchone()[0] == 0

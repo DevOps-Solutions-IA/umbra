@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,6 +57,35 @@ def main():
             stdout=stream, stderr=subprocess.STDOUT, timeout=180)
     if not valid_report(log.read_text(), result.returncode):
         raise RuntimeError(f'Admission instrumentation did not pass all three cases: {log}')
+    # Keep prepare instrumentation alive, prove its PID, kill it, then verify in a new process.
+    command=[*adb,'shell','am','instrument','-w','-r','-e','class','app.umbra.DeviceSignalTest',
+             '-e','listener','app.umbra.AdmissionRestartFixtureListener','-e','admissionPhase']
+    runner=package+'.test/androidx.test.runner.AndroidJUnitRunner'
+    before=args.reports/'admission-before-kill.log'
+    with before.open('w') as stream:
+        process=subprocess.Popen([*command,'prepare',runner],stdout=stream,stderr=subprocess.STDOUT)
+        try:
+            deadline=time.monotonic()+45
+            while 'admissionRestart=READY' not in before.read_text():
+                if process.poll() is not None or time.monotonic()>=deadline:
+                    raise RuntimeError('Admission restart preparation failed')
+                time.sleep(0.1)
+            pid=subprocess.check_output([*adb,'shell','pidof',package],text=True,timeout=10).strip()
+            if not re.fullmatch(r'\d+',pid): raise RuntimeError('Missing live target before admission force-stop')
+            subprocess.run([*adb,'shell','am','force-stop',package],check=True,timeout=10)
+            process.wait(timeout=20)
+            stopped=subprocess.run([*adb,'shell','pidof',package],capture_output=True,text=True,timeout=10)
+            if stopped.returncode!=1 or stopped.stdout.strip(): raise RuntimeError('Admission target survived force-stop')
+        finally:
+            if process.poll() is None:
+                subprocess.run([*adb,'shell','am','force-stop',package],check=True,timeout=10)
+                process.terminate();process.wait(timeout=10)
+    after=args.reports/'admission-after-kill.log'
+    with after.open('w') as stream:
+        result=subprocess.run([*command,'verify',runner],stdout=stream,stderr=subprocess.STDOUT,timeout=90)
+    if not valid_report(after.read_text(),result.returncode) or 'admissionRestart=PASS' not in after.read_text():
+        raise RuntimeError('Admission force-stop restart not verified')
+    evidence['forceStopAfterCommittedRevocation']='PASS; synthetic SQLite, not death during commit or hardware Vault'
     evidence['result'] = 'PASS'
     (args.reports / 'receipt.json').write_text(json.dumps(evidence, indent=2) + '\n')
 

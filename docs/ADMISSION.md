@@ -188,3 +188,12 @@ not production encrypted storage. The dedicated Vault test uses actual SQLite,
 AES-GCM and AndroidKeyStore with test-created software-capable keys; it does not
 weaken production key preparation or prove TEE/StrongBox. Physical hardware,
 radio and independent security review remain separate acceptance requirements.
+
+A verifier's freshly issued timestamp may be one wall-clock second ahead of the
+client at receipt. RelayClient can wait at most 2.5 monotonic seconds for a lead
+of at most two seconds, outside database transactions, checking the original
+vault/admission/transport lease every 50 ms. It then applies the unchanged strict
+challenge validity checks. Larger or frozen clock differences fail closed. No
+challenge/credential TTL is extended. Expiry during signing or verifier restart
+permits at most one fresh challenge attempt with the frozen body and original
+lease; no ratchet is rewound and no stale proof is replayed.

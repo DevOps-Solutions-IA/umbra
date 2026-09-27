@@ -20,7 +20,7 @@ public final class SqliteDeviceRecords implements Records, AutoCloseable {
     public volatile Runnable beforeTransaction;
     public SqliteDeviceRecords() { this(null,false); }
     public SqliteDeviceRecords(String fixture, boolean existing) {
-        if(fixture!=null && !Set.of("location-restart","voice-restart").contains(fixture)) throw new SecurityException("Unknown synthetic fixture");
+        if(fixture!=null && !Set.of("location-restart","voice-restart","admission-restart").contains(fixture)) throw new SecurityException("Unknown synthetic fixture");
         var context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         if (!(BuildConfig.DEBUG && context.getPackageName().endsWith(".dev"))
                 && !context.getPackageName().equals("app.umbra.privatechat.medialab")

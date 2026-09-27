@@ -36,23 +36,28 @@ class AndroidExecutionTests(unittest.TestCase):
 
     def test_skip_cannot_be_hidden_by_summary(self):
         with self.assertRaises(SystemExit):
-            self.run_single('INSTRUMENTATION_STATUS_CODE: -3\nOK (34 tests)\nINSTRUMENTATION_CODE: -1\n')
+            self.run_single('INSTRUMENTATION_STATUS_CODE: -3\nOK (37 tests)\nINSTRUMENTATION_CODE: -1\n')
 
     def test_missing_completion_is_failure(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (34 tests)\n')
+            self.run_single('OK (37 tests)\n')
 
     def test_adb_failure_is_not_overridden_by_test_summary(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (34 tests)\nINSTRUMENTATION_CODE: -1\n', returncode=1)
+            self.run_single('OK (37 tests)\nINSTRUMENTATION_CODE: -1\n', returncode=1)
 
-    def test_thirty_four_executed_checks_and_completion_pass(self):
-        self.run_single('OK (34 tests)\nINSTRUMENTATION_CODE: -1\n')
+    def test_thirty_seven_executed_checks_and_completion_pass(self):
+        self.run_single('OK (37 tests)\nINSTRUMENTATION_CODE: -1\n')
 
     def test_connected_requires_new_surface_lifecycle_checks(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (34 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
-        self.run_single('OK (36 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
+            self.run_single('OK (37 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
+        self.run_single('OK (39 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
+
+    def test_pre_admission_suite_counts_are_no_longer_complete(self):
+        for flavor,count in [('connected',36),('offline',34)]:
+            with self.subTest(flavor=flavor), self.assertRaises(SystemExit):
+                self.run_single(f'OK ({count} tests)\nINSTRUMENTATION_CODE: -1\n',flavor=flavor)
 
     def test_physical_device_rejected_before_install_or_radio_changes(self):
         with tempfile.TemporaryDirectory() as folder:

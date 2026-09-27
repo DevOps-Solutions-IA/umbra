@@ -41,7 +41,21 @@ public final class RelayClient implements AutoCloseable {
             super("Servidor rechazó la operación (HTTP "+status+")"); this.freshChallenge=freshChallenge;
         }
     }
-    @FunctionalInterface private interface Authorization { void check() throws Exception; }
+    @FunctionalInterface interface Authorization { void check() throws Exception; }
+    @FunctionalInterface interface Pause { void sleep(long millis) throws InterruptedException; }
+    /** A fresh verifier timestamp may precede the next local wall-clock second. Wait boundedly;
+     * never accept a future/expired proof, extend its TTL, hold a DB transaction or acquire a new lease. */
+    static void awaitChallengeStart(long issued,java.util.function.LongSupplier wall,
+            java.util.function.LongSupplier monotonic,Authorization authorization,Pause pause) throws Exception {
+        long began=monotonic.getAsLong();
+        while(wall.getAsLong()<issued) {
+            authorization.check();
+            if(issued-wall.getAsLong()>2 || monotonic.getAsLong()-began>=2_500_000_000L)
+                throw new SecurityException("Admission challenge clock mismatch");
+            pause.sleep(50);
+        }
+        authorization.check();
+    }
     private JSONObject request(String method, String path, String token, JSONObject body) throws Exception {
         return request(method, path, token, body, () -> {});
     }
@@ -82,10 +96,15 @@ public final class RelayClient implements AutoCloseable {
             // Retire before attempting the request, including on failure. Never replay a possession proof.
             challenge=challenges.removeFirst().forOperation(operation);
         }
-        String proof=admission.prove(challenge,Bytes.sha256(Bytes.utf8(base)),operation);
         try {
+            awaitChallengeStart(challenge.issuedAt(),Bytes::now,System::nanoTime,() -> { allowed(); check.check(); },Thread::sleep);
+            String proof=admission.prove(challenge,Bytes.sha256(Bytes.utf8(base)),operation);
             return requestRaw(method,path,token,frozen,check,java.util.Map.of("X-Umbra-Credential",credential.wire(),
                 "X-Umbra-Challenge",challenge.encode(),"X-Umbra-Proof",proof));
+        } catch(app.umbra.admission.AdmissionChallenge.Expired expired) {
+            if(renewed) throw expired;
+            synchronized(challenges) { challenges.clear(); }
+            return admittedRequest(method,path,token,frozen,check,true);
         } catch(HttpFailure failure) {
             if(!failure.freshChallenge || renewed) throw failure;
             synchronized(challenges) { challenges.clear(); }

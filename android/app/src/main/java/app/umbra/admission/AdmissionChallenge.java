@@ -33,12 +33,15 @@ public record AdmissionChallenge(String realmId,String credentialId,String crede
         return new AdmissionChallenge(realmId,credentialId,credentialHash,nonce,verifierHash,
             AdmissionCodec.digest(operation),issuedAt,expiresAt);
     }
+    public static final class Expired extends SecurityException {
+        private Expired() { super("Admission challenge expired"); }
+    }
     public void validate(AdmissionCredential c,String verifier,String operation,long now) {
         if(!realmId.equals(c.realmId()) || !credentialId.equals(c.credentialId()) ||
                 !credentialHash.equals(Bytes.sha256(Bytes.utf8(c.wire()))) || !verifierHash.equals(verifier) ||
                 !operationHash.equals(operation)) throw AdmissionCodec.invalid();
         if(now<issuedAt) throw new SecurityException("Admission challenge not yet valid");
-        if(now>=expiresAt) throw new SecurityException("Admission challenge expired");
+        if(now>=expiresAt) throw new Expired();
     }
     static String prove(byte[] seed,AdmissionChallenge challenge) { return AdmissionCodec.sign("proof",seed,challenge.fields()); }
     public void verifyProof(AdmissionCredential credential,String wire) {

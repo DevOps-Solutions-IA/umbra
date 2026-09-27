@@ -105,3 +105,40 @@ un realm cuyo pin falta pero conserva registros, con regresiones Java/SQLite.
 Benchmark local sintético (`python scripts/benchmark_admission.py`, exit0,
 100 muestras): p95 verificación credential 0,147 ms, proof 0,100 ms, autorización
 SQLite 4,168 ms. No medición Android ni prueba de carga o capacidad productiva.
+
+## Diagnóstico temporal y extensión de aceptación
+
+HEAD `6c3914f093beb7e46702cdbc26a2c384b782df95`, checkout
+`bbd08fa380e5ba540b1d40710ffc52ba53a6250e`: modulación **36310120793 FAILURE**
+en ambas matrices con `Admission challenge not yet valid`. Esto demuestra que
+el reloj local todavía precedía el issuedAt del relay; no era autenticación
+TURN ni un permiso de captura. Se añade espera breve acotada documentada en el
+protocolo, manteniendo la comprobación estricta posterior, y regresiones de
+reloj detenido, diferencia excesiva y lease invalidado durante la espera.
+La siguiente CI debe probar la corrección; todavía no se declara resuelto.
+
+Sobre 6c3914f, admisión **36310120795 SUCCESS** y contraseña **36310120749 SUCCESS**;
+Verify aprobó guard, backend/core y contenedor, Android aún pendiente al consultar.
+Voz R8 **36310120774 FAILURE**, no aceptación final.
+
+Aceptación local ampliada, `python scripts/test_relay_integration.py` exit0:
+A2 vinculado pero NOT_ADMITTED; denegación por API; aprobación propia;
+A1 revocado primero en el relay, HTTP403 antes de sincronizar el cliente;
+A2 y B1 mantienen admisión y entregan mensaje Signal real por HTTPS. Estado
+revocado persiste al recrear Engine (no se equipara a proceso Android muerto).
+
+Se añade force-stop de proceso Android después de commit de revocación, pendiente
+de ejecutar en CI. El arnés media comprueba además HTTP403 pre-admission desde
+Android mediante solicitudes directas, antes de instalar credencial; la ruta
+TURN sigue siendo una comprobación default-deny, no un issuer productivo nuevo.
+
+Verify 36310120712 terminó FAILURE: Android ejecutó **39 casos con OK**, pero el
+runner exigía el total histórico36. El artefacto descargado muestra los tres
+DeviceAdmissionTest adicionales, sin skip/fallo. Se actualiza el total exigido
+a39 connected /37 offline y se añade regresión que rechaza el total antiguo;
+la siguiente CI debe ejecutar también offline. No se reduce cobertura ni umbral.
+
+Pruebas locales posteriores: 203 backend exit0 (incluye revocación mientras un
+handler HTTP espera antes de escribir), suites JVM de ambas variantes y builds
+androidTest exit0. Laboratorio R8 con listener de reinicio compilado, aún no
+se cuenta ejecutado. Los recibos de CI anteriores permanecen históricos.
