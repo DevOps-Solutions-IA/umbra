@@ -28,38 +28,30 @@ public record ConnectivityPresentation(State state, String chip, Tone tone, Glyp
     public static ConnectivityPresentation of(String engineState, boolean offlineEdition, boolean canConnect,
                                               boolean nearbyActive, boolean relayKnown, Service service) {
         State s = State.fromEngine(engineState);
-        String nearby = nearbyActive ? "Nearby activo · Bluetooth autorizado por ti" : "Nearby detenido";
+        String nearby = nearbyActive ? "Cercanía activa" : "Cercanía detenida";
         String svc = s != State.CONNECTED ? null : switch (service) {
-            case RESPONDED -> "El servidor privado respondió en la última sincronización.";
-            case UNREACHABLE -> "Sin respuesta del servidor privado. Los mensajes quedan pendientes.";
-            case NOT_OBSERVED -> "Aún no hay sincronización con el servidor en esta sesión.";
+            case RESPONDED -> "Servidor respondió";
+            case UNREACHABLE -> "Servidor sin respuesta";
+            case NOT_OBSERVED -> "Sin sincronizar aún";
         };
         if (offlineEdition)
-            return new ConnectivityPresentation(s, nearbyActive ? "Offline · Nearby activo" : "Modo offline · sin red",
-                nearbyActive ? Tone.OFFLINE : Tone.NEUTRAL, Glyph.OFFLINE_BLUETOOTH, "Edición offline",
-                "Esta edición no tiene permiso de internet. Solo puede comunicarse por Bluetooth cuando tú activas Nearby.",
+            return new ConnectivityPresentation(s, nearbyActive ? "Cercanía activa" : "Sin conexión",
+                nearbyActive ? Tone.OFFLINE : Tone.NEUTRAL, Glyph.OFFLINE_BLUETOOTH, "Edición sin internet", "Solo cercanía por Bluetooth.",
                 false, false, nearby, null);
         return switch (s) {
             case LOCKED_PRIVATE -> new ConnectivityPresentation(s, "Bloqueada · sin conexión", Tone.NEUTRAL, Glyph.NETWORK_OFF,
-                "Bloqueada · sin conexión", "Con la bóveda bloqueada UMBRA no abre conexiones.", false, false, nearby, null);
-            case UNLOCKED_OFFLINE -> new ConnectivityPresentation(s, nearbyActive ? "Sin red · Nearby activo" : "Sin conexión", Tone.NEUTRAL, Glyph.NETWORK_OFF,
-                "Red deshabilitada",
-                canConnect ? "Desbloquear no conecta. Pulsa «Conectar» cuando quieras usar el servidor privado."
-                    : relayKnown ? "Conectar requiere que este dispositivo esté admitido y que la bóveda siga abierta."
-                    : "Configura primero el servidor privado y la admisión de este dispositivo.",
+                "Bloqueada · sin conexión", "", false, false, nearby, null);
+            case UNLOCKED_OFFLINE -> new ConnectivityPresentation(s, nearbyActive ? "Sin red · cercanía activa" : "Sin conexión", Tone.NEUTRAL, Glyph.NETWORK_OFF,
+                "Sin conexión", canConnect ? "" : relayKnown ? "Requiere admisión vigente." : "Configura servidor y admisión.",
                 canConnect && relayKnown, false, nearby, null);
-            case CONNECTING -> new ConnectivityPresentation(s, "Habilitando red…", Tone.WARNING, Glyph.CLOUD,
-                "Habilitando red", "Solicitando el permiso de red al motor.", false, true, nearby, null);
+            case CONNECTING -> new ConnectivityPresentation(s, "Conectando…", Tone.WARNING, Glyph.CLOUD,
+                "Conectando…", "", false, true, nearby, null);
             case CONNECTED -> new ConnectivityPresentation(s, "Red habilitada", Tone.ACCENT, Glyph.CLOUD,
-                "Red habilitada por ti",
-                "UMBRA puede usar el servidor privado mientras la bóveda siga abierta. Si la red cambia o se pierde, se deshabilita y no se reconecta sola.",
-                false, true, nearby, svc);
-            case DISCONNECTING -> new ConnectivityPresentation(s, "Deshabilitando red…", Tone.NEUTRAL, Glyph.CLOUD_OFF,
-                "Deshabilitando red", "Cerrando el trabajo de red registrado.", false, false, nearby, null);
+                "Red habilitada", "No reconecta sola.", false, true, nearby, svc);
+            case DISCONNECTING -> new ConnectivityPresentation(s, "Desconectando…", Tone.NEUTRAL, Glyph.CLOUD_OFF,
+                "Desconectando…", "", false, false, nearby, null);
             case OFFLINE_ERROR -> new ConnectivityPresentation(s, "Red interrumpida", Tone.WARNING, Glyph.CLOUD_OFF,
-                "La red se interrumpió",
-                "Se perdió la red, cambió o la admisión dejó de ser válida. UMBRA no reconecta sola: vuelve a pulsar «Conectar» si quieres.",
-                canConnect && relayKnown, false, nearby, null);
+                "Red interrumpida", "No reconecta sola.", canConnect && relayKnown, false, nearby, null);
         };
     }
 

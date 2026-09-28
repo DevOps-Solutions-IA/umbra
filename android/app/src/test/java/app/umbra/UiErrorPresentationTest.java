@@ -33,7 +33,8 @@ public class UiErrorPresentationTest {
     }
     @Test public void identityChangeErrorUsesPlainLanguage() {
         ErrorPresentation e = ErrorPresentation.of(ErrorKind.IDENTITY_CHANGED);
-        assertTrue(e.body().startsWith("La identidad criptográfica de este contacto cambió."));
+        assertEquals("Identidad cambió", e.title());
+        assertEquals("Verifica de nuevo antes de continuar.", e.body());
         assertFalse(e.retryable());
     }
 }

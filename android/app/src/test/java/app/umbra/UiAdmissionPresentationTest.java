@@ -29,19 +29,21 @@ public class UiAdmissionPresentationTest {
             assertNotEquals(s.name(), Glyph.VERIFIED, p.glyph());
             assertFalse(s.name(), p.title().toLowerCase(Locale.ROOT).contains("verificad"));
         }
-        assertTrue(of(Status.ADMITTED).body().contains("No verifica a tus contactos"));
+        assertEquals("No verifica contactos ni conecta.", of(Status.ADMITTED).body());
+        assertTrue(Help.ADMISSION.lines.contains("Estar admitido no verifica contactos."));
     }
     @Test public void realmConfigurationDoesNotImplyAdmission() {
         AdmissionPresentation configured = of(Status.NOT_ADMITTED);
         assertFalse(configured.admitted());
-        assertTrue(configured.title().startsWith("Entorno UMBRA configurado"));
-        assertFalse(configured.title().contains("autorizado"));
-        assertTrue(of(Status.UNCONFIGURED).body().contains("no admite este dispositivo"));
+        assertEquals("Sin admisión", configured.title());
+        assertEquals("Entorno configurado.", configured.body());
+        assertEquals("Configurar el entorno no admite el dispositivo.", of(Status.UNCONFIGURED).body());
     }
     @Test public void pendingRequestIsGeneratedNotReceived() {
         AdmissionPresentation pending = of(Status.REQUEST_PENDING);
-        assertEquals("Solicitud generada para compartir", pending.title());
-        assertTrue(pending.body().contains("no sabe si el administrador la recibió"));
+        assertEquals("Pendiente", pending.title());
+        assertEquals("Generada · no recibida.", pending.body());
+        assertTrue(Help.ADMISSION.lines.contains("Nada se envía solo: se comparten archivos."));
         assertTrue(pending.canImportDecision());
         assertTrue(pending.canExportRequest());
         assertFalse("no local approval", pending.canCreateRequest());
@@ -53,14 +55,15 @@ public class UiAdmissionPresentationTest {
         AdmissionPresentation credentialExpired = AdmissionPresentation.of("EXPIRED", false, false);
         assertNotEquals(requestExpired.title(), credentialExpired.title());
         assertTrue(credentialExpired.body().contains("renovación autorizada"));
-        assertTrue(credentialExpired.body().contains("no renueva por sí sola"));
+        assertTrue(credentialExpired.body().contains("no se renueva sola"));
         AdmissionPresentation revoked = of(Status.REVOKED);
         assertEquals(Tone.BLOCKED, revoked.tone());
         assertFalse("no bypass", revoked.canCreateRequest() || revoked.canImportDecision() || revoked.canImportRealm());
-        assertTrue(revoked.body().contains("no se borraron"));
+        assertTrue(revoked.body().contains("no se borraron tus datos"));
         AdmissionPresentation invalid = of(Status.INVALID);
         assertFalse(invalid.canCreateRequest() || invalid.canImportRealm() || invalid.canImportDecision());
         assertTrue(invalid.body().contains("no los repara"));
+        assertEquals("Sin lectura", AdmissionPresentation.unreadable().title());
         assertFalse(AdmissionPresentation.notRead().admitted());
     }
     @Test public void securityCopyAvoidsAbsoluteClaims() {
@@ -70,7 +73,8 @@ public class UiAdmissionPresentationTest {
         for (String banned : new String[]{"100%", "imposible", "anonimato total", "borrado remoto", "datos eliminados"})
             assertFalse(banned, text.contains(banned));
         assertTrue(AdmissionPresentation.OFFLINE_REVOCATION_NOTE.contains("no borra"));
-        assertTrue(AdmissionPresentation.REALM_IMPORT_REJECTED.contains("nunca acepta otra autoridad"));
+        assertTrue(AdmissionPresentation.REALM_IMPORT_REJECTED.contains("se conserva la actual"));
+        assertTrue(Help.ADMISSION.lines.contains("Otra autoridad se rechaza y se conserva la anterior."));
     }
     @Test public void importDispatchIsByDocumentedPrefixOnly() {
         assertEquals(AdmissionImport.Kind.REALM, AdmissionImport.classify("umbra:realm:1:abc:def:0123\n").kind());

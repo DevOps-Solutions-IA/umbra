@@ -16,7 +16,7 @@ public class UiCallPresentationTest {
         CallPresentation incoming = CallPresentation.of("INCOMING", null);
         assertTrue(incoming.incoming());
         assertFalse(incoming.live());
-        assertTrue(incoming.detail().contains("no activa tu micrófono ni tu cámara"));
+        assertEquals("Micrófono y cámara piden confirmación.", incoming.detail());
     }
     @Test public void terminalStatesAreNotLive() {
         for (String s : new String[]{"CANCELLED", "REJECTED", "BUSY", "EXPIRED", "ENDED", "FAILED", "NOT_SELECTED"}) {
@@ -38,12 +38,14 @@ public class UiCallPresentationTest {
         assertFalse("closed after last frame", VideoPresentation.of("ACTIVE", now, now - 100, now - 50).cameraTransmitting());
         assertEquals("Esperando imagen…", VideoPresentation.of("WAITING_FOR_FRAME", now, 0, 0).remote());
         assertFalse(VideoPresentation.of(null, now, 0, 0).remoteVisible());
-        assertEquals("Bruno solicita activar video.", VideoPresentation.requestHeadline("Bruno"));
+        assertEquals("Bruno pide video", VideoPresentation.requestHeadline("Bruno"));
     }
     @Test public void locationSummaryStatesWhoHowLongAndPrecision() {
         var draft = LocationShareDraft.live(LocationShareDraft.Precision.APPROXIMATE, 3600);
         var lines = draft.summary("Bruno", 2);
-        assertEquals("Quién la recibirá", lines.get(0)[0]);
+        assertEquals("Para", lines.get(0)[0]);
+        assertEquals("Duración", lines.get(1)[0]);
+        assertEquals("Precisión", lines.get(2)[0]);
         assertEquals("Bruno · 2 dispositivos aprobados", lines.get(0)[1]);
         assertTrue(lines.get(1)[1].contains("1 hora"));
         assertTrue(lines.get(2)[1].startsWith("Aproximada"));

@@ -10,7 +10,7 @@ public class UiMessagePresentationTest {
         assertEquals("Pendiente", MessageItem.Delivery.ofEngine("Pendiente").label());
         assertEquals("Entregado", MessageItem.Delivery.ofEngine("Entregado").label());
         assertEquals(Tone.SUCCESS, MessageItem.Delivery.ofEngine("Entregado").tone());
-        assertEquals("Enviado por Bluetooth", MessageItem.Delivery.ofEngine("Enlace Bluetooth").label());
+        assertEquals("Por Bluetooth", MessageItem.Delivery.ofEngine("Enlace Bluetooth").label());
         assertEquals(Glyph.RETRY, MessageItem.Delivery.failed().glyph());
     }
     @Test public void filesAndImagesAreDistinguished() {

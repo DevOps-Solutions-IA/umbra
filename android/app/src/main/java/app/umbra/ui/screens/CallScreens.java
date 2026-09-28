@@ -34,8 +34,8 @@ public final class CallScreens {
 
     public static Screen call(Ui ui, CallState s, CallActions a, Handles handles) {
         LinearLayout top = ui.column();
-        top.addView(ui.topBar(a::minimize, ui.titleBlock(s.videoMode() ? "Videollamada" : "Llamada de voz",
-            ui.chip(Tone.NEUTRAL, Glyph.SHIELD_CHECK, "Cifrada · retransmisor autorizado"))));
+        top.addView(ui.topBar(a::minimize, ui.titleBlock(s.videoMode() ? "Videollamada" : "Llamada",
+            ui.chip(Tone.NEUTRAL, Glyph.SHIELD_CHECK, "Cifrada")), ui.helpButton(Help.CALL)));
         LinearLayout body = ui.column(); body.setGravity(Gravity.CENTER_HORIZONTAL);
 
         if (s.videoMode()) body.addView(videoStage(ui, s, a));
@@ -60,7 +60,7 @@ public final class CallScreens {
             Glyph glyph = s.modulator().microphoneSilenced() ? Glyph.MIC_OFF : s.modulator().modulatedActive() ? Glyph.VOICE : Glyph.MIC;
             TextView audio = ui.chip(tone, glyph, s.modulator().transmission()); audio.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
             indicators.addView(audio);
-        } else if (!s.call().terminal()) indicators.addView(ui.chip(Tone.NEUTRAL, Glyph.MIC_OFF, "Micrófono no autorizado · no se transmite audio"));
+        } else if (!s.call().terminal()) indicators.addView(ui.chip(Tone.NEUTRAL, Glyph.MIC_OFF, "Micrófono sin autorizar"));
         if (s.video() != null) indicators.addView(ui.chip(s.video().cameraTone(), s.video().cameraTransmitting() ? Glyph.VIDEO : Glyph.VIDEO_OFF, s.video().camera()));
         body.addView(indicators, ui.margins(Ui.match(), 12, 8));
 
@@ -74,18 +74,18 @@ public final class CallScreens {
         LinearLayout controls = ui.column();
         if (s.mediaSession()) {
             LinearLayout row = ui.row(); row.setGravity(Gravity.CENTER);
-            row.addView(spaced(ui, ui.callControl(s.muted() ? Glyph.MIC_OFF : Glyph.MIC, s.muted() ? "Activar micrófono" : "Silenciar", s.muted() ? "Silenciado" : "Micrófono activo", s.muted(), false, true, () -> a.mute(!s.muted()))));
-            row.addView(spaced(ui, ui.callControl(Glyph.SPEAKER, "Altavoz", "Elegir salida", false, false, true, a::audioOutput)));
+            row.addView(spaced(ui, ui.callControl(s.muted() ? Glyph.MIC_OFF : Glyph.MIC, s.muted() ? "Activar" : "Silenciar", s.muted() ? "Silenciado" : null, s.muted(), false, true, () -> a.mute(!s.muted()))));
+            row.addView(spaced(ui, ui.callControl(Glyph.SPEAKER, "Salida", null, false, false, true, a::audioOutput)));
             boolean modAvail = s.features().available(Feature.VOICE_MODULATION);
             String voiceState = s.modulator() == null ? null : s.modulator().modulatedActive() ? "Modulada" : s.modulator().busy() ? "Confirmando…" : s.modulator().microphoneSilenced() && !s.muted() ? "Falló" : "Natural";
             row.addView(spaced(ui, ui.callControl(Glyph.VOICE, "Voz", voiceState, s.modulator() != null && s.modulator().modulatedActive(), false, modAvail, a::toggleModulator)));
             if (s.features().visible(Feature.VIDEO_CALLS))
-                row.addView(spaced(ui, ui.callControl(s.videoMode() ? Glyph.CAMERA_SWITCH : Glyph.VIDEO, s.videoMode() ? "Cambiar cámara" : "Video",
-                    s.videoMode() ? null : "Requiere consentimiento", false, false, true, s.videoMode() ? a::switchCamera : a::video)));
+                row.addView(spaced(ui, ui.callControl(s.videoMode() ? Glyph.CAMERA_SWITCH : Glyph.VIDEO, s.videoMode() ? "Cámara" : "Video",
+                    null, false, false, true, s.videoMode() ? a::switchCamera : a::video)));
             controls.addView(row, ui.margins(Ui.match(), 10, 10));
             if (s.videoMode()) {
                 LinearLayout vrow = ui.row(); vrow.setGravity(Gravity.CENTER);
-                vrow.addView(spaced(ui, ui.callControl(Glyph.VIDEO_OFF, "Apagar video", "El audio continúa", false, false, true, a::stopVideo)));
+                vrow.addView(spaced(ui, ui.callControl(Glyph.VIDEO_OFF, "Sin video", null, false, false, true, a::stopVideo)));
                 controls.addView(vrow);
             }
         }
@@ -110,9 +110,8 @@ public final class CallScreens {
         TextView status = ui.text(UmbraType.LABEL, v == null ? "Video desactivado" : v.remote(), v == null ? UmbraColors.TEXT_SECONDARY : Ui.toneColor(v.remoteTone()));
         status.setGravity(Gravity.CENTER); remote.addView(status, ui.margins(Ui.match(), 8, 8));
         if (v != null && v.remoteVisible()) {
-            Button open = ui.button(Ui.ButtonKind.SECONDARY, "Ver video recibido", Glyph.VIDEO, a::showRemoteVideo);
+            Button open = ui.button(Ui.ButtonKind.SECONDARY, "Ver video", Glyph.VIDEO, a::showRemoteVideo);
             remote.addView(open, Ui.wrap());
-            remote.addView(ui.text(UmbraType.CAPTION, "Se abre en una vista protegida; integrarla aquí está pendiente."));
         }
         stage.addView(remote, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, ui.dp(260)));
         LinearLayout local = ui.column(); local.setGravity(Gravity.CENTER);
@@ -134,7 +133,6 @@ public final class CallScreens {
         LinearLayout h = ui.row(); h.addView(ui.iconTile(Glyph.VIDEO, Tone.ACCENT));
         LinearLayout t = ui.column(); t.setPadding(ui.dp(12), 0, 0, 0);
         t.addView(ui.heading(UmbraType.HEADING, VideoPresentation.requestHeadline(alias)));
-        t.addView(ui.text(UmbraType.CAPTION, "Tu cámara solo se enciende si eliges compartirla."));
         h.addView(t, Ui.weight()); c.addView(h);
         c.addView(ui.button(Ui.ButtonKind.SECONDARY, VideoPresentation.CONSENT_REJECT, Glyph.CLOSE, () -> a.answerVideo(2)));
         c.addView(ui.button(Ui.ButtonKind.SECONDARY, VideoPresentation.CONSENT_RECEIVE, Glyph.EYE, () -> a.answerVideo(0)));
@@ -146,7 +144,7 @@ public final class CallScreens {
     /** VOZ panel: Natural / Modulada. "Modulada" is highlighted only after the engine confirms ON. */
     public static LinearLayout modulatorPanel(Ui ui, ModulatorPresentation m, CallActions a) {
         LinearLayout c = ui.elevatedCard();
-        c.addView(ui.text(UmbraType.SECURITY_LABEL, "Voz"));
+        LinearLayout vh = ui.row(); vh.addView(ui.text(UmbraType.SECURITY_LABEL, "Voz"), Ui.weight()); vh.addView(ui.helpButton(Help.VOICE)); c.addView(vh);
         int selected = m.selected() == ModulatorPresentation.Mode.NATURAL ? 0 : m.selected() == ModulatorPresentation.Mode.MODULATED ? 1 : -1;
         c.addView(ui.segmented(new String[]{"Natural", "Modulada"}, selected, new boolean[]{true, !m.busy()}, i -> {
             if (i == 0 && m.selected() != ModulatorPresentation.Mode.NATURAL) a.natural();
@@ -157,11 +155,11 @@ public final class CallScreens {
         LinearLayout tx = ui.column(); tx.setPadding(ui.dp(10), 0, 0, 0);
         TextView head = ui.text(UmbraType.LABEL, m.headline(), m.tone() == Tone.NEUTRAL ? UmbraColors.TEXT_PRIMARY : Ui.toneColor(m.tone()));
         head.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        tx.addView(head); tx.addView(ui.text(UmbraType.CAPTION, m.detail()));
+        tx.addView(head); if (!m.detail().isEmpty()) tx.addView(ui.text(UmbraType.CAPTION, m.detail()));
         st.addView(tx, Ui.weight()); st.setContentDescription(app.umbra.ui.design.StateColors.modulatorDescription(m) + ". " + m.detail());
         c.addView(st, ui.margins(Ui.match(), 6, 4));
         if (m.state() == ModulatorPresentation.EngineState.ERROR_MUTED)
-            c.addView(ui.button(Ui.ButtonKind.SECONDARY, "Reintentar modulación", Glyph.RETRY, a::retryModulation));
+            c.addView(ui.button(Ui.ButtonKind.SECONDARY, "Reintentar", Glyph.RETRY, a::retryModulation));
         c.addView(ui.text(UmbraType.CAPTION, ModulatorPresentation.DISCLAIMER, UmbraColors.TEXT_TERTIARY), ui.margins(Ui.match(), 6, 0));
         return c;
     }
@@ -172,19 +170,17 @@ public final class CallScreens {
 
     public static Screen incoming(Ui ui, IncomingState s, IncomingActions a) {
         LinearLayout top = ui.column();
-        top.addView(ui.topBar(a::later, ui.titleBlock(s.video() ? "Videollamada entrante" : "Llamada entrante", null)));
+        top.addView(ui.topBar(a::later, ui.titleBlock(s.video() ? "Videollamada entrante" : "Llamada entrante", null), ui.helpButton(Help.CALL)));
         LinearLayout body = ui.column(); body.setGravity(Gravity.CENTER_HORIZONTAL);
         body.addView(ui.avatar(s.alias(), false, 112), ui.margins(new LinearLayout.LayoutParams(ui.dp(112), ui.dp(112)), 32, 0));
-        TextView name = ui.heading(UmbraType.DISPLAY, "Llamada de " + s.alias()); name.setGravity(Gravity.CENTER);
+        TextView name = ui.heading(UmbraType.DISPLAY, s.alias()); name.setGravity(Gravity.CENTER);
         body.addView(name, ui.margins(Ui.match(), 16, 6));
         LinearLayout badge = ui.row(); badge.setGravity(Gravity.CENTER); badge.addView(ui.trustBadge(s.trust())); body.addView(badge, Ui.match());
-        body.addView(ui.banner(Tone.NEUTRAL, Glyph.SHIELD, "Tú decides qué se enciende",
-            s.video() ? "Responder abre solo la señalización y luego el audio con tu confirmación. La cámara requiere un consentimiento aparte."
-                      : "Responder no enciende tu micrófono hasta que lo autorices.", null, null), ui.margins(Ui.match(), 20, 0));
+        body.addView(ui.chip(Tone.NEUTRAL, Glyph.SHIELD, s.video() ? "Micrófono y cámara con confirmación" : "Micrófono con confirmación"), ui.margins(Ui.wrap(), 20, 0));
         LinearLayout controls = ui.row(); controls.setGravity(Gravity.CENTER);
         controls.addView(spaced(ui, ui.callControl(Glyph.CALL_END, "Rechazar", null, false, true, true, a::reject)));
         boolean allowed = s.trust().allowsCalls();
-        controls.addView(spaced(ui, ui.callControl(Glyph.CALL, "Responder", allowed ? null : "Contacto no verificado", true, false, allowed, a::answer)));
+        controls.addView(spaced(ui, ui.callControl(Glyph.CALL, "Responder", allowed ? null : "Sin verificar", true, false, allowed, a::answer)));
         return Screen.of(top, body, controls);
     }
 

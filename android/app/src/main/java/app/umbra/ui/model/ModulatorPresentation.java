@@ -18,10 +18,10 @@ public record ModulatorPresentation(EngineState state, Mode selected, boolean bu
     /** Segment highlighted in the Natural/Modulada control. NONE while the engine is transitioning. */
     public enum Mode { NATURAL, MODULATED, NONE }
 
-    public static final String NATURAL_CONFIRM_TITLE = "Vas a transmitir tu voz natural.";
-    public static final String NATURAL_CONFIRM_BODY = "Desactivar la modificación local de voz no quita el silencio ni concede permiso de micrófono.";
-    public static final String NATURAL_CONFIRM_ACTION = "Usar voz natural";
-    public static final String DISCLAIMER = "Modificación local de voz. Cambia el timbre; no garantiza que no puedan reconocerte.";
+    public static final String NATURAL_CONFIRM_TITLE = "¿Usar voz natural?";
+    public static final String NATURAL_CONFIRM_BODY = "No quita el silencio ni concede el micrófono.";
+    public static final String NATURAL_CONFIRM_ACTION = "Voz natural";
+    public static final String DISCLAIMER = "Cambia el timbre. No garantiza que no te reconozcan.";
 
     public static EngineState parse(String engineStatus) {
         if (engineStatus == null) return EngineState.ERROR_MUTED;
@@ -33,18 +33,18 @@ public record ModulatorPresentation(EngineState state, Mode selected, boolean bu
         EngineState s = parse(engineStatus);
         Mode selected; boolean busy; String headline, detail; Tone tone; Glyph glyph; boolean silenced;
         switch (s) {
-            case ON -> { selected = Mode.MODULATED; busy = false; headline = "Voz modulada"; detail = "El motor confirma que la modificación local se está aplicando."; tone = Tone.ACCENT; glyph = Glyph.VOICE; silenced = false; }
-            case ENABLING -> { selected = Mode.NONE; busy = true; headline = "Activando modulación…"; detail = "Esperando que el motor confirme que el efecto se aplica. No se indica como modulada hasta entonces."; tone = Tone.NEUTRAL; glyph = Glyph.VOICE; silenced = false; }
-            case DISABLING -> { selected = Mode.NONE; busy = true; headline = "Desactivando modulación…"; detail = "Esperando confirmación del motor para volver a voz natural."; tone = Tone.NEUTRAL; glyph = Glyph.VOICE; silenced = false; }
-            case ERROR_MUTED -> { selected = Mode.NONE; busy = false; headline = "La modulación falló."; detail = "Tu micrófono permanece silenciado. Reintenta o confirma voz natural."; tone = Tone.DANGER; glyph = Glyph.VOICE; silenced = true; }
-            default -> { selected = Mode.NATURAL; busy = false; headline = "Voz natural"; detail = "Se transmite tu voz sin modificar."; tone = Tone.NEUTRAL; glyph = Glyph.VOICE; silenced = false; }
+            case ON -> { selected = Mode.MODULATED; busy = false; headline = "Voz modulada"; detail = "Confirmada por el motor."; tone = Tone.ACCENT; glyph = Glyph.VOICE; silenced = false; }
+            case ENABLING -> { selected = Mode.NONE; busy = true; headline = "Activando modulación…"; detail = "Esperando confirmación."; tone = Tone.NEUTRAL; glyph = Glyph.VOICE; silenced = false; }
+            case DISABLING -> { selected = Mode.NONE; busy = true; headline = "Desactivando modulación…"; detail = "Esperando confirmación."; tone = Tone.NEUTRAL; glyph = Glyph.VOICE; silenced = false; }
+            case ERROR_MUTED -> { selected = Mode.NONE; busy = false; headline = "Modulación fallida"; detail = "Micrófono silenciado."; tone = Tone.DANGER; glyph = Glyph.VOICE; silenced = true; }
+            default -> { selected = Mode.NATURAL; busy = false; headline = "Voz natural"; detail = "Sin modificar."; tone = Tone.NEUTRAL; glyph = Glyph.VOICE; silenced = false; }
         }
         String transmission;
-        if (muted) transmission = "Micrófono silenciado · no se transmite audio";
-        else if (silenced) transmission = "Micrófono silenciado por fallo de modulación";
-        else if (busy) transmission = "Confirmando el modo de voz…";
-        else if (s == EngineState.ON) transmission = "Transmitiendo voz modulada";
-        else transmission = "Transmitiendo tu voz natural";
+        if (muted) transmission = "Silenciado";
+        else if (silenced) transmission = "Silenciado por fallo";
+        else if (busy) transmission = "Confirmando…";
+        else if (s == EngineState.ON) transmission = "Voz modulada";
+        else transmission = "Voz natural";
         boolean confirm = s != EngineState.OFF;
         return new ModulatorPresentation(s, selected, busy, headline, detail, tone, glyph, muted || silenced, transmission, confirm);
     }

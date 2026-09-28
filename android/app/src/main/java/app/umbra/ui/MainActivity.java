@@ -68,7 +68,7 @@ public final class MainActivity extends Activity {
     private Vault vault;
     private Engine engine;
     private volatile app.umbra.location.AndroidLocationCapture locationCapture;
-    private String locationStatus="Sin captura de ubicación";
+    private String locationStatus="Sin ubicación";
     private volatile BluetoothLink bluetooth;
     private volatile boolean unlocked;
     private volatile boolean networkPaused = true;
@@ -76,7 +76,7 @@ public final class MainActivity extends Activity {
     private long grantedAt;
     private long authAt;
     private volatile int generation;
-    private String transportStatus = "Sin conexión activa", lockProblem;
+    private String transportStatus = "Sin enlace", lockProblem;
     private volatile boolean relayUnreachable;
     private JSONObject profile;
     private List<JSONObject> contacts = List.of(), messages = List.of(), locations = List.of(), callSessions = List.of();
@@ -125,6 +125,7 @@ public final class MainActivity extends Activity {
         getWindow().setHideOverlayWindows(true);
         if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false);
         ui = new Ui(this);
+        ui.onHelp(this::showHelp);
         gate.onInvalidation(gateInvalidated);
         if (Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(0, this::back);
         showLocked(); main.postDelayed(tick, 4000);
@@ -233,7 +234,7 @@ public final class MainActivity extends Activity {
             finally { PasswordPolicy.erase(secret); }
             final Exception problemResult = failure;
             main.post(() -> passwordOperationFinished(ticket, problemResult, AccessStep.LOCKED_AFTER_CREATE,
-                "No se pudo crear la contraseña. La bóveda no cambió."));
+                "No se creó. Nada cambió."));
         });
     }
     /**
@@ -331,7 +332,7 @@ public final class MainActivity extends Activity {
             finally { PasswordPolicy.erase(old); PasswordPolicy.erase(next); }
             final Exception problemResult = failure;
             main.post(() -> passwordOperationFinished(ticket, problemResult, AccessStep.LOCKED_AFTER_CHANGE,
-                "No se cambió la contraseña. Revisa la contraseña actual; la bóveda sigue igual."));
+                "No se cambió. Revisa la actual."));
         });
     }
 
@@ -349,7 +350,7 @@ public final class MainActivity extends Activity {
         nav.lock(); drafts.clear(); messages = List.of(); locations = List.of(); contacts = List.of(); callSessions = List.of(); trust = Map.of(); contactDevices = Map.of();
         devicesState = null; profile = null; loadedPeer = null; groupSelection.clear(); groupName = ""; qrCache.clear(); videoIntent.clear(); modulatorOpen = false; verifyTechnical = false;
         BluetoothLink link = bluetooth; bluetooth = null; if (link != null) link.close();
-        transportStatus = "Bloqueado · conexiones pausadas"; showLocked();
+        transportStatus = "Bloqueado"; showLocked();
     }
     private void authenticate() {
         if (authenticating || destroyed) return;
@@ -366,7 +367,7 @@ public final class MainActivity extends Activity {
                 if (destroyed || isFinishing()) return;
                 if (!resumed || ticket != generation) { authenticating = false; return; }
                 if (problem != null) {
-                    authenticating = false; lockProblem = "No se pudo preparar Android Keystore. No se creará una identidad sin protección."; showLocked(); return;
+                    authenticating = false; lockProblem = "Keystore no disponible. No se creó nada."; showLocked(); return;
                 }
                 showAuthenticationPrompt();
             });
@@ -426,7 +427,7 @@ public final class MainActivity extends Activity {
             } catch (Exception e) {
                 main.post(() -> {
                     if (!destroyed && unlocked && ticket == generation) {
-                        if (hasVaultFailure(e)) { lock(); notice("La bóveda necesita desbloqueo o su clave fue invalidada. No se borraron tus datos."); }
+                        if (hasVaultFailure(e)) { lock(); notice("Bóveda bloqueada. No se borró nada."); }
                         else failure.accept(e);
                     }
                 });
@@ -449,8 +450,9 @@ public final class MainActivity extends Activity {
         String message = e.getMessage();
         ErrorKind kind = ErrorPresentation.classify(message);
         if (kind != ErrorKind.GENERIC) { ErrorPresentation p = ErrorPresentation.of(kind); return p.title() + ". " + p.body(); }
+        // Domain/transport messages are often English: show them only when they are clean Spanish.
         if ((e instanceof IllegalArgumentException || e instanceof SecurityException || e instanceof IllegalStateException)
-            && message != null && message.length() < 180 && !message.contains("\n")) return message;
+            && message != null && message.length() < 120 && !message.contains("\n") && SpanishText.isSpanish(message)) return message;
         return ErrorPresentation.of(ErrorKind.GENERIC).body();
     }
     private void syncNow() {
@@ -570,7 +572,7 @@ public final class MainActivity extends Activity {
     /** The active Nearby link. Radio actions never create consent implicitly: Nearby must be started first. */
     private BluetoothLink link() {
         BluetoothLink active = bluetooth;
-        if (active == null) throw new SecurityException("Activa Nearby primero");
+        if (active == null) throw new SecurityException("Activa la cercanía");
         return active;
     }
     /** Explicit user action only (never from onCreate/onResume, render, network callbacks or restored state). */
@@ -581,15 +583,15 @@ public final class MainActivity extends Activity {
             if (engine.connectivity().isNearbySessionAllowed()) return;
             bluetooth = null; stale.close(); // The domain already ended that consent (lock, revocation).
         }
-        try { bluetooth = newLink(engine.connectivity().startNearby(true)); transportStatus = "Nearby activo · sin enlace"; }
-        catch (Exception refused) { notice("No se pudo activar Nearby. Requiere la bóveda abierta y una admisión vigente."); }
+        try { bluetooth = newLink(engine.connectivity().startNearby(true)); transportStatus = "Sin enlace"; }
+        catch (Exception refused) { notice("No se activó la cercanía. Requiere admisión."); }
         refresh();
     }
     private void stopNearby() {
         BluetoothLink active = bluetooth; bluetooth = null;
         if (active != null) active.close();
         if (engine != null) engine.connectivity().stopNearby();
-        transportStatus = "Nearby detenido"; refresh();
+        transportStatus = "Detenida"; refresh();
     }
     private BluetoothLink newLink(app.umbra.connectivity.ConnectivityService.Lease consent) {
         final int ticket = generation;
@@ -617,7 +619,7 @@ public final class MainActivity extends Activity {
                 main.post(() -> { if (unlocked && ticket == generation) { refresh(); syncNow(); } });
             }
             @Override public void status(String text) {
-                main.post(() -> { if (unlocked && ticket == generation) { transportStatus = text; if (onTab(HomeTab.NEARBY)) refresh(); } });
+                main.post(() -> { if (unlocked && ticket == generation) { transportStatus = app.umbra.ui.model.ShortStatus.transport(text); if (onTab(HomeTab.NEARBY)) refresh(); } });
             }
         }, consent);
     }
@@ -636,7 +638,7 @@ public final class MainActivity extends Activity {
         if (!granted) {
             ErrorKind kind = switch (request) { case 301 -> ErrorKind.BLUETOOTH_DENIED; case 302 -> ErrorKind.LOCATION_DENIED; case 303 -> ErrorKind.MICROPHONE_DENIED; case 304 -> ErrorKind.CAMERA_DENIED; default -> ErrorKind.GENERIC; };
             ErrorPresentation p = ErrorPresentation.of(kind); notice(p.title() + ". " + p.body());
-        } else notice("Permiso concedido. Vuelve a pulsar la acción y confirma para continuar.");
+        } else notice("Permiso concedido. Repite la acción.");
     }
 
     // ================================================================== state snapshot
@@ -715,7 +717,7 @@ public final class MainActivity extends Activity {
                 items.add(DeviceItem.of(self, true, roster.active(self), admin));
                 for (String id : roster.members.keySet()) if (!id.equals(self)) items.add(DeviceItem.of(id, false, roster.active(id), admin));
             } catch (Exception stale) {
-                problem = "No se pudo leer la lista firmada de dispositivos (puede haber caducado). No se asumió ningún estado.";
+                problem = "Lista de dispositivos ilegible o vencida.";
                 items.add(DeviceItem.of(self, true, true, false));
             }
         } else items.add(DeviceItem.of(self, true, true, false));
@@ -834,13 +836,13 @@ public final class MainActivity extends Activity {
             @Override public void startNearby() { MainActivity.this.startNearby(); }
             @Override public void stopNearby() { MainActivity.this.stopNearby(); }
             @Override public void networkSettings() { go(Route.of(Route.Kind.SETTINGS_SECTION, SettingsSection.NETWORK.name())); }
-            @Override public void listen() { if (bluetooth == null) { notice("Activa Nearby primero"); return; } if (!bluetoothPermission()) return; try { link().listen(); render(); } catch (Exception e) { notice(safeError(e)); } }
-            @Override public void makeVisible() { if (bluetooth == null) { notice("Activa Nearby primero"); return; } if (!bluetoothPermission()) return; external(new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120), 0); }
+            @Override public void listen() { if (bluetooth == null) { notice("Activa la cercanía"); return; } if (!bluetoothPermission()) return; try { link().listen(); render(); } catch (Exception e) { notice(safeError(e)); } }
+            @Override public void makeVisible() { if (bluetooth == null) { notice("Activa la cercanía"); return; } if (!bluetoothPermission()) return; external(new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120), 0); }
             @Override public void connectVerified() { chooseBluetooth(false); }
             @Override public void enrollNew() {
-                confirm("Vinculación explícita", "Esta acción intercambia una tarjeta con identidad pública, alias y permiso de escritura al buzón. Verifica después el código completo en persona.", "Continuar", false, () ->
-                    new SecureDialogBuilder().setTitle("En ambos teléfonos elige vinculación nueva")
-                        .setItems(new String[]{"Esperar al nuevo contacto", "Conectar al nuevo contacto"}, (d, item) -> {
+                confirm("Vincular contacto", "Comparte identidad y alias. Luego verifiquen.", "Continuar", false, () ->
+                    new SecureDialogBuilder().setTitle("Vincular")
+                        .setItems(new String[]{"Esperar", "Conectar"}, (d, item) -> {
                             if (!bluetoothPermission()) return;
                             try { if (item == 0) { link().listen(true); render(); } else chooseBluetooth(true); }
                             catch (Exception e) { notice(safeError(e)); }
@@ -868,7 +870,7 @@ public final class MainActivity extends Activity {
         connectBusy = true; relayUnreachable = false; relayResponded = false;
         action(() -> { AndroidConnectivity.connect(this, engine.connectivity(), engine.profile().getString("relay"), true); return engine.connectivity().isNetworkSessionAllowed(); },
             allowed -> { connectBusy = false; networkPaused = !allowed; refresh(); if (allowed) syncNow(); },
-            failure -> { connectBusy = false; notice("No se habilitó la red. Requiere admisión vigente, una red disponible y el servidor configurado."); refresh(); });
+            failure -> { connectBusy = false; notice("No se habilitó la red."); refresh(); });
     }
     /** Revokes the online session without locking the vault or stopping Nearby. */
     private void disconnectNetwork() {
@@ -877,31 +879,31 @@ public final class MainActivity extends Activity {
         refresh();
     }
     private void chooseBluetooth(boolean enroll) {
-        if (bluetooth == null) { notice("Activa Nearby primero"); return; }
+        if (bluetooth == null) { notice("Activa la cercanía"); return; }
         if (!bluetoothPermission()) return;
         if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
-            notice("Se necesita permiso para consultar los dispositivos cercanos."); return;
+            notice("Falta el permiso de dispositivos cercanos."); return;
         }
         try {
             BluetoothAdapter adapter = link().adapter();
             if (adapter == null || !adapter.isEnabled()) { ErrorPresentation p = ErrorPresentation.of(ErrorKind.BLUETOOTH_UNAVAILABLE); notice(p.title() + ". " + p.body()); return; }
             List<BluetoothDevice> devices = new ArrayList<>(adapter.getBondedDevices());
-            if (devices.isEmpty()) { notice("Primero empareja ambos teléfonos en los ajustes Bluetooth de Android."); return; }
+            if (devices.isEmpty()) { notice("Empareja primero en Android."); return; }
             String[] names = new String[devices.size()];
             for (int i = 0; i < names.length; i++) names[i] = Objects.toString(devices.get(i).getName(), "Dispositivo") + " · " + devices.get(i).getAddress();
-            new SecureDialogBuilder().setTitle("Teléfono que está esperando").setItems(names, (d, index) -> {
+            new SecureDialogBuilder().setTitle("Teléfono en espera").setItems(names, (d, index) -> {
                 try { link().connect(devices.get(index), enroll); } catch (Exception e) { notice(safeError(e)); }
             }).setNegativeButton("Cancelar", null).show();
         } catch (SecurityException e) {
-            notice("El permiso Bluetooth fue revocado. Revisa los permisos de dispositivos cercanos.");
-        } catch (Exception e) { notice("No se pudo abrir Bluetooth. Revisa los permisos de dispositivos cercanos."); }
+            notice("Permiso de Bluetooth revocado.");
+        } catch (Exception e) { notice("No se pudo abrir Bluetooth."); }
     }
 
     private void addContactSheet() {
         LinearLayout box = ui.column();
         Dialog[] sheet = new Dialog[1];
         box.addView(ui.heading(UmbraType.TITLE, "Agregar contacto"));
-        box.addView(ui.text(UmbraType.CAPTION, "Tener un archivo o estar cerca no verifica a la persona: después comparen el código de seguridad."), ui.margins(Ui.match(), 2, 8));
+        box.addView(ui.text(UmbraType.CAPTION, "Luego comparen el código."), ui.margins(Ui.match(), 2, 8));
         box.addView(ui.listRow(ui.iconTile(Glyph.PERSON_ADD, Tone.ACCENT), "Crear invitación", "Archivo de un solo uso que vence en 1 hora", ui.chevron(), () -> { sheet[0].dismiss(); createInvitation(); }));
         box.addView(ui.listRow(ui.iconTile(Glyph.FILE, Tone.ACCENT), "Importar invitación", "Invitación, solicitud o confirmación recibida", ui.chevron(), () -> { sheet[0].dismiss(); pickContact(); }));
         box.addView(ui.listRow(ui.iconTile(Glyph.BLUETOOTH, Tone.OFFLINE), "Conectar por Bluetooth", "Con un teléfono cercano", ui.chevron(), () -> { sheet[0].dismiss(); nav.selectTab(HomeTab.NEARBY); render(); }));
@@ -936,7 +938,7 @@ public final class MainActivity extends Activity {
         for (JSONObject l : loaded ? locations : List.<JSONObject>of()) {
             JSONObject payload = l.optJSONObject("payload"), point = l.optJSONObject("lastPoint");
             String display = l.optString("display");
-            String title = switch (display) { case "RECENT" -> "Ubicación reciente de " + alias(contact); case "LAST_KNOWN" -> "Última ubicación conocida de " + alias(contact); default -> "Ubicación de " + alias(contact) + " · " + display.toLowerCase(Locale.ROOT); };
+            String title = switch (display) { case "RECENT" -> "Reciente · " + alias(contact); case "LAST_KNOWN" -> "Última · " + alias(contact); default -> "Ubicación · " + alias(contact); };
             String detail = (payload == null ? "" : precisionLabel(payload.optString("mode"))) + (point == null ? " · sin punto recibido" :
                 String.format(Locale.ROOT, " · %.5f, %.5f · medida %s", point.optLong("latE7") / 1e7, point.optLong("lonE7") / 1e7, time(point.optLong("measured"))));
             entries.add(new ChatScreens.Entry(null, new ChatScreens.LocationEntry(title, detail, "RECENT".equals(display), false)));
@@ -964,7 +966,7 @@ public final class MainActivity extends Activity {
     }
     private void exportFile(JSONObject message) {
         if (message == null) return;
-        confirm("Exportar archivo", "La copia exportada ya no estará protegida por la bóveda ni por el vencimiento del mensaje.", "Exportar", false, () -> {
+        confirm("Exportar archivo", "La copia queda fuera de la bóveda.", "Exportar", false, () -> {
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/octet-stream").addCategory(Intent.CATEGORY_OPENABLE)
                 .putExtra(Intent.EXTRA_TITLE, message.optString("name").replaceAll("[\\p{Cntrl}/\\\\]", "_"));
             action(() -> engine.stageExport(Bytes.unb64(message.optString("data"))), key -> { pendingExportKey = key; external(intent, EXPORT_FILE); });
@@ -985,8 +987,8 @@ public final class MainActivity extends Activity {
         var capture=locationCapture; String session=capture==null?null:capture.activeSession();
         if(session!=null) engine.locations().cancelCapture(session);
         if(capture!=null) capture.close();
-        if(session!=null) action(() -> { engine.locations().stop(session); return true; },ok -> { locationStatus="Ubicación detenida"; locationCapture=null; refresh(); syncNow(); });
-        else { engine.locations().cancelLocal(); action(() -> { engine.expire(); return true; },ok -> { locationStatus="Entregas de ubicación canceladas"; refresh(); }); }
+        if(session!=null) action(() -> { engine.locations().stop(session); return true; },ok -> { locationStatus="Detenida"; locationCapture=null; refresh(); syncNow(); });
+        else { engine.locations().cancelLocal(); action(() -> { engine.expire(); return true; },ok -> { locationStatus="Cancelada"; refresh(); }); }
     }
     private void setBlocked(String peer, boolean block) {
         Runnable apply = () -> action(() -> { engine.block(peer, block); return true; }, ok -> {
@@ -994,7 +996,7 @@ public final class MainActivity extends Activity {
             if (active != null && peer.equals(active.connectedPeer())) { active.close(); bluetooth = null; }
             cancelRelay(); refresh();
         });
-        if (block) confirm("Bloquear contacto", "No recibirás ni enviarás mensajes, ubicación ni llamadas con " + aliasFor(peer) + ". Los mensajes en cola hacia este contacto se descartan.", "Bloquear", true, apply);
+        if (block) confirm("Bloquear " + aliasFor(peer), "Se descarta la cola pendiente.", "Bloquear", true, apply);
         else apply.run();
     }
 
@@ -1007,7 +1009,7 @@ public final class MainActivity extends Activity {
             @Override public void back() { MainActivity.this.back(); }
             @Override public void verify() { verifyMethod = SecurityScreens.Method.CODE; go(Route.of(Route.Kind.VERIFY, peer)); }
             @Override public void block(boolean block) { setBlocked(peer, block); }
-            @Override public void clear() { confirm("Vaciar conversación", "Borra el historial local y la cola pendiente. No borra las copias del otro teléfono ni revoca lo ya enviado al servidor.", "Vaciar", true,
+            @Override public void clear() { confirm("Vaciar chat", "Solo en este teléfono.", "Vaciar", true,
                 () -> action(() -> { engine.clearConversation(peer); return true; }, ok -> refresh())); }
             @Override public void call() { startCall(peer, false); }
             @Override public void message() {
@@ -1038,7 +1040,7 @@ public final class MainActivity extends Activity {
             @Override public void back() { verifyTechnical = false; MainActivity.this.back(); }
             @Override public void method(SecurityScreens.Method m) { verifyMethod = m; render(); }
             @Override public void compare(String typed) {
-                action(() -> { engine.verify(peer, typed); return true; }, ok -> { notice("Contacto verificado. El código coincide."); verifyTechnical = false; nav.back(); refresh(); syncNow(); });
+                action(() -> { engine.verify(peer, typed); return true; }, ok -> { notice("Verificado"); verifyTechnical = false; nav.back(); refresh(); syncNow(); });
             }
             @Override public void technical(boolean show) { verifyTechnical = show; render(); }
         }));
@@ -1063,7 +1065,7 @@ public final class MainActivity extends Activity {
             @Override public void toggle(String id) { if (!groupSelection.remove(id)) groupSelection.add(id); render(); }
             @Override public void step(int step) { groupStep = step; render(); }
             @Override public void name(String name) { groupName = name; }
-            @Override public void create() { notice(ErrorPresentation.of(ErrorKind.FEATURE_PENDING).body() + " No se creó ningún grupo."); }
+            @Override public void create() { notice(ErrorPresentation.of(ErrorKind.FEATURE_PENDING).title()); }
         }));
     }
 
@@ -1075,7 +1077,7 @@ public final class MainActivity extends Activity {
             @Override public void back() { MainActivity.this.back(); }
             @Override public void revoke(DeviceItem d) {
                 if (!features.available(Feature.DEVICE_REVOCATION)) { notice(ErrorPresentation.of(ErrorKind.FEATURE_PENDING).body()); return; }
-                confirm("Revocar " + d.title(), "El dispositivo dejará de estar autorizado para tu identidad. Es definitivo.", "Revocar", true,
+                confirm("Revocar " + d.title(), "Definitivo.", "Revocar", true,
                     () -> action(() -> new app.umbra.devices.DeviceService(vault).revoke(d.id()), ok -> refresh()));
             }
             @Override public void add() { notice(ErrorPresentation.of(ErrorKind.FEATURE_PENDING).body()); }
@@ -1091,11 +1093,11 @@ public final class MainActivity extends Activity {
             @Override public void back() { MainActivity.this.back(); }
             @Override public void createInvitation() { MainActivity.this.createInvitation(); }
             @Override public void importInvitation() { pickContact(); }
-            @Override public void revokeInvitations() { confirm("Revocar invitaciones", "Los archivos ya compartidos dejarán de permitir nuevos vínculos. Los contactos existentes no se eliminan.", "Revocar", true,
-                () -> action(() -> new PairingService(vault).revokeUnused(), count -> notice("Invitaciones revocadas: " + count))); }
+            @Override public void revokeInvitations() { confirm("Revocar invitaciones", "Los contactos existentes se conservan.", "Revocar", true,
+                () -> action(() -> new PairingService(vault).revokeUnused(), count -> notice("Revocadas: " + count))); }
             @Override public void lockNow() { lock(); }
             @Override public void destroyIdentity() {
-                confirm("Acción irreversible", "Se destruirá la clave de esta identidad. No existe recuperación. Esta acción no borra copias externas ni asegura borrado físico de la memoria flash.", "Destruir", true, () -> {
+                confirm("Destruir identidad", "Irreversible. Sin recuperación.", "Destruir", true, () -> {
                     BluetoothLink b = bluetooth; if (b != null) b.close(); bluetooth = null;
                     action(() -> { vault.close(); Vault.destroyKey(); deleteDatabase("umbra.db"); vault = null; engine = null; initialised = false; return true; }, ok -> { lock(); authenticate(); });
                 });
@@ -1114,11 +1116,11 @@ public final class MainActivity extends Activity {
                     try (RelayClient relay = openRelay(base, generation, false)) { relay.register(engine.profile(), invite); }
                     engine.updateRelay(base, true); return true;
                 }, ok -> { networkPaused = !engine.connectivity().isNetworkSessionAllowed(); notice("Buzón registrado."); refresh(); syncNow(); },
-                    failure -> { notice("No se registró el buzón. Revisa la dirección, la invitación y que este dispositivo esté admitido."); refresh(); });
+                    failure -> { notice("Buzón no registrado."); refresh(); });
             }
             @Override public void syncNow() { MainActivity.this.syncNow(); }
             @Override public void unregister() {
-                confirm("Eliminar buzón remoto", "Se eliminan los mensajes pendientes de ese buzón. La identidad y el historial local permanecen.", "Eliminar", true, () -> action(() -> {
+                confirm("Eliminar buzón", "Se pierden los mensajes pendientes del servidor.", "Eliminar", true, () -> action(() -> {
                     JSONObject me = engine.profile();
                     try (RelayClient relay = openRelay(me.getString("relay"), generation, false)) { relay.unregister(me); }
                     engine.updateRelay(me.getString("relay"), false); return true;
@@ -1129,7 +1131,7 @@ public final class MainActivity extends Activity {
             @Override public void nearby() { nav.home(); nav.selectTab(HomeTab.NEARBY); render(); }
             @Override public void changePassword() { changeProblem = null; go(Route.of(Route.Kind.CHANGE_PASSWORD)); }
             @Override public void enrollPassword() {
-                confirm("Añadir contraseña personal", "La bóveda se volverá a cifrar en este teléfono y quedará bloqueada. Después necesitarás Android y la contraseña para abrirla. No existe recuperación.",
+                confirm("Añadir contraseña", "La bóveda quedará bloqueada. Sin recuperación.",
                     "Continuar", false, () -> { if (unlocked && engine != null && !passwordConfigured) { accessStep = AccessStep.LEGACY_ENROLLMENT; legacyDeferred = false; accessProblem = null; render(); } });
             }
             @Override public void admission() { go(Route.of(Route.Kind.ADMISSION)); refresh(); }
@@ -1154,8 +1156,8 @@ public final class MainActivity extends Activity {
                 @Override public void createRequest() {
                     if (adminBusy) return; adminBusy = true;
                     action(() -> { engine.admission().createAdmissionRequest(); return true; },
-                        ok -> { adminBusy = false; notice("Solicitud generada en este teléfono. Todavía no se envió a nadie: expórtala y compártela."); refresh(); },
-                        failure -> { adminBusy = false; notice("No se generó la solicitud. Si hay una vigente, espera a que venza o importa la respuesta."); refresh(); });
+                        ok -> { adminBusy = false; notice("Solicitud generada. Expórtala."); refresh(); },
+                        failure -> { adminBusy = false; notice("No se generó la solicitud."); refresh(); });
                 }
                 @Override public void exportRequest() {
                     AdmissionFlow.Snapshot current = admission;
@@ -1180,12 +1182,12 @@ public final class MainActivity extends Activity {
             new AdmissionScreens.AdminActions() {
                 @Override public void back() { MainActivity.this.back(); }
                 @Override public void createRealm() {
-                    confirm("Crear entorno", "Este teléfono será la única autoridad del entorno. No hay recuperación ni rotación: si pierdes este teléfono o su bóveda, no podrás admitir más dispositivos.",
-                        "Crear y ser autoridad", true, () -> {
+                    confirm("Crear entorno", "Este teléfono será la autoridad. Sin recuperación.",
+                        "Crear", true, () -> {
                             if (adminBusy) return; adminBusy = true;
                             action(() -> engine.admission().createAdmissionRealm(true),
-                                realm -> { adminBusy = false; notice("Entorno creado. Este teléfono es su autoridad, pero aún no está admitido: genera y revisa su propia solicitud."); refresh(); },
-                                failure -> { adminBusy = false; notice("No se creó el entorno. Ya existe una configuración de admisión en este teléfono."); refresh(); });
+                                realm -> { adminBusy = false; notice("Entorno creado. Falta admitir este teléfono."); refresh(); },
+                                failure -> { adminBusy = false; notice("No se creó el entorno."); refresh(); });
                         });
                 }
                 @Override public void exportRealm() {
@@ -1194,8 +1196,8 @@ public final class MainActivity extends Activity {
                 @Override public void reviewRequest() {
                     AdmissionFlow.Snapshot own = admission;
                     if (own != null && own.request() != null && !own.request().expired() && own.credentialWire() == null) {
-                        new SecureDialogBuilder().setTitle("Solicitud a revisar")
-                            .setItems(new String[]{"La de este teléfono", "Otra, desde un archivo"}, (d, which) -> {
+                        new SecureDialogBuilder().setTitle("Revisar")
+                            .setItems(new String[]{"Este teléfono", "Desde archivo"}, (d, which) -> {
                                 if (which == 0) reviewWire(AdmissionImport.classify(AdmissionImport.file(own.request().wire())), true);
                                 else external(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_ADMIN_REVIEW);
                             }).setNegativeButton("Cancelar", null).show();
@@ -1204,7 +1206,7 @@ public final class MainActivity extends Activity {
                 @Override public void revokeCredential() { external(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_ADMIN_REVOKE); }
             }));
     }
-    private static final String REVIEW_REJECTED = "No se puede revisar: la solicitud venció, ya fue decidida, pertenece a otro entorno o este teléfono no es la autoridad.";
+    private static final String REVIEW_REJECTED = "Solicitud no válida para revisar.";
     /** Authority review: the domain validates signature, realm, expiry, consumption and authority before showing anything. */
     private void reviewWire(AdmissionImport.Parsed parsed, boolean own) {
         if (parsed.kind() != AdmissionImport.Kind.REQUEST && parsed.kind() != AdmissionImport.Kind.RENEWAL_REQUEST) { notice(AdmissionPresentation.IMPORT_REJECTED); return; }
@@ -1221,13 +1223,13 @@ public final class MainActivity extends Activity {
         sheet[0] = SecureDialogs.sheet(this, this::track, AdmissionScreens.reviewSheet(ui, holder.info(), new AdmissionScreens.ReviewActions() {
             @Override public void approve(long ttl) {
                 sheet[0].dismiss();
-                confirm(holder.info().renewal() ? "Aprobar renovación" : "Aprobar admisión",
-                    "¿Comparaste las huellas con la persona por un canal confiable? Se firmará una credencial de " + (ttl >= 604_800 ? "7 días" : "24 horas") + ". Estar admitido no verifica a ningún contacto.",
+                confirm(holder.info().renewal() ? "Aprobar renovación" : "Aprobar",
+                    "¿Huellas comparadas? Vigencia: " + (ttl >= 604_800 ? "7 días" : "24 horas") + ".",
                     "Aprobar", false, () -> decide(holder, true, ttl));
             }
             @Override public void reject() {
                 sheet[0].dismiss();
-                confirm("Rechazar solicitud", "Se firmará un rechazo para esta solicitud. El dispositivo no quedará admitido.", "Rechazar", true, () -> decide(holder, false, 0));
+                confirm("Rechazar", "Se firma un rechazo.", "Rechazar", true, () -> decide(holder, false, 0));
             }
             @Override public void cancel() { pendingReview = null; sheet[0].dismiss(); }
         }));
@@ -1239,23 +1241,23 @@ public final class MainActivity extends Activity {
         action(() -> {
             AdmissionService service = engine.admission();
             if (!approve) return new Decision(AdmissionImport.file(service.rejectAdmission(holder.review(), true).wire()), "umbra-rechazo.txt",
-                "Rechazo firmado. Entrégalo al dispositivo para que lo importe.");
+                "Rechazo firmado. Entrégalo.");
             if (holder.oldCredential() != null) {
                 AdmissionService.Renewal renewal = service.renewAdmission(holder.review(), holder.oldCredential(), true, ttl);
                 return new Decision(AdmissionImport.file(renewal.credential().wire(), renewal.revocation().wire()), "umbra-renovacion.txt",
-                    "Renovación firmada: credencial nueva y revocación de la anterior. Entrégala al dispositivo; los demás teléfonos conocen la revocación solo al recibirla.");
+                    "Renovación firmada. Entrégala.");
             }
             if (holder.own()) {
                 // Approve and install in one vault transaction: either this phone is admitted or nothing changed.
                 vault.transaction(() -> { service.installAdmissionCredential(service.approveAdmission(holder.review(), true, ttl).wire()); return null; });
-                return new Decision(null, null, "Este teléfono quedó admitido con la credencial que acabas de firmar.");
+                return new Decision(null, null, "Este teléfono quedó admitido.");
             }
             var credential = service.approveAdmission(holder.review(), true, ttl);
-            return new Decision(AdmissionImport.file(credential.wire()), "umbra-credencial.txt", "Credencial firmada. Entrégala al dispositivo para que la importe.");
+            return new Decision(AdmissionImport.file(credential.wire()), "umbra-credencial.txt", "Credencial firmada. Entrégala.");
         }, decision -> {
             adminBusy = false; notice(decision.notice()); refresh();
             if (decision.exportText() != null) exportAdmission(decision.exportText(), decision.fileName());
-        }, failure -> { adminBusy = false; notice("No se firmó la decisión. La solicitud pudo vencer o ya estaba decidida; no se cambió nada."); refresh(); });
+        }, failure -> { adminBusy = false; notice("No se firmó. Sin cambios."); refresh(); });
     }
     private void revokeWire(AdmissionImport.Parsed parsed) {
         if (parsed.kind() != AdmissionImport.Kind.CREDENTIAL) { notice(AdmissionPresentation.IMPORT_REJECTED); return; }
@@ -1266,11 +1268,11 @@ public final class MainActivity extends Activity {
                 new AdmissionScreens.RevokeActions() {
                     @Override public void revoke(String reason) {
                         sheet[0].dismiss();
-                        confirm("Revocar credencial", "Se firmará una revocación. No borra datos de ese dispositivo y los teléfonos sin conexión solo la conocerán al recibir el archivo.", "Revocar", true, () -> {
+                        confirm("Revocar credencial", "No borra datos ya entregados.", "Revocar", true, () -> {
                             if (adminBusy) return; adminBusy = true;
                             action(() -> AdmissionImport.file(engine.admission().revokeAdmission(wire, true, reason).wire()),
-                                text -> { adminBusy = false; notice("Revocación firmada. Distribúyela a los demás teléfonos del entorno."); refresh(); exportAdmission(text, "umbra-revocacion.txt"); },
-                                failure -> { adminBusy = false; notice("No se firmó la revocación: la credencial no pertenece a este entorno, ya estaba revocada o este teléfono no es la autoridad."); });
+                                text -> { adminBusy = false; notice("Revocación firmada. Distribúyela."); refresh(); exportAdmission(text, "umbra-revocacion.txt"); },
+                                failure -> { adminBusy = false; notice("No se firmó. Sin cambios."); });
                         });
                     }
                     @Override public void cancel() { sheet[0].dismiss(); }
@@ -1287,7 +1289,7 @@ public final class MainActivity extends Activity {
                 String detail = null;
                 if (parsed.kind() == AdmissionImport.Kind.REALM) {
                     var realm = app.umbra.admission.RealmConfig.decode(parsed.parts().get(0)); // public parse for display only
-                    detail = "Entorno: " + realm.realmId() + "\nHuella de la autoridad: " + Fingerprints.lines(realm.authorityKeyId(), 4);
+                    detail = "Entorno: " + realm.realmId() + "\nAutoridad: " + Fingerprints.lines(realm.authorityKeyId(), 4);
                 }
                 return new ImportPreview(parsed, detail);
             } finally { Arrays.fill(bytes, (byte) 0); }
@@ -1296,16 +1298,16 @@ public final class MainActivity extends Activity {
             boolean member = kind == AdmissionImport.Kind.REALM || kind == AdmissionImport.Kind.CREDENTIAL || kind == AdmissionImport.Kind.REJECTION
                 || kind == AdmissionImport.Kind.REVOCATION || kind == AdmissionImport.Kind.RENEWAL_RESULT;
             if (!member) { notice(kind == AdmissionImport.Kind.REQUEST || kind == AdmissionImport.Kind.RENEWAL_REQUEST
-                ? "Es una solicitud de otro dispositivo: revísala en Herramientas del administrador." : AdmissionPresentation.IMPORT_REJECTED); return; }
+                ? "Solicitud: revísala en Administración." : AdmissionPresentation.IMPORT_REJECTED); return; }
             String body = kind == AdmissionImport.Kind.REALM
-                ? preview.detail() + "\n\nCompara la huella con la que te dio el administrador. Configurar el entorno no admite este dispositivo."
-                : "UMBRA comprobará la firma y que corresponda a este dispositivo antes de aplicarlo.";
-            confirm("Importar: " + AdmissionImport.describe(kind), body, "Importar", false, () -> action(() -> {
+                ? preview.detail() + "\n\nCompara la huella con la del administrador."
+                : "UMBRA comprobará la firma.";
+            confirm(AdmissionImport.describe(kind), body, "Importar", false, () -> action(() -> {
                 AdmissionFlow.applyMember(vault, engine.admission(), preview.parsed(), true);
                 return AdmissionFlow.read(engine.admission(), Bytes.now());
             }, after -> {
                 admission = after;
-                notice(kind == AdmissionImport.Kind.REALM ? "Entorno UMBRA configurado. Este dispositivo todavía no está admitido." : admissionPresentation().title());
+                notice(kind == AdmissionImport.Kind.REALM ? "Entorno configurado. Sin admisión aún." : admissionPresentation().title());
                 refresh();
             }, failure -> notice(kind == AdmissionImport.Kind.REALM ? AdmissionPresentation.REALM_IMPORT_REJECTED : AdmissionPresentation.IMPORT_REJECTED)));
         }, failure -> notice(AdmissionPresentation.IMPORT_REJECTED));
@@ -1349,10 +1351,10 @@ public final class MainActivity extends Activity {
         if (!trustOf(peer).allowsCalls()) { notice(trustOf(peer).blockedReason()); return; }
         action(() -> {
             JSONObject index=engine.get("device-index",peer);
-            if(index==null) throw new SecurityException("Primero aprueba la lista de dispositivos del contacto");
+            if(index==null) throw new SecurityException("Aprueba primero sus dispositivos");
             return engine.calls().reviewInvite(index.getString("root"),app.umbra.calls.CallPayload.NetworkPolicy.RELAY_ONLY);
-        }, consent -> confirm(video ? "Iniciar videollamada" : "Iniciar llamada",
-            "Se avisará a " + aliasFor(peer) + ". Todavía no se enciende el micrófono" + (video ? " ni la cámara" : "") + ": cada uno requiere tu confirmación. El audio usa tu retransmisor autorizado.",
+        }, consent -> confirm(video ? "Videollamada a " + aliasFor(peer) : "Llamar a " + aliasFor(peer),
+            video ? "Micrófono y cámara se confirman después." : "El micrófono se confirma después.",
             "Llamar", false, () -> action(() -> engine.calls().invite(consent,true), id -> { if (video) videoIntent.add(id); syncNow(); if (nav.push(Route.of(Route.Kind.CALL, id))) refresh(); })));
     }
     private void renderIncoming(String id) {
@@ -1363,7 +1365,7 @@ public final class MainActivity extends Activity {
             @Override public void reject() { endCall(id); nav.back(); render(); }
             @Override public void answer() {
                 action(() -> engine.calls().reviewAccept(id,app.umbra.calls.CallPayload.NetworkPolicy.RELAY_ONLY),
-                    consent -> confirm("Responder a " + aliasFor(peer), "Se confirma la llamada con este dispositivo verificado. El micrófono se autoriza en el siguiente paso.", "Responder", false,
+                    consent -> confirm("Responder a " + aliasFor(peer), "El micrófono se confirma después.", "Responder", false,
                         () -> action(() -> { engine.calls().accept(consent,true); return true; }, ok -> { nav.replace(Route.of(Route.Kind.CALL, id)); syncNow(); refresh(); })));
             }
             @Override public void later() { MainActivity.this.back(); }
@@ -1412,8 +1414,8 @@ public final class MainActivity extends Activity {
             }
             @Override public void video() {
                 videoIntent.add(id);
-                new SecureDialogBuilder().setTitle("Solicitar video a " + aliasFor(otherPartyOf(id)))
-                    .setItems(new String[]{"Solo recibir su video", "Enviar mi cámara y recibir"}, (d, which) -> voiceControls.answerVideo(MainActivity.this, worker, false, which, MainActivity.this::refresh))
+                new SecureDialogBuilder().setTitle("Video con " + aliasFor(otherPartyOf(id)))
+                    .setItems(new String[]{"Solo recibir", "Enviar mi cámara"}, (d, which) -> voiceControls.answerVideo(MainActivity.this, worker, false, which, MainActivity.this::refresh))
                     .setNegativeButton("Cancelar", null).show();
             }
             @Override public void stopVideo() { mediaCall(voiceControls::stopVideo); videoIntent.remove(id); }
@@ -1422,7 +1424,7 @@ public final class MainActivity extends Activity {
             @Override public void answerVideo(int choice) { voiceControls.answerVideo(MainActivity.this, worker, true, choice, MainActivity.this::refresh); }
             @Override public void hangUp() {
                 if (CallPresentation.of(sessionState(id), null).terminal() && voice() == null) { MainActivity.this.back(); return; }
-                confirm("Colgar", "Se detienen el audio y el video de esta llamada.", "Colgar", true, () -> { endCall(id); videoIntent.remove(id); modulatorOpen = false; });
+                confirm("Colgar", "Se detienen audio y video.", "Colgar", true, () -> { endCall(id); videoIntent.remove(id); modulatorOpen = false; });
             }
         };
     }
@@ -1430,7 +1432,7 @@ public final class MainActivity extends Activity {
     private interface MediaOperation { void run() throws Exception; }
     private void mediaCall(MediaOperation operation) {
         try { operation.run(); render(); }
-        catch (Exception e) { notice("No se pudo aplicar el cambio. El estado mostrado es el que informa el motor."); render(); }
+        catch (Exception e) { notice("Sin cambios."); render(); }
     }
 
     // ------------------------------------------------------------------ location
@@ -1471,19 +1473,19 @@ public final class MainActivity extends Activity {
     private void reviewLocation(String peer, app.umbra.location.LocationPayload.Mode mode,long duration,boolean live,double lat,double lon) {
         action(() -> {
             JSONObject index=engine.get("device-index",peer);
-            if(index==null) throw new SecurityException("Primero aprueba la lista autenticada de dispositivos del contacto");
+            if(index==null) throw new SecurityException("Aprueba primero sus dispositivos");
             return engine.locations().review(index.getString("root"),mode,duration,live);
         },consent -> {
             LocationShareDraft draft = new LocationShareDraft(LocationShareDraft.Precision.valueOf(mode.name()), live, duration);
             StringBuilder text = new StringBuilder();
             for (String[] line : draft.summary(aliasFor(peer), consent.devices().size())) text.append(line[0]).append(": ").append(line[1]).append("\n");
             text.append("Dispositivos: "); for (String d : consent.devices()) text.append(Fingerprints.shortId(d)).append(' ');
-            text.append("\nSolo este teléfono captura. Bloquear o salir la detiene; no se reanuda sola.");
-            confirm("Confirmar ubicación", text.toString(), live ? "Compartir en vivo" : "Compartir", false, () -> action(() -> {
+            text.append("\nBloquear o salir la detiene.");
+            confirm("Ubicación", text.toString(), live ? "Compartir en vivo" : "Compartir", false, () -> action(() -> {
                 if(mode==app.umbra.location.LocationPayload.Mode.MANUAL) return engine.locations().manual(consent,true,lat,lon);
                 if(locationCapture!=null && locationCapture.activeSession()!=null) throw new SecurityException("Detén primero la ubicación actual");
                 String session=engine.locations().start(consent,true);
-                locationCapture=new app.umbra.location.AndroidLocationCapture(this,worker,() -> resumed && unlocked && !destroyed,engine.locations(),status -> main.post(() -> { if(unlocked) { locationStatus=status; refresh(); syncNow(); } }));
+                locationCapture=new app.umbra.location.AndroidLocationCapture(this,worker,() -> resumed && unlocked && !destroyed,engine.locations(),status -> main.post(() -> { if(unlocked) { locationStatus=app.umbra.ui.model.ShortStatus.location(status); refresh(); syncNow(); } }));
                 locationCapture.start(session,mode,live); return session;
             },session -> { locationStatus = (live ? "En vivo · " : "Un punto · ") + draft.precision().label + " · hasta " + LocationShareDraft.durationLabel(duration); refresh(); syncNow(); }));
         });
@@ -1510,7 +1512,7 @@ public final class MainActivity extends Activity {
     private void pickContact() { external(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_CONTACT); }
     private void external(Intent intent, int requestCode) {
         try { externalUi = true; startActivityForResult(intent, requestCode); }
-        catch (Exception e) { externalUi = false; notice("No hay una aplicación del sistema disponible para esta acción."); }
+        catch (Exception e) { externalUi = false; notice("Sin aplicación del sistema para esto."); }
     }
     @Override public void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data); externalUi = false;
@@ -1524,8 +1526,8 @@ public final class MainActivity extends Activity {
     private void resumeExternalResult() {
         PendingResult result = pendingResult; if (result == null || !unlocked || engine == null) return;
         pendingResult = null; Uri uri = result.uri(); int request = result.request();
-        if (!"content".equals(uri.getScheme())) { notice("Elige un documento mediante el selector de Android."); return; }
-        if (request == PICK_CONTACT) confirm("Procesar vinculación", "Solo continúa si solicitaste este intercambio. La posesión del archivo no verifica a la persona. Una solicitud válida consume la invitación y crea un contacto sin verificar.", "Procesar", false, () -> action(() -> importPairing(uri), processed -> {
+        if (!"content".equals(uri.getScheme())) { notice("Usa el selector de Android."); return; }
+        if (request == PICK_CONTACT) confirm("Procesar archivo", "Solo si lo pediste. Queda sin verificar.", "Procesar", false, () -> action(() -> importPairing(uri), processed -> {
             if (processed.exportKey() != null) exportPairing(processed.exportKey());
             else { verifyMethod = SecurityScreens.Method.CODE; nav.push(Route.of(Route.Kind.VERIFY, processed.peer())); refresh(); }
         }));
@@ -1540,7 +1542,7 @@ public final class MainActivity extends Activity {
             }, id -> { refresh(); syncNow(); });
         } else if (request == EXPORT_CONTACT || request == EXPORT_FILE || request == EXPORT_ADMISSION) {
             String key = pendingExportKey; pendingExportKey = null;
-            if (key == null) { notice("La exportación no está disponible. Créala nuevamente."); return; }
+            if (key == null) { notice("Exportación vencida. Repítela."); return; }
             action(() -> {
                 AccessGate.Lease lease = gate.enter();
                 byte[] content = engine.exportData(key);
@@ -1552,8 +1554,7 @@ public final class MainActivity extends Activity {
                     // Never clean up with a new authentication epoch. Expiry handles cancelled exports.
                     gate.check(lease); engine.clearExport(key);
                 }
-            }, ok -> notice(request == EXPORT_ADMISSION ? "Archivo exportado. Solo contiene datos públicos firmados; entrégalo por un canal confiable."
-                : "Documento exportado. La copia externa no está protegida por UMBRA."));
+            }, ok -> notice(request == EXPORT_ADMISSION ? "Exportado. Entrégalo por un canal confiable." : "Exportado. Fuera de la bóveda."));
         }
     }
     private byte[] readBounded(Uri uri, int max) throws Exception {
@@ -1580,9 +1581,15 @@ public final class MainActivity extends Activity {
         voiceControls.close();
         var capture=locationCapture; locationCapture=null; if(capture!=null) capture.close();
         if(engine!=null) { engine.locations().cancelLocal(); engine.calls().cancelLocal(); }
-        locationStatus="Ubicación interrumpida; requiere nueva autorización";
+        locationStatus="Interrumpida · autoriza de nuevo";
     }
     private String ttlName() { return ttl == 3600 ? "1 hora" : ttl == 604800 ? "7 días" : "24 horas"; }
+    /** ⓘ help sheets: explanations moved off the screens. Secure dialog, dismissed on lock. */
+    private void showHelp(Help topic) {
+        if (!unlocked && topic != Help.DEVELOPMENT) return;
+        Dialog[] sheet = new Dialog[1];
+        sheet[0] = SecureDialogs.sheet(this, this::track, ui.helpSheet(topic, () -> sheet[0].dismiss()));
+    }
     private void notice(String text) { if (!destroyed && text != null) Toast.makeText(this, text, Toast.LENGTH_LONG).show(); }
     private void track(Dialog dialog) { dialogs.add(dialog); dialog.setOnDismissListener(d -> dialogs.remove(dialog)); }
     private void confirm(String title, String message, String confirmLabel, boolean destructive, Runnable yes) {

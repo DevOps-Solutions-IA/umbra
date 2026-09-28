@@ -8,9 +8,15 @@
 
 - La interfaz muestra estados reales del motor; nunca infiere verificación, modulación, cámara
   o llamada desde preferencias visuales. `FeatureAvailability` decide qué se presenta como
-  funcional; lo demás dice «UI preparada · Backend pendiente» o no aparece (edición offline).
+  funcional; lo demás dice «Próximamente» o no aparece (edición offline).
 - Ningún estado se comunica solo por color: tono + icono + texto (y `stateDescription`).
 - Sin jerga criptográfica en pantallas normales; «Detalles técnicos» es opcional.
+- Estilo limpio (2026-09-27): solo español; botones de 1–3 palabras (≤ 24 caracteres); títulos y
+  chips cortos; en pantalla solo advertencias críticas de una línea. Las explicaciones viven en
+  hojas de ayuda ⓘ (`ui/model/Help`, `Ui.helpButton`, `MainActivity.showHelp`), máx. 6 líneas.
+  Mensajes del motor o del transporte solo se muestran si pasan `SpanishText` y son cortos
+  (`ShortStatus`, `safeError`); si no, se usa un texto fijo en español. Contrato probado por
+  `UiCopyTest` (JVM) y `assertConcise` en `UiScreensRenderTest` (instrumentación).
 
 ## Sistema de diseño (`ui/design`)
 

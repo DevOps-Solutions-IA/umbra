@@ -53,15 +53,15 @@ public final class ChatScreens {
         }
         top.addView(ui.topBar(a::back, title, call, video));
         if (s.voiceSessionActive())
-            top.addView(ui.banner(Tone.SUCCESS, Glyph.MIC, "Llamada en curso", "Tu micrófono está autorizado para esta llamada.", "Volver a la llamada", a::openCall));
+            top.addView(ui.banner(Tone.SUCCESS, Glyph.MIC, "Llamada en curso", null, "Volver", a::openCall));
         switch (s.trust().level()) {
-            case IDENTITY_CHANGED -> top.addView(ui.banner(s.trust().tone(), s.trust().glyph(), "La identidad cambió", s.trust().explanation(), s.trust().primaryAction(), a::verify));
-            case UNVERIFIED -> top.addView(ui.banner(Tone.WARNING, Glyph.SHIELD, "Contacto no verificado", "Comparen el código de seguridad antes de conversar. El envío está bloqueado.", "Verificar ahora", a::verify));
-            case BLOCKED -> top.addView(ui.banner(s.trust().tone(), s.trust().glyph(), "Contacto bloqueado", s.trust().explanation(), "Desbloquear", a::unblock));
+            case IDENTITY_CHANGED -> top.addView(ui.banner(s.trust().tone(), s.trust().glyph(), "Verifica de nuevo", null, "Verificar", a::verify));
+            case UNVERIFIED -> top.addView(ui.banner(Tone.WARNING, Glyph.SHIELD, "Sin verificar", null, "Verificar", a::verify));
+            case BLOCKED -> top.addView(ui.banner(s.trust().tone(), s.trust().glyph(), "Bloqueado", null, "Desbloquear", a::unblock));
             default -> {}
         }
         if (s.sharingLocation())
-            top.addView(ui.locationCard("Estás compartiendo tu ubicación", s.locationStatus(), true, true, a::stopLocation));
+            top.addView(ui.locationCard("Tu ubicación", s.locationStatus(), true, true, a::stopLocation));
 
         List<Object> rows = new ArrayList<>();
         rows.add("header");
@@ -69,9 +69,7 @@ public final class ChatScreens {
         ListView list = Lists.of(ui, rows, row -> {
             if (row instanceof String) {
                 LinearLayout h = ui.column(); h.setGravity(Gravity.CENTER_HORIZONTAL); h.setPadding(0, ui.dp(8), 0, ui.dp(8));
-                h.addView(ui.chip(Tone.NEUTRAL, Glyph.SHIELD_CHECK, "Cifrado de extremo a extremo · caduca en " + s.expiryLabel()));
-                TextView note = ui.text(UmbraType.CAPTION, s.entries().isEmpty() ? "Solo ustedes pueden abrir el contenido. Escribe el primer mensaje." : "La caducidad no impide que el destinatario copie el contenido.");
-                note.setGravity(Gravity.CENTER); h.addView(note, Ui.match());
+                h.addView(ui.chip(Tone.NEUTRAL, Glyph.TIMER, "Caduca en " + s.expiryLabel()));
                 return h;
             }
             Entry e = (Entry) row;
@@ -86,7 +84,7 @@ public final class ChatScreens {
         if (s.trust().allowsMessaging()) bottom = composer(ui, s.draft(), true, a);
         else {
             LinearLayout blocked = ui.column();
-            blocked.addView(ui.banner(s.trust().tone(), s.trust().glyph(), "Envío bloqueado por seguridad", s.trust().blockedReason(), null, null));
+            blocked.addView(ui.banner(s.trust().tone(), s.trust().glyph(), "Envío bloqueado", null, null, null));
             bottom = blocked;
         }
         return Screen.list(top, list, bottom);
@@ -94,8 +92,8 @@ public final class ChatScreens {
 
     static LinearLayout composer(Ui ui, String draft, boolean enabled, ChatActions a) {
         LinearLayout c = ui.row(); c.setGravity(Gravity.BOTTOM); c.setPadding(0, ui.dp(6), 0, 0);
-        c.addView(ui.iconButton(Glyph.ATTACH, "Adjuntar archivo, foto o ubicación", a::attach));
-        EditText input = ui.field("Mensaje privado");
+        c.addView(ui.iconButton(Glyph.ATTACH, "Adjuntar", a::attach));
+        EditText input = ui.field("Mensaje");
         input.setText(draft == null ? "" : draft);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         input.setMaxLines(5); input.setSingleLine(false);
@@ -123,13 +121,12 @@ public final class ChatScreens {
     public static LinearLayout attachSheet(Ui ui, FeatureAvailability f, boolean allowsLocation, AttachActions a) {
         LinearLayout box = ui.column();
         box.addView(ui.heading(UmbraType.TITLE, "Compartir"));
-        box.addView(ui.text(UmbraType.CAPTION, "Todo se cifra antes de salir del teléfono. Máximo 256 KiB por archivo."), ui.margins(Ui.match(), 2, 8));
-        box.addView(ui.listRow(ui.iconTile(Glyph.FILE, Tone.ACCENT), "Archivo", "Documento.pdf, notas, cualquier archivo pequeño", ui.chevron(), a::file));
+        box.addView(ui.listRow(ui.iconTile(Glyph.FILE, Tone.ACCENT), "Archivo", "Máximo 256 KiB", ui.chevron(), a::file));
         LinearLayout photo = ui.listRow(ui.iconTile(Glyph.PHOTO, Tone.NEUTRAL), "Foto",
-            "Desactivado: las fotos pueden contener ubicación y datos del teléfono (EXIF). La limpieza aún no existe.", ui.pendingChip(), null);
+            null, ui.pendingChip(), null);
         photo.setAlpha(0.75f); box.addView(photo);
         LinearLayout location = ui.listRow(ui.iconTile(Glyph.LOCATION, allowsLocation ? Tone.ACCENT : Tone.NEUTRAL), "Ubicación",
-            allowsLocation ? "Eliges precisión y duración antes de enviar" : "Requiere un contacto verificado con dispositivos aprobados", ui.chevron(), allowsLocation ? a::location : null);
+            allowsLocation ? null : "Requiere contacto verificado", ui.chevron(), allowsLocation ? a::location : null);
         if (!allowsLocation) location.setAlpha(0.6f);
         box.addView(location);
         return box;
@@ -153,11 +150,11 @@ public final class ChatScreens {
         title.setContentDescription("Grupo " + s.name() + ". " + s.members().size() + " miembros");
         top.addView(ui.topBar(a::back, title, ui.iconButton(Glyph.INFO, "Información del grupo", a::info)));
         if (!s.features().available(Feature.GROUP_CHAT))
-            top.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Vista previa de diseño", "El cifrado de grupos no existe todavía en el motor. Nada de esta pantalla se envía.", null, null));
+            top.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Vista previa · no se envía", null, null, null));
         ListView list = Lists.of(ui, s.messages(), m -> ui.bubble(m, null, null), true);
         LinearLayout bottom = ui.column();
         Button send = ui.button(Ui.ButtonKind.SECONDARY, "Escribir al grupo", Glyph.SEND, null);
-        if (!s.features().available(Feature.GROUP_CHAT)) ui.disabled(send, "backend de grupos pendiente");
+        if (!s.features().available(Feature.GROUP_CHAT)) ui.disabled(send, "próximamente");
         bottom.addView(send);
         return Screen.list(top, list, bottom);
     }
@@ -171,11 +168,11 @@ public final class ChatScreens {
         LinearLayout top = ui.column();
         top.addView(ui.topBar(a::back, ui.titleBlock("Nuevo mensaje", null)));
         LinearLayout body = ui.column();
-        body.addView(ui.listRow(ui.iconTile(Glyph.PERSON_ADD, Tone.ACCENT), "Agregar contacto", "Con una invitación segura o por Bluetooth", ui.chevron(), a::addContact));
+        body.addView(ui.listRow(ui.iconTile(Glyph.PERSON_ADD, Tone.ACCENT), "Agregar contacto", null, ui.chevron(), a::addContact));
         List<Contact> verified = new ArrayList<>(), attention = new ArrayList<>();
         for (Contact c : contacts) (c.trust() == TrustLevel.VERIFIED ? verified : attention).add(c);
         body.addView(ui.sectionHeader("Contactos verificados"));
-        if (verified.isEmpty()) body.addView(ui.text(UmbraType.CAPTION, "Aún no hay contactos verificados."));
+        if (verified.isEmpty()) body.addView(ui.text(UmbraType.CAPTION, "Sin contactos verificados."));
         for (Contact c : verified) body.addView(contactRow(ui, c, () -> a.pick(c)));
         if (!attention.isEmpty()) {
             body.addView(ui.sectionHeader("Requieren atención"));
@@ -201,18 +198,18 @@ public final class ChatScreens {
         top.addView(ui.topBar(a::back, ui.titleBlock("Nuevo grupo", ui.text(UmbraType.CAPTION, "Paso " + (s.step() + 1) + " de 3 · " + titles[Math.min(2, s.step())]))));
         LinearLayout body = ui.column();
         if (!s.features().available(Feature.GROUP_CHAT))
-            body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Flujo preparado · backend pendiente", "Puedes recorrer los pasos. Crear el grupo seguirá desactivado hasta que exista el cifrado grupal.", null, null));
+            body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Vista previa · próximamente", null, null, null));
         LinearLayout bottom = ui.column();
         switch (s.step()) {
             case 0 -> {
-                body.addView(ui.text(UmbraType.CAPTION, "Solo los contactos verificados pueden formar parte de un grupo."));
+                body.addView(ui.text(UmbraType.CAPTION, "Solo contactos verificados."));
                 for (Contact c : s.contacts()) {
                     boolean allowed = c.trust() == TrustLevel.VERIFIED, on = s.selected().contains(c.id());
                     CheckBox box = new CheckBox(ui.context()); box.setChecked(on); box.setEnabled(allowed);
                     box.setButtonTintList(android.content.res.ColorStateList.valueOf(UmbraColors.ACCENT_MUTED));
                     box.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); box.setClickable(false);
                     LinearLayout row = ui.listRow(ui.avatar(c.alias(), false, 44), c.alias(),
-                        allowed ? TrustPresentation.of(c.trust()).label() : TrustPresentation.of(c.trust()).label() + " · no se puede agregar", box, allowed ? () -> a.toggle(c.id()) : null);
+                        allowed ? TrustPresentation.of(c.trust()).label() : TrustPresentation.of(c.trust()).label() + " · no disponible", box, allowed ? () -> a.toggle(c.id()) : null);
                     if (!allowed) row.setAlpha(0.55f);
                     row.setAccessibilityDelegate(new View.AccessibilityDelegate() {
                         @Override public void onInitializeAccessibilityNodeInfo(View host, android.view.accessibility.AccessibilityNodeInfo info) {
@@ -222,17 +219,17 @@ public final class ChatScreens {
                     body.addView(row);
                 }
                 Button next = ui.button(Ui.ButtonKind.PRIMARY, "Continuar (" + s.selected().size() + ")", Glyph.CHEVRON, () -> a.step(1));
-                if (s.selected().isEmpty()) ui.disabled(next, "elige al menos un miembro");
+                if (s.selected().isEmpty()) ui.disabled(next, "elige un miembro");
                 bottom.addView(next);
             }
             case 1 -> {
-                body.addView(ui.text(UmbraType.BODY_SECONDARY, "Estas personas verán los mensajes del grupo en sus dispositivos aprobados:"));
+                body.addView(ui.text(UmbraType.BODY_SECONDARY, "Miembros:"));
                 for (Contact c : s.contacts()) if (s.selected().contains(c.id())) body.addView(contactRow(ui, c, null));
                 bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Continuar", Glyph.CHEVRON, () -> a.step(2)));
-                bottom.addView(ui.button(Ui.ButtonKind.GHOST, "Cambiar miembros", Glyph.BACK, () -> a.step(0)));
+                bottom.addView(ui.button(Ui.ButtonKind.GHOST, "Cambiar", Glyph.BACK, () -> a.step(0)));
             }
             default -> {
-                EditText name = ui.field("Por ejemplo: Equipo Operaciones");
+                EditText name = ui.field("Nombre");
                 name.setText(s.name()); name.setSingleLine(true);
                 name.addTextChangedListener(new android.text.TextWatcher() {
                     public void beforeTextChanged(CharSequence t, int st, int n, int af) {}
@@ -240,9 +237,9 @@ public final class ChatScreens {
                     public void afterTextChanged(android.text.Editable e) {}
                 });
                 body.addView(ui.labeledField("Nombre del grupo", name));
-                body.addView(ui.text(UmbraType.CAPTION, s.selected().size() + " miembros seleccionados + tú"));
+                body.addView(ui.text(UmbraType.CAPTION, s.selected().size() + " miembros + tú"));
                 Button create = ui.button(Ui.ButtonKind.PRIMARY, "Crear grupo", Glyph.GROUP, a::create);
-                if (!s.features().available(Feature.GROUP_CHAT)) { ui.disabled(create, "el cifrado de grupos aún no existe"); bottom.addView(create); bottom.addView(ui.pendingChip()); }
+                if (!s.features().available(Feature.GROUP_CHAT)) { ui.disabled(create, "próximamente"); bottom.addView(create); bottom.addView(ui.pendingChip()); }
                 else bottom.addView(create);
                 bottom.addView(ui.button(Ui.ButtonKind.GHOST, "Atrás", Glyph.BACK, () -> a.step(1)));
             }

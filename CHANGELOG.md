@@ -6,6 +6,9 @@
 - Admisión privada por dispositivo: realm, solicitud, credencial, rechazo, revocación, renovación y
   herramientas de autoridad sobre `AdmissionService`; provisioning por archivos, sin red previa.
 - Inicio privado: conexión y Nearby solo por acción explícita; sin reconexión automática.
+- Interfaz limpia solo en español: botones y títulos cortos, explicaciones en hojas de ayuda ⓘ,
+  mensajes en inglés del motor/transporte nunca se muestran tal cual. Sin cambios de lógica ni
+  seguridad. Pruebas: `UiCopyTest` y `assertConcise` en `UiScreensRenderTest`.
 - Huecos de API documentados en `docs/API_GAPS_UI_SECURITY.md`. Validación:
   `docs/validation/2026-09-27-ui-security-integration.md` (CI pendiente de publicación de la rama).
 

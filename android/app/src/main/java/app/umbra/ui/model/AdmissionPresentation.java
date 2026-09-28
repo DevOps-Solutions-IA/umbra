@@ -31,53 +31,42 @@ public record AdmissionPresentation(Status status, String title, String body, To
     public static AdmissionPresentation of(String state, boolean requestPresent, boolean requestExpired) {
         Status s = Status.fromEngine(state);
         return switch (s) {
-            case UNCONFIGURED -> new AdmissionPresentation(s, "Entorno no configurado",
-                "Importa la configuración pública del entorno UMBRA que te entregó el administrador. Configurar el entorno no admite este dispositivo.",
+            case UNCONFIGURED -> new AdmissionPresentation(s, "Sin entorno", "Configurar el entorno no admite el dispositivo.",
                 Tone.NEUTRAL, Glyph.SHIELD, true, false, false, false, false);
-            case NOT_ADMITTED -> new AdmissionPresentation(s, "Entorno UMBRA configurado · sin admisión",
-                "Este dispositivo todavía no está admitido. Genera una solicitud y compártela con el administrador por un canal fuera de UMBRA.",
+            case NOT_ADMITTED -> new AdmissionPresentation(s, "Sin admisión", "Entorno configurado.",
                 Tone.NEUTRAL, Glyph.DEVICE_PENDING, false, true, false, false, true);
-            case REQUEST_PENDING -> new AdmissionPresentation(s, "Solicitud generada para compartir",
-                "La solicitud existe en este teléfono. UMBRA no sabe si el administrador la recibió: nada se envía automáticamente. Cuando recibas la respuesta firmada, impórtala aquí.",
+            case REQUEST_PENDING -> new AdmissionPresentation(s, "Pendiente", "Generada · no recibida.",
                 Tone.WARNING, Glyph.DEVICE_PENDING, false, false, true, true, true);
-            case REJECTED -> new AdmissionPresentation(s, "Solicitud rechazada",
-                "El administrador firmó un rechazo para esta solicitud. El dispositivo no está admitido. Puedes generar una solicitud nueva si el administrador lo acuerda contigo.",
+            case REJECTED -> new AdmissionPresentation(s, "Rechazada", "Puedes generar otra solicitud.",
                 Tone.DANGER, Glyph.BLOCK, false, true, false, false, true);
-            case ADMITTED -> new AdmissionPresentation(s, "Dispositivo admitido",
-                "Este dispositivo tiene una credencial vigente del entorno. No verifica a tus contactos ni conecta por sí solo: conectar sigue siendo una decisión tuya.",
+            case ADMITTED -> new AdmissionPresentation(s, "Admitido", "No verifica contactos ni conecta.",
                 Tone.SUCCESS, Glyph.DEVICE_AUTHORIZED, false, !requestPresent, requestPresent, requestPresent, true);
             case EXPIRED -> requestPresent && requestExpired
-                ? new AdmissionPresentation(s, "La solicitud venció",
-                    "La solicitud dura diez minutos y venció sin una respuesta importada. Genera una nueva y compártela otra vez.",
+                ? new AdmissionPresentation(s, "Solicitud vencida", "Genera otra.",
                     Tone.WARNING, Glyph.TIMER, false, true, false, false, true)
-                : new AdmissionPresentation(s, "La admisión venció",
-                    "La credencial de este dispositivo caducó. Requiere una renovación autorizada por el administrador; UMBRA no renueva por sí sola.",
+                : new AdmissionPresentation(s, "Admisión vencida", "Requiere renovación autorizada; no se renueva sola.",
                     Tone.WARNING, Glyph.TIMER, false, !requestPresent, requestPresent, requestPresent, true);
-            case REVOKED -> new AdmissionPresentation(s, "Admisión revocada",
-                "El administrador revocó la credencial de este dispositivo. No puede abrir nuevas sesiones del entorno. Tus datos locales no se borraron y no hay forma de omitir esta revocación desde aquí.",
+            case REVOKED -> new AdmissionPresentation(s, "Revocado", "Sin nuevas sesiones; no se borraron tus datos.",
                 Tone.BLOCKED, Glyph.DEVICE_REVOKED, false, false, false, false, false);
-            case INVALID -> new AdmissionPresentation(s, "Admisión no válida",
-                "Los datos de admisión guardados no superan la validación del motor. UMBRA no los repara ni los reemplaza automáticamente.",
+            case INVALID -> new AdmissionPresentation(s, "No válida", "UMBRA no los repara ni los reemplaza.",
                 Tone.DANGER, Glyph.WARNING, false, false, false, false, false);
         };
     }
 
     /** Before the first domain read in this session: no state is claimed and no action is offered. */
     public static AdmissionPresentation notRead() {
-        return new AdmissionPresentation(Status.INVALID, "Consultando la admisión…", "UMBRA todavía no leyó el estado de admisión en esta sesión.",
+        return new AdmissionPresentation(Status.INVALID, "Consultando…", "",
             Tone.NEUTRAL, Glyph.TIMER, false, false, false, false, false);
     }
 
     /** The domain read failed (not a lock). Nothing is claimed or offered; the next refresh reads again. */
     public static AdmissionPresentation unreadable() {
-        return new AdmissionPresentation(Status.INVALID, "No se pudo leer la admisión", "UMBRA no pudo leer el estado de admisión ahora. No se modificó nada.",
+        return new AdmissionPresentation(Status.INVALID, "Sin lectura", "No se modificó nada.",
             Tone.WARNING, Glyph.WARNING, false, false, false, false, false);
     }
 
     /** Offline revocation is only known once the signed revocation is imported; say so plainly. */
-    public static final String OFFLINE_REVOCATION_NOTE =
-        "Sin conexión, otros teléfonos solo conocen una revocación cuando reciben el archivo firmado. Revocar no borra datos que ya se entregaron.";
-    public static final String IMPORT_REJECTED = "El archivo no se aceptó. No se cambió la admisión de este dispositivo.";
-    public static final String REALM_IMPORT_REJECTED =
-        "No se aceptó esta configuración. Si ya había un entorno configurado, se conserva sin cambios; UMBRA nunca acepta otra autoridad automáticamente.";
+    public static final String OFFLINE_REVOCATION_NOTE = "Sin conexión, llega solo con el archivo firmado; no borra datos.";
+    public static final String IMPORT_REJECTED = "Archivo rechazado. Sin cambios.";
+    public static final String REALM_IMPORT_REJECTED = "Configuración rechazada; se conserva la actual.";
 }

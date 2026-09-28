@@ -9,6 +9,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
@@ -115,6 +116,29 @@ public class UiScreensRenderTest {
     private static String describe(View v) {
         return v.getClass().getSimpleName() + " " + (v instanceof TextView t ? t.getText() : "") + " " + v.getContentDescription();
     }
+    /** A TextView whose whole text is exactly {@code text}. */
+    private static boolean hasExact(View root, String text) {
+        for (View v : all(root)) if (shown(v) && v instanceof TextView t && !(v instanceof EditText) && text.contentEquals(t.getText())) return true;
+        return false;
+    }
+    /** The help control that opens the sheet for {@code topic}. */
+    private static View help(View root, Help topic) {
+        for (View v : all(root)) if (v instanceof ImageButton && ("Ayuda: " + topic.title).contentEquals(String.valueOf(v.getContentDescription()))) return v;
+        return null;
+    }
+    /** Clean style: Spanish only on screen, short buttons and short visible lines (explanations live in help sheets). */
+    private static void assertConcise(View root) {
+        for (View v : all(root)) {
+            if (!shown(v) || !(v instanceof TextView t) || v instanceof EditText) continue;
+            String text = t.getText().toString();
+            assertNull("English on screen: " + text, SpanishText.englishWord(text));
+            CharSequence d = v.getContentDescription();
+            if (d != null) assertNull("English in accessibility label: " + d, SpanishText.englishWord(d.toString()));
+            if (v instanceof Button) assertTrue("Button too long: " + text, text.length() <= MAX_BUTTON);
+            else assertTrue("Line too long: " + text, text.length() <= MAX_LINE);
+        }
+    }
+    private static final int MAX_BUTTON = 24, MAX_LINE = 64;
     private static Button button(View root, String text) {
         for (View v : all(root)) if (v instanceof Button b && text.contentEquals(b.getText())) return b;
         return null;
@@ -129,7 +153,7 @@ public class UiScreensRenderTest {
         e.add(new ChatScreens.Entry(MessageItem.file("3", true, "Documento.pdf", 184_320, "09:15", "En cola del servidor", null), null));
         e.add(new ChatScreens.Entry(MessageItem.file("4", false, "Plano.png", 96_000, "09:20", null, null), null));
         e.add(new ChatScreens.Entry(MessageItem.text("5", true, "Perfecto, nos vemos a las 10.", "09:21", "Pendiente", null), null));
-        e.add(new ChatScreens.Entry(null, new ChatScreens.LocationEntry("Ubicación reciente de Bruno", "Aproximada · 4.61000, -74.08000 · medida 09:22", true, false)));
+        e.add(new ChatScreens.Entry(null, new ChatScreens.LocationEntry("Reciente · Bruno", "Aproximada · 4.61000, -74.08000 · medida 09:22", true, false)));
         return e;
     }
     private static ChatScreens.ChatState chat(TrustLevel trust, boolean sharing) {
@@ -160,13 +184,14 @@ public class UiScreensRenderTest {
         }));
         assertTrue(hasText(v, "Bóveda bloqueada"));
         assertNotNull(button(v, "Desbloquear"));
-        assertTrue(hasText(v, "Versión de desarrollo. No auditada para uso sensible."));
+        assertTrue(hasText(v, "VERSIÓN DE DESARROLLO"));
+        assertConcise(v);
         assertAccessible(v);
         View insecure = render("01b-lock-no-device-credential", ui -> EntryScreens.lock(ui, new EntryScreens.LockState(false, false, null, null), new EntryScreens.LockActions() {
             public void unlock() {} public void openSecuritySettings() {}
         }));
         assertNull("no unlock without a device credential", button(insecure, "Desbloquear"));
-        assertNotNull(button(insecure, "Configurar bloqueo de Android"));
+        assertNotNull(button(insecure, "Configurar bloqueo"));
     }
 
     @Test public void onboardingIsShortAndLeadsToAdmission() {
@@ -175,9 +200,10 @@ public class UiScreensRenderTest {
         assertTrue(hasText(first, "Sin teléfono ni correo"));
         assertTrue(hasText(first, "Paso 1 de 3"));
         View last = render("02c-onboarding-identity", ui -> EntryScreens.onboarding(ui, 2, !BuildConfig.ALLOW_RELAY, a));
-        assertTrue(hasText(last, "Después: admisión de este dispositivo"));
+        assertTrue(hasText(last, "Después: admisión"));
         assertFalse("identity creation never claims admission", hasText(last, "Dispositivo admitido"));
         assertAccessible(last);
+        assertConcise(first); assertConcise(last);
         render("02b-onboarding-verification", ui -> EntryScreens.onboarding(ui, 1, !BuildConfig.ALLOW_RELAY, a));
     }
 
@@ -191,38 +217,41 @@ public class UiScreensRenderTest {
         };
         View v = render("03-home-chats", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(items, false, HomeScreens.Filter.ALL, FEATURES, !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, null, null, null), a, nav(ui, HomeTab.CHATS)));
         String text = visibleText(v);
-        assertTrue(text.contains("La identidad cambió · verifica de nuevo"));
-        assertTrue(text.contains("Verificación pendiente · envío bloqueado"));
+        assertTrue(text.contains("Identidad cambió"));
+        assertTrue(text.contains("Sin verificar"));
         assertEquals(BuildConfig.ALLOW_RELAY, text.contains("Llamadas"));
         assertAccessible(v);
         View empty = render("17-empty-state", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(List.of(), false, HomeScreens.Filter.ALL, FEATURES, !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, null, null, null), a, nav(ui, HomeTab.CHATS)));
-        assertTrue(hasText(empty, "Todavía no tienes conversaciones."));
-        assertTrue(hasText(empty, "Agrega un contacto mediante una invitación segura."));
+        assertTrue(hasText(empty, "Sin conversaciones"));
+        assertNotNull(button(empty, "Agregar contacto"));
+        assertConcise(v); assertConcise(empty);
         View groups = render("03b-home-groups-pending", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(items, false, HomeScreens.Filter.GROUPS, FEATURES, !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, null, null, null), a, nav(ui, HomeTab.CHATS)));
-        assertTrue(hasText(groups, "UI preparada · Backend pendiente"));
+        assertTrue(hasText(groups, "Próximamente"));
         render("03c-home-loading", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(items, true, HomeScreens.Filter.ALL, FEATURES, !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, null, null, null), a, nav(ui, HomeTab.CHATS)));
     }
 
     @Test public void verifiedChatShowsComposerAndContentKinds() {
         View v = render("04-chat-verified", ui -> ChatScreens.direct(ui, chat(TrustLevel.VERIFIED, false), CHAT));
         assertTrue(hasText(v, "Verificado"));
-        boolean composer = false; for (View x : all(v)) if (x instanceof EditText e && "Mensaje privado".contentEquals(e.getHint())) composer = true;
+        boolean composer = false; for (View x : all(v)) if (x instanceof EditText e && "Mensaje".contentEquals(e.getHint())) composer = true;
         assertTrue(composer);
         assertAccessible(v);
+        assertConcise(v);
         render("04b-chat-sharing-location", ui -> ChatScreens.direct(ui, chat(TrustLevel.VERIFIED, true), CHAT));
     }
 
     @Test public void identityChangeBlocksSendingAndSaysWhy() {
         View v = render("15-chat-identity-changed", ui -> ChatScreens.direct(ui, chat(TrustLevel.IDENTITY_CHANGED, false), CHAT));
-        assertTrue(hasText(v, "La identidad criptográfica de este contacto cambió. Verifica nuevamente antes de continuar con operaciones sensibles."));
-        assertTrue(hasText(v, "Envío bloqueado por seguridad"));
+        assertTrue(hasText(v, "Verifica de nuevo"));
+        assertTrue(hasText(v, "Envío bloqueado"));
         for (View x : all(v)) assertFalse("no composer when identity changed", x instanceof EditText);
-        assertFalse(hasText(v, "✓ Verificado"));
+        assertFalse(hasText(v, "Verificado"));
         View unverified = render("15b-chat-unverified", ui -> ChatScreens.direct(ui, chat(TrustLevel.UNVERIFIED, false), CHAT));
         for (View x : all(unverified)) assertFalse(x instanceof EditText);
         View blocked = render("15c-chat-blocked", ui -> ChatScreens.direct(ui, chat(TrustLevel.BLOCKED, false), CHAT));
-        assertTrue(hasText(blocked, "Contacto bloqueado"));
+        assertTrue(hasText(blocked, "Bloqueado"));
         assertAccessible(v);
+        assertConcise(v); assertConcise(unverified); assertConcise(blocked);
     }
 
     @Test public void groupScreensStayPreparedWithoutEngine() {
@@ -235,7 +264,7 @@ public class UiScreensRenderTest {
         }));
         assertTrue(hasText(v, "Equipo Operaciones"));
         assertTrue(hasText(v, "5 miembros"));
-        assertTrue(hasText(v, "Vista previa de diseño"));
+        assertTrue(hasText(v, "Vista previa · no se envía"));
         Button send = button(v, "Escribir al grupo"); assertNotNull(send); assertFalse(send.isEnabled());
         List<ChatScreens.Contact> contacts = List.of(new ChatScreens.Contact(ANA, "Ana", TrustLevel.VERIFIED), new ChatScreens.Contact(BRUNO, "Bruno", TrustLevel.IDENTITY_CHANGED), new ChatScreens.Contact(CARLOS, "Carlos", TrustLevel.VERIFIED));
         ChatScreens.NewGroupActions na = new ChatScreens.NewGroupActions() { public void back() {} public void toggle(String id) {} public void step(int s) {} public void name(String n) {} public void create() {} };
@@ -251,9 +280,10 @@ public class UiScreensRenderTest {
     @Test public void contactAndVerificationUsePlainLanguage() {
         SecurityScreens.ContactActions ca = new SecurityScreens.ContactActions() { public void back() {} public void verify() {} public void block(boolean b) {} public void clear() {} public void call() {} public void message() {} };
         View contact = render("06-contact-info", ui -> SecurityScreens.contact(ui, new SecurityScreens.ContactState(BRUNO, "Bruno", TrustPresentation.of(TrustLevel.VERIFIED), 2, 1, FEATURES.visible(Feature.VOICE_CALLS), FEATURES), ca));
-        assertTrue(hasText(contact, "Contacto verificado"));
-        assertTrue(hasText(contact, "2 dispositivos en su lista firmada"));
+        assertTrue(hasText(contact, "Verificado"));
+        assertTrue(hasExact(contact, "Dispositivos")); assertTrue(hasExact(contact, "2"));
         assertAccessible(contact);
+        assertConcise(contact);
         String code = Bytes.safetyCode(ME, BRUNO);
         Bitmap qr;
         try {
@@ -263,9 +293,9 @@ public class UiScreensRenderTest {
         } catch (Exception e) { throw new AssertionError(e); }
         SecurityScreens.VerifyActions va = new SecurityScreens.VerifyActions() { public void back() {} public void method(SecurityScreens.Method m) {} public void compare(String c) {} public void technical(boolean s) {} };
         View verify = render("07-verify-code", ui -> SecurityScreens.verify(ui, new SecurityScreens.VerifyState("Bruno", TrustPresentation.of(TrustLevel.UNVERIFIED), code, null, SecurityScreens.Method.CODE, false, "D4D4D4D4", "B2B2B2B2", FEATURES), va));
-        assertTrue(hasText(verify, "NO VERIFICADO"));
-        assertTrue(hasText(verify, "IDENTIDAD CAMBIÓ"));
-        assertTrue(hasText(verify, "BLOQUEADO"));
+        assertTrue(hasText(verify, "Sin verificar"));
+        assertNotNull(help(verify, Help.VERIFY));
+        assertConcise(verify);
         assertFalse(visibleText(verify).toLowerCase(Locale.ROOT).contains("x3dh"));
         assertTrue(visibleText(verify).contains(Fingerprints.group(code).substring(0, 9)));
         assertAccessible(verify);
@@ -281,16 +311,19 @@ public class UiScreensRenderTest {
             new DeviceScreens.DevicesActions() { public void back() {} public void revoke(DeviceItem d) {} public void add() {} }));
         assertTrue(hasText(devices, "Este dispositivo"));
         assertTrue(hasText(devices, "Revocado"));
+        assertConcise(devices);
         for (View x : all(devices)) if (x instanceof Button b && b.getText().toString().startsWith("Revocar")) assertEquals(FEATURES.available(Feature.DEVICE_REVOCATION), b.isEnabled());
         assertAccessible(devices);
         View location = render("09-location-sheet", ui -> Screen.of(null, DeviceScreens.locationSheet(ui, new DeviceScreens.LocationSheetState("Bruno", true, LocationShareDraft.Precision.APPROXIMATE, 1),
             new DeviceScreens.LocationActions() { public void live(boolean l) {} public void precision(LocationShareDraft.Precision p) {} public void duration(int i) {} public void review(String a, String b) {} public void stopAll() {} }), null));
-        assertTrue(hasText(location, "Quién la recibirá"));
-        assertTrue(hasText(location, "Durante cuánto tiempo"));
-        assertTrue(hasText(location, "Con qué precisión"));
-        Button stopAll = button(location, "DETENER UBICACIÓN"); assertNotNull(stopAll); assertTrue(stopAll.isEnabled());
+        assertTrue(hasExact(location, "Para"));
+        assertTrue(hasExact(location, "Duración"));
+        assertTrue(hasExact(location, "Precisión"));
+        assertNotNull(help(location, Help.LOCATION));
+        assertConcise(location);
+        Button stopAll = button(location, "Detener todo"); assertNotNull(stopAll); assertTrue(stopAll.isEnabled());
         View sharing = render("09b-location-stop", ui -> ChatScreens.direct(ui, chat(TrustLevel.VERIFIED, true), CHAT));
-        Button stop = button(sharing, "DETENER UBICACIÓN"); assertNotNull(stop); assertTrue("stop needs no extra password", stop.isEnabled());
+        Button stop = button(sharing, "Detener"); assertNotNull(stop); assertTrue("stop needs no extra password", stop.isEnabled());
     }
 
     @Test public void callScreenShowsRealTransmissionState() {
@@ -301,18 +334,21 @@ public class UiScreensRenderTest {
             return; // No call screenshots in the offline edition.
         }
         View voice = render("10-call-voice", ui -> CallScreens.call(ui, call("OFF", false, false, false, false), CALL, null));
-        assertTrue(hasText(voice, "Transmitiendo tu voz natural"));
+        assertTrue(hasText(voice, "Voz natural"));
         assertTrue(hasText(voice, "00:42"));
         assertFalse(visibleText(voice).contains("WebRTC"));
         assertAccessible(voice);
+        assertConcise(voice);
         View muted = render("10b-call-muted", ui -> CallScreens.call(ui, call("ON", true, false, false, false), CALL, null));
-        assertTrue(hasText(muted, "Micrófono silenciado · no se transmite audio"));
+        assertTrue(hasExact(muted, "Silenciado"));
         View pending = render("10c-call-mic-not-authorized", ui -> CallScreens.call(ui, new CallScreens.CallState("c", "Bruno", CallPresentation.of("SELECTED", null), null, false, false, null, false, null, false, false, FEATURES), CALL, null));
         assertNotNull(button(pending, "Autorizar micrófono"));
         View incoming = render("16-incoming-call", ui -> CallScreens.incoming(ui, new CallScreens.IncomingState("c", "Bruno", TrustPresentation.of(TrustLevel.VERIFIED), false),
             new CallScreens.IncomingActions() { public void reject() {} public void answer() {} public void later() {} }));
-        assertTrue(hasText(incoming, "Llamada de Bruno"));
+        assertTrue(hasText(incoming, "Llamada entrante"));
+        assertTrue(hasExact(incoming, "Bruno"));
         assertAccessible(incoming);
+        assertConcise(incoming);
     }
 
     @Test public void modulatorNeverClaimsModulationBeforeEngineConfirms() {
@@ -323,24 +359,27 @@ public class UiScreensRenderTest {
         View on = render("11b-modulator-on", ui -> CallScreens.call(ui, call("ON", false, false, false, true), CALL, null));
         boolean selected = false; for (View x : all(on)) if (x instanceof Button b && "Modulada".contentEquals(b.getText())) selected = b.isSelected();
         assertTrue(selected);
-        assertTrue(hasText(on, "Transmitiendo voz modulada"));
+        assertTrue(hasText(on, "Voz modulada"));
         View failed = render("11c-modulator-error", ui -> CallScreens.call(ui, call("ERROR_MUTED", false, false, false, true), CALL, null));
-        assertTrue(hasText(failed, "La modulación falló."));
-        assertTrue(hasText(failed, "Tu micrófono permanece silenciado. Reintenta o confirma voz natural."));
+        assertTrue(hasText(failed, "Modulación fallida"));
+        assertTrue(hasText(failed, "Silenciado por fallo"));
+        assertNotNull(button(failed, "Reintentar"));
         assertFalse(visibleText(failed).toLowerCase(Locale.ROOT).contains("anónim"));
         assertAccessible(failed);
+        assertConcise(failed);
     }
 
     @Test public void videoCallRequiresConsentPerDirection() {
         if (!FEATURES.visible(Feature.VIDEO_CALLS)) { assertFalse(FEATURES.available(Feature.VIDEO_CALLS)); return; }
         View request = render("12a-video-consent", ui -> CallScreens.call(ui, call("OFF", false, true, true, false), CALL, null));
-        assertTrue(hasText(request, "Bruno solicita activar video."));
+        assertTrue(hasText(request, "Bruno pide video"));
         assertNotNull(button(request, "Rechazar"));
-        assertNotNull(button(request, "Permitir recibir"));
-        assertNotNull(button(request, "Compartir mi cámara"));
+        assertNotNull(button(request, "Solo recibir"));
+        assertNotNull(button(request, "Enviar mi cámara"));
         View video = render("12b-video-call", ui -> CallScreens.call(ui, call("ON", false, true, false, false), CALL, null));
-        assertTrue(hasText(video, "Tu cámara está transmitiendo"));
+        assertTrue(hasText(video, "Tu cámara transmite"));
         assertAccessible(video);
+        assertConcise(request); assertConcise(video);
     }
 
     @Test public void settingsSectionsAreHonestAboutPendingControls() {
@@ -348,6 +387,7 @@ public class UiScreensRenderTest {
         View rootSettings = render("13-settings", ui -> HomeScreens.settings(ui, "Ana", OFFLINE_SESSION, ra, nav(ui, HomeTab.SETTINGS)));
         for (SettingsSection s : SettingsSection.values()) if (s != SettingsSection.PROFILE) assertTrue(s.title, hasText(rootSettings, s.title));
         assertAccessible(rootSettings);
+        assertConcise(rootSettings);
         SettingsScreens.SettingsActions sa = new SettingsScreens.SettingsActions() {
             public void back() {} public void createInvitation() {} public void importInvitation() {} public void revokeInvitations() {} public void lockNow() {}
             public void destroyIdentity() {} public void expiry(int i) {} public void register(String a, String i) {} public void syncNow() {} public void unregister() {}
@@ -356,13 +396,14 @@ public class UiScreensRenderTest {
         };
         for (SettingsSection s : new SettingsSection[]{SettingsSection.PROFILE, SettingsSection.PRIVACY, SettingsSection.SECURITY, SettingsSection.NETWORK, SettingsSection.ABOUT}) {
             View v = render("13-settings-" + s.name().toLowerCase(Locale.ROOT), ui -> SettingsScreens.section(ui, new SettingsScreens.SettingsState(s, "Ana", ME, FEATURES,
-                !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, BuildConfig.ALLOW_RELAY, BuildConfig.ALLOW_RELAY ? "https://relay.example.test" : "", "24 horas", 1, BuildConfig.VERSION_NAME,
+                !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, BuildConfig.ALLOW_RELAY, BuildConfig.ALLOW_RELAY ? "https://servidor.ejemplo.test" : "", "24 horas", 1, BuildConfig.VERSION_NAME,
                 true, "4 min", AdmissionPresentation.of("ADMITTED", false, false)), sa));
             assertAccessible(v);
+            assertConcise(v);
             if (s == SettingsSection.SECURITY) {
-                Button emergency = button(v, "BLOQUEAR UMBRA"); assertNotNull(emergency);
+                Button emergency = button(v, "Bloqueo de emergencia"); assertNotNull(emergency);
                 assertEquals(FEATURES.available(Feature.EMERGENCY_LOCK), emergency.isEnabled());
-                assertTrue(hasText(v, "UI preparada · Backend pendiente"));
+                assertTrue(hasText(v, "Próximamente"));
             }
             if (s == SettingsSection.PROFILE) assertFalse(visibleText(v).toLowerCase(Locale.ROOT).contains("private key"));
         }
@@ -373,16 +414,18 @@ public class UiScreensRenderTest {
             public void startNearby() {} public void stopNearby() {} public void listen() {} public void makeVisible() {} public void connectVerified() {}
             public void enrollNew() {} public void systemSettings() {} public void networkSettings() {}
         };
-        View nearby = render("14-offline-nearby", ui -> HomeScreens.nearby(ui, new HomeScreens.NearbyState("Nearby activo · sin enlace", !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, true, true), na, nav(ui, HomeTab.NEARBY)));
+        View nearby = render("14-offline-nearby", ui -> HomeScreens.nearby(ui, new HomeScreens.NearbyState("Sin enlace", !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, true, true), na, nav(ui, HomeTab.NEARBY)));
         assertAccessible(nearby);
-        assertTrue(hasText(nearby, "Nearby activo"));
-        assertNotNull(button(nearby, "Detener Nearby"));
+        assertTrue(hasText(nearby, "Cercanía activa"));
+        assertNotNull(button(nearby, "Detener cercanía"));
+        assertNotNull(help(nearby, Help.NEARBY));
+        assertConcise(nearby);
         if (!BuildConfig.ALLOW_RELAY) {
             assertFalse(hasText(nearby, "Llamadas"));
-            assertFalse(hasText(nearby, "Red deshabilitada")); // No Internet control where Internet does not exist.
+            assertFalse(hasExact(nearby, "Red")); // No Internet control where Internet does not exist.
             View chat = render("14b-offline-chat", ui -> ChatScreens.direct(ui, chat(TrustLevel.VERIFIED, false), CHAT));
             for (View x : all(chat)) assertFalse("no call buttons offline", "Llamada de voz".contentEquals(String.valueOf(x.getContentDescription())) || "Videollamada".contentEquals(String.valueOf(x.getContentDescription())));
-        } else assertTrue(hasText(nearby, "Red deshabilitada"));
+        } else assertTrue(hasExact(nearby, "Red"));
     }
 
     // ------------------------------------------------------------------ vault password, admission and connectivity
@@ -412,29 +455,36 @@ public class UiScreensRenderTest {
     @Test public void passwordScreensLabelSecretsAndOfferNoRecoveryOrReset() {
         AccessScreens.CreateActions ca = new AccessScreens.CreateActions() { public void submit(EditText p, EditText c) {} public void later() {} public void lockNow() {} };
         View create = render("24a-password-create", ui -> AccessScreens.create(ui, new AccessScreens.CreateState(false, false, null), ca));
-        assertTrue(hasText(create, "Crea tu contraseña personal"));
+        assertTrue(hasText(create, "Nueva contraseña"));
         assertTrue(hasText(create, "Sin recuperación"));
-        assertNotNull(button(create, "Crear contraseña"));
-        assertNull("no skip on a new install", button(create, "Ahora no (seguir solo con el bloqueo de Android)"));
+        assertNotNull(button(create, "Crear"));
+        assertNull("no skip on a new install", button(create, "Ahora no"));
+        assertNotNull(help(create, Help.ACCESS));
+        assertConcise(create);
         assertSecretInputs(create, 2);
         assertAccessible(create);
         View legacy = render("24b-password-enroll-legacy", ui -> AccessScreens.create(ui, new AccessScreens.CreateState(true, false, PasswordPolicy.Problem.MISMATCH.message), ca));
-        assertNotNull(button(legacy, "Inscribir con contraseña"));
-        assertNotNull(button(legacy, "Ahora no (seguir solo con el bloqueo de Android)"));
-        assertTrue(hasText(legacy, "Las dos contraseñas no coinciden."));
+        assertNotNull(button(legacy, "Inscribir"));
+        assertNotNull(button(legacy, "Ahora no"));
+        assertTrue(hasText(legacy, "No coinciden."));
+        assertConcise(legacy);
         AccessScreens.UnlockActions ua = new AccessScreens.UnlockActions() { public void submit(EditText p) {} public void autoLock(int i) {} public void lockNow() {} };
         View unlock = render("24c-password-unlock", ui -> AccessScreens.unlock(ui, new AccessScreens.UnlockState(false, AccessStep.UNLOCK_FAILED, 2, !BuildConfig.ALLOW_RELAY), ua));
         assertTrue(hasText(unlock, AccessStep.UNLOCK_FAILED));
-        assertTrue(hasText(unlock, BuildConfig.ALLOW_RELAY ? "Desbloquear no conecta" : "Modo offline · sin conexión"));
+        assertTrue(hasText(unlock, "Sin conexión"));
+        assertTrue(Help.NETWORK.lines.contains("Desbloquear no conecta."));
+        assertNotNull(help(unlock, Help.AUTO_LOCK));
+        assertConcise(unlock);
         for (String label : PasswordPolicy.AUTO_LOCK_LABELS) assertNotNull(label, button(unlock, label));
         assertNull("no five-minute option in v1", button(unlock, "5 min"));
         assertSecretInputs(unlock, 1);
         assertAccessible(unlock);
         View busy = render("24d-password-unlock-busy", ui -> AccessScreens.unlock(ui, new AccessScreens.UnlockState(true, null, 2, !BuildConfig.ALLOW_RELAY), ua));
-        assertFalse("double submission prevented while the domain works", button(busy, "Abrir bóveda").isEnabled());
+        assertFalse("double submission prevented while the domain works", button(busy, "Abrir").isEnabled());
         AccessScreens.ChangeActions cha = new AccessScreens.ChangeActions() { public void back() {} public void submit(EditText a, EditText b, EditText c) {} };
         View change = render("24e-password-change", ui -> AccessScreens.change(ui, new AccessScreens.ChangeState(false, null), cha));
-        assertNotNull(button(change, "Cambiar y bloquear"));
+        assertNotNull(button(change, "Cambiar"));
+        assertConcise(change);
         assertSecretInputs(change, 3);
         assertAccessible(change);
         for (AccessStep failure : new AccessStep[]{AccessStep.CORRUPT, AccessStep.KEY_UNAVAILABLE}) {
@@ -464,41 +514,47 @@ public class UiScreensRenderTest {
             View v = render("25-admission-" + c[0].toLowerCase(Locale.ROOT) + (request ? "-request" : ""), ui -> AdmissionScreens.status(ui, admissionState(c[0], request, expired), aa));
             assertTrue(c[0], hasText(v, p.title()));
             assertFalse(c[0] + " never shown as verification", hasText(v, "Verificado"));
-            assertTrue(hasText(v, "Vincular otro dispositivo a tu identidad no lo admite"));
+            assertNotNull(help(v, Help.ADMISSION));
             assertAccessible(v);
+            assertConcise(v);
             if (c[0].equals("REVOKED") || c[0].equals("INVALID"))
                 for (View x : all(v)) if (x instanceof Button b) assertFalse(c[0] + " offers no bypass: " + b.getText(),
                     b.getText().toString().startsWith("Generar") || b.getText().toString().startsWith("Importar"));
         }
         View pending = render("25-admission-request_pending-detail", ui -> AdmissionScreens.status(ui, admissionState("REQUEST_PENDING", true, false), aa));
-        assertTrue(hasText(pending, "Generada no significa recibida"));
-        assertNotNull(button(pending, "Exportar solicitud (archivo)"));
-        assertNotNull(button(pending, "Importar respuesta del administrador"));
+        assertTrue(hasText(pending, "Generada · no recibida."));
+        assertNotNull(button(pending, "Exportar solicitud"));
+        assertNotNull(button(pending, "Importar respuesta"));
         assertNull("no local approval", button(pending, "Aprobar"));
         View unconfigured = render("25-admission-unconfigured-detail", ui -> AdmissionScreens.status(ui, admissionState("UNCONFIGURED", false, false), aa));
-        assertTrue(hasText(unconfigured, "No admite este dispositivo ni conecta nada."));
+        assertTrue(hasText(unconfigured, AdmissionPresentation.of("UNCONFIGURED", false, false).body()));
+        assertTrue(Help.ADMISSION.lines.contains("Configurar el entorno no admite."));
         AdmissionScreens.AdminActions ad = new AdmissionScreens.AdminActions() {
             public void back() {} public void createRealm() {} public void exportRealm() {} public void reviewRequest() {} public void revokeCredential() {}
         };
         View admin = render("26a-admission-admin", ui -> AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(true, REALM, Fingerprints.lines(FP, 4), false), ad));
-        assertTrue(hasText(admin, "el motor lo comprueba en cada operación"));
-        assertNotNull(button(admin, "Revisar solicitud (archivo)"));
+        assertNotNull(help(admin, Help.ADMIN));
+        assertTrue(Help.ADMIN.lines.contains("El motor lo comprueba en cada operación."));
+        assertNotNull(button(admin, "Revisar solicitud"));
         assertAccessible(admin);
+        assertConcise(admin);
         View create = render("26b-admission-admin-create", ui -> AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(false, null, null, false), ad));
-        assertTrue(hasText(create, "No existe recuperación ni rotación de la autoridad"));
+        assertTrue(hasText(create, "Sin recuperación ni rotación"));
         View review = render("26c-admission-review", ui -> Screen.of(null, AdmissionScreens.reviewSheet(ui, new AdmissionScreens.ReviewInfo(Fingerprints.lines(FP, 4),
             Fingerprints.lines(ANA, 4), REALM, "27/09 10:40", false), new AdmissionScreens.ReviewActions() { public void approve(long t) {} public void reject() {} public void cancel() {} }), null));
         assertTrue(hasText(review, Fingerprints.lines(FP, 4)));
         assertTrue(hasText(review, REALM));
-        assertNotNull(button(review, "Aprobar · 24 horas"));
-        assertNotNull(button(review, "Aprobar · 7 días"));
+        assertNotNull(button(review, "Aprobar 24 h"));
+        assertNotNull(button(review, "Aprobar 7 d"));
         assertNotNull(button(review, "Rechazar"));
         assertAccessible(review);
+        assertConcise(review);
         View revoke = render("26d-admission-revoke", ui -> Screen.of(null, AdmissionScreens.revokeSheet(ui, new AdmissionScreens.RevokeInfo(Fingerprints.lines(ANA, 4), "03/10 10:30"),
             new AdmissionScreens.RevokeActions() { public void revoke(String r) {} public void cancel() {} }), null));
-        assertTrue(hasText(revoke, "No borra datos que ya recibió"));
+        assertTrue(hasText(revoke, "No borra datos ya entregados"));
         assertFalse(visibleText(revoke).toLowerCase(Locale.ROOT).contains("datos eliminados"));
         assertAccessible(revoke);
+        assertConcise(revoke);
     }
 
     @Test public void networkAndSecuritySettingsReflectOnlyDomainConsent() {
@@ -509,44 +565,48 @@ public class UiScreensRenderTest {
             public void admission() {} public void devices() {}
         };
         java.util.function.BiFunction<ConnectivityPresentation, Boolean, SettingsScreens.SettingsState> state = (c, admitted) -> new SettingsScreens.SettingsState(
-            SettingsSection.NETWORK, "Ana", ME, FEATURES, !BuildConfig.ALLOW_RELAY, c, true, BuildConfig.ALLOW_RELAY ? "https://relay.example.test" : "", "24 horas", 1,
+            SettingsSection.NETWORK, "Ana", ME, FEATURES, !BuildConfig.ALLOW_RELAY, c, true, BuildConfig.ALLOW_RELAY ? "https://servidor.ejemplo.test" : "", "24 horas", 1,
             BuildConfig.VERSION_NAME, true, "4 min", AdmissionPresentation.of(admitted ? "ADMITTED" : "NOT_ADMITTED", false, false));
         ConnectivityPresentation.Service none = ConnectivityPresentation.Service.NOT_OBSERVED;
         View offline = render("27a-network-unlocked-offline", ui -> SettingsScreens.section(ui, state.apply(OFFLINE_SESSION, true), sa));
         assertAccessible(offline);
         if (!BuildConfig.ALLOW_RELAY) {
             assertNull("no network control without INTERNET", button(offline, "Conectar"));
-            assertTrue(hasText(offline, "Edición offline"));
+            assertTrue(hasText(offline, "Edición sin internet"));
         } else {
             assertTrue(button(offline, "Conectar").isEnabled());
-            assertTrue(hasText(offline, "Desbloquear no conecta"));
+            assertNotNull(help(offline, Help.NETWORK));
+            assertConcise(offline);
             View notAdmitted = render("27b-network-not-admitted", ui -> SettingsScreens.section(ui,
                 state.apply(ConnectivityPresentation.of("UNLOCKED_OFFLINE", false, false, false, true, none), false), sa));
             assertFalse(button(notAdmitted, "Conectar").isEnabled());
-            assertFalse(button(notAdmitted, "Conectar y registrar buzón").isEnabled());
+            assertFalse(button(notAdmitted, "Registrar buzón").isEnabled());
             View connected = render("27c-network-connected", ui -> SettingsScreens.section(ui,
                 state.apply(ConnectivityPresentation.of("CONNECTED", false, false, false, true, ConnectivityPresentation.Service.RESPONDED), true), sa));
             assertNotNull(button(connected, "Desconectar"));
-            assertTrue(hasText(connected, "Red habilitada por ti"));
-            assertTrue(hasText(connected, "Desconectar no bloquea la bóveda"));
+            assertTrue(hasText(connected, "Red habilitada"));
+            assertTrue(Help.NETWORK.lines.contains("Desconectar no bloquea la bóveda."));
+            assertConcise(connected);
             assertFalse(hasText(connected, "Conectado · servidor privado"));
             View error = render("27d-network-error", ui -> SettingsScreens.section(ui,
                 state.apply(ConnectivityPresentation.of("OFFLINE_ERROR", false, true, false, true, ConnectivityPresentation.Service.UNREACHABLE), true), sa));
-            assertTrue(hasText(error, "no reconecta sola"));
+            assertTrue(hasText(error, "No reconecta sola."));
             assertNotNull(button(error, "Conectar"));
         }
         View security = render("27e-settings-security-password", ui -> SettingsScreens.section(ui, new SettingsScreens.SettingsState(SettingsSection.SECURITY, "Ana", ME, FEATURES,
             !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, true, "", "24 horas", 1, BuildConfig.VERSION_NAME, true, "2 min", AdmissionPresentation.of("REQUEST_PENDING", true, false)), sa));
-        assertTrue(hasText(security, "Contraseña personal activa"));
-        assertNotNull(button(security, "Cambiar contraseña personal"));
-        assertTrue(hasText(security, "Autobloqueo de esta sesión: 2 min"));
-        assertTrue(hasText(security, "No es el bloqueo de emergencia."));
-        assertTrue(hasText(security, "Solicitud generada para compartir"));
+        assertTrue(hasText(security, "Contraseña activa"));
+        assertNotNull(button(security, "Cambiar contraseña"));
+        assertTrue(hasExact(security, "Autobloqueo")); assertTrue(hasExact(security, "2 min"));
+        assertTrue(Help.AUTO_LOCK.lines.contains("No es el bloqueo de emergencia."));
+        assertTrue(hasExact(security, "Pendiente"));
+        assertNotNull(help(security, Help.ACCESS));
         assertAccessible(security);
+        assertConcise(security);
         View legacy = render("27f-settings-security-legacy", ui -> SettingsScreens.section(ui, new SettingsScreens.SettingsState(SettingsSection.SECURITY, "Ana", ME, FEATURES,
             !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, true, "", "24 horas", 1, BuildConfig.VERSION_NAME, false, "4 min", AdmissionPresentation.of("UNCONFIGURED", false, false)), sa));
-        assertNotNull(button(legacy, "Añadir contraseña personal"));
-        assertNull(button(legacy, "Cambiar contraseña personal"));
+        assertNotNull(button(legacy, "Añadir contraseña"));
+        assertNull(button(legacy, "Cambiar contraseña"));
     }
 
     @Test public void errorsAreHumanWithOptionalTechnicalDetails() {
@@ -556,7 +616,7 @@ public class UiScreensRenderTest {
                 box.addView(ui.errorState(ErrorPresentation.of(k, "SecurityException: synthetic diagnostic"), () -> {}, true));
             return Screen.of(null, box, null);
         });
-        assertTrue(hasText(v, "Servidor privado no disponible"));
+        assertTrue(hasText(v, "Servidor sin respuesta"));
         assertFalse("technical details collapsed by default", hasText(v, "synthetic diagnostic"));
         assertNotNull(button(v, "Detalles técnicos"));
         assertAccessible(v);

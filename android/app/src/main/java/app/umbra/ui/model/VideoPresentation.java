@@ -17,18 +17,18 @@ public record VideoPresentation(String remote, Tone remoteTone, boolean remoteVi
         switch (v) {
             case "ACTIVE" -> { remote = "Video recibido"; tone = Tone.SUCCESS; visible = true; }
             case "WAITING_FOR_FRAME" -> { remote = "Esperando imagen…"; tone = Tone.NEUTRAL; visible = false; }
-            case "STALE" -> { remote = "Video en pausa o conexión inestable"; tone = Tone.WARNING; visible = true; }
+            case "STALE" -> { remote = "Video en pausa"; tone = Tone.WARNING; visible = true; }
             case "NEGOTIATING" -> { remote = "Preparando video…"; tone = Tone.NEUTRAL; visible = false; }
-            case "CAMERA_UNAVAILABLE" -> { remote = "Cámara no disponible · el audio continúa"; tone = Tone.WARNING; visible = false; }
+            case "CAMERA_UNAVAILABLE" -> { remote = "Sin cámara · audio activo"; tone = Tone.WARNING; visible = false; }
             default -> { remote = "Video desactivado"; tone = Tone.NEUTRAL; visible = false; }
         }
         return new VideoPresentation(remote, tone, visible,
-            capturing ? "Tu cámara está transmitiendo" : "Tu cámara no transmite",
+            capturing ? "Tu cámara transmite" : "Tu cámara no transmite",
             capturing ? Tone.ACCENT : Tone.NEUTRAL, capturing);
     }
 
     public static final String CONSENT_REJECT = "Rechazar";
-    public static final String CONSENT_RECEIVE = "Permitir recibir";
-    public static final String CONSENT_SHARE = "Compartir mi cámara";
-    public static String requestHeadline(String alias) { return alias + " solicita activar video."; }
+    public static final String CONSENT_RECEIVE = "Solo recibir";
+    public static final String CONSENT_SHARE = "Enviar mi cámara";
+    public static String requestHeadline(String alias) { return alias + " pide video"; }
 }

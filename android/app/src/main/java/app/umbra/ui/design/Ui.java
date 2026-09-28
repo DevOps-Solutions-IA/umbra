@@ -35,6 +35,26 @@ public final class Ui {
     private final float density;
 
     public Ui(Context context) { this.context = context; this.density = context.getResources().getDisplayMetrics().density; }
+    private java.util.function.Consumer<Help> helpHandler;
+    /** The host shows help sheets (secure dialog); without a handler the ⓘ button does nothing. */
+    public void onHelp(java.util.function.Consumer<Help> handler) { this.helpHandler = handler; }
+    /** "ⓘ" button: explanations live in a short sheet, never as paragraphs on the screen. */
+    public ImageButton helpButton(Help topic) {
+        return iconButton(Glyph.INFO, "Ayuda: " + topic.title, () -> { if (helpHandler != null) helpHandler.accept(topic); });
+    }
+    /** Content of a help sheet: title and one short line per point. */
+    public LinearLayout helpSheet(Help topic, Runnable close) {
+        LinearLayout box = column();
+        box.addView(heading(UmbraType.TITLE, topic.title), margins(match(), 0, 8));
+        for (String line : topic.lines) {
+            LinearLayout r = row(); r.setGravity(Gravity.TOP); r.setPadding(0, dp(6), 0, dp(6));
+            r.addView(text(UmbraType.BODY, "—", UmbraColors.ACCENT_MUTED));
+            TextView t = text(UmbraType.BODY, line); t.setPadding(dp(10), 0, 0, 0); r.addView(t, weight());
+            box.addView(r);
+        }
+        box.addView(button(ButtonKind.SECONDARY, "Cerrar", null, close), margins(match(), 12, 0));
+        return box;
+    }
 
     public Context context() { return context; }
     public int dp(float value) { return Math.round(value * density); }
@@ -256,7 +276,7 @@ public final class Ui {
         LinearLayout.LayoutParams p = wrap(); p.setMarginEnd(dp(6)); p.topMargin = dp(3); p.bottomMargin = dp(3); c.setLayoutParams(p);
         return c;
     }
-    /** "UI preparada · Backend pendiente" marker used on every non-functional entry point. */
+    /** "Próximamente" marker used on every non-functional entry point. */
     public TextView pendingChip() { return chip(Tone.NEUTRAL, Glyph.INFO, FeatureAvailability.label(FeatureAvailability.Status.PENDING_BACKEND)); }
 
     public TextView badge(int count) {
@@ -338,7 +358,7 @@ public final class Ui {
         LinearLayout tile = iconTile(glyph, Tone.ACCENT); tile.setLayoutParams(new LinearLayout.LayoutParams(dp(64), dp(64)));
         tile.setBackground(outlined(UmbraColors.ACCENT_CONTAINER, UmbraColors.BORDER_SUBTLE, 22)); e.addView(tile);
         TextView t = heading(UmbraType.TITLE, title); t.setGravity(Gravity.CENTER); e.addView(t, margins(match(), 18, 6));
-        TextView b = text(UmbraType.BODY_SECONDARY, body); b.setGravity(Gravity.CENTER); e.addView(b, match());
+        if (body != null) { TextView b = text(UmbraType.BODY_SECONDARY, body); b.setGravity(Gravity.CENTER); e.addView(b, match()); }
         if (action != null) e.addView(button(ButtonKind.PRIMARY, action, Glyph.ADD, onAction));
         e.setLayoutParams(match());
         return e;
@@ -539,7 +559,7 @@ public final class Ui {
                 f.addView(iconTile(m.kind() == MessageItem.Kind.IMAGE ? Glyph.PHOTO : Glyph.FILE, Tone.ACCENT));
                 LinearLayout meta = column(); meta.setPadding(dp(12), 0, 0, 0);
                 TextView name = text(UmbraType.LABEL, m.fileName()); name.setMaxLines(2); name.setEllipsize(TextUtils.TruncateAt.MIDDLE); meta.addView(name);
-                meta.addView(text(UmbraType.CAPTION, (m.kind() == MessageItem.Kind.IMAGE ? "Imagen · " : "Archivo · ") + m.sizeLabel() + " · toca para exportar"));
+                meta.addView(text(UmbraType.CAPTION, m.sizeLabel()));
                 f.addView(meta, weight()); b.addView(f);
                 spoken.append(". ").append(m.kind() == MessageItem.Kind.IMAGE ? "Imagen " : "Archivo ").append(m.fileName()).append(", ").append(m.sizeLabel());
             }
@@ -572,8 +592,8 @@ public final class Ui {
         LinearLayout t = column(); t.setPadding(dp(12), 0, 0, 0);
         t.addView(text(UmbraType.LABEL, title)); t.addView(text(UmbraType.CAPTION, detail));
         head.addView(t, weight()); c.addView(head);
-        if (live) c.addView(chip(Tone.ACCENT, Glyph.LOCATION_LIVE, outgoing ? "Estás compartiendo en vivo" : "Ubicación en vivo"));
-        if (stop != null) c.addView(button(ButtonKind.DESTRUCTIVE, "DETENER UBICACIÓN", Glyph.LOCATION_OFF, stop));
+        if (live) c.addView(chip(Tone.ACCENT, Glyph.LOCATION_LIVE, outgoing ? "Compartiendo en vivo" : "En vivo"));
+        if (stop != null) c.addView(button(ButtonKind.DESTRUCTIVE, "Detener", Glyph.LOCATION_OFF, stop));
         c.setContentDescription(title + ". " + detail);
         return c;
     }

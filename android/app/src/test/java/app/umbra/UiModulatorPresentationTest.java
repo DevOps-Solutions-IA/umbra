@@ -28,8 +28,8 @@ public class UiModulatorPresentationTest {
     }
     @Test public void failureKeepsMicrophoneSilencedAndSaysSo() {
         ModulatorPresentation failed = ModulatorPresentation.of("ERROR_MUTED", false);
-        assertEquals("La modulación falló.", failed.headline());
-        assertTrue(failed.detail().contains("Tu micrófono permanece silenciado"));
+        assertEquals("Modulación fallida", failed.headline());
+        assertEquals("Micrófono silenciado.", failed.detail());
         assertTrue(failed.microphoneSilenced());
         assertFalse(failed.modulatedActive());
     }
@@ -42,17 +42,18 @@ public class UiModulatorPresentationTest {
         for (EngineState s : EngineState.values()) {
             ModulatorPresentation p = ModulatorPresentation.of(s.name(), true);
             assertTrue(p.microphoneSilenced());
-            assertTrue(p.transmission().startsWith("Micrófono silenciado"));
+            assertEquals("Silenciado", p.transmission());
         }
-        assertEquals("Transmitiendo tu voz natural", ModulatorPresentation.of("OFF", false).transmission());
-        assertEquals("Transmitiendo voz modulada", ModulatorPresentation.of("ON", false).transmission());
+        assertEquals("Voz natural", ModulatorPresentation.of("OFF", false).transmission());
+        assertEquals("Voz modulada", ModulatorPresentation.of("ON", false).transmission());
+        assertEquals("Silenciado por fallo", ModulatorPresentation.of("ERROR_MUTED", false).transmission());
     }
     @Test public void returningToNaturalVoiceRequiresConfirmationUnlessAlreadyNatural() {
         assertFalse(ModulatorPresentation.of("OFF", false).naturalRequiresConfirmation());
         for (String s : new String[]{"ON", "ENABLING", "DISABLING", "ERROR_MUTED"})
             assertTrue(s, ModulatorPresentation.of(s, false).naturalRequiresConfirmation());
-        assertEquals("Vas a transmitir tu voz natural.", ModulatorPresentation.NATURAL_CONFIRM_TITLE);
-        assertEquals("Usar voz natural", ModulatorPresentation.NATURAL_CONFIRM_ACTION);
+        assertEquals("¿Usar voz natural?", ModulatorPresentation.NATURAL_CONFIRM_TITLE);
+        assertEquals("Voz natural", ModulatorPresentation.NATURAL_CONFIRM_ACTION);
     }
     @Test public void noWordingClaimsAnonymity() {
         StringBuilder all = new StringBuilder(ModulatorPresentation.DISCLAIMER).append(ModulatorPresentation.NATURAL_CONFIRM_BODY);
@@ -62,7 +63,7 @@ public class UiModulatorPresentationTest {
         }
         String text = all.toString().toLowerCase(Locale.ROOT);
         assertFalse(text.contains("anónim"));
-        assertFalse(text.contains("no pueden reconocerte") && !text.contains("no garantiza que no puedan reconocerte"));
-        assertTrue(ModulatorPresentation.DISCLAIMER.startsWith("Modificación local de voz"));
+        assertFalse(text.contains("no te reconocerán"));
+        assertTrue(ModulatorPresentation.DISCLAIMER.contains("No garantiza que no te reconozcan"));
     }
 }

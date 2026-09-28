@@ -46,12 +46,11 @@ public final class HomeScreens {
             ui.iconButton(Glyph.PERSON_ADD, "Agregar contacto", a::addContact),
             ui.iconButton(Glyph.ADD, "Nuevo mensaje", a::newMessage)));
         if (s.incoming() != null)
-            top.addView(ui.banner(Tone.ACCENT, Glyph.CALL, "Llamada de " + s.incoming().alias(), "Responder no enciende tu micrófono ni tu cámara sin confirmación.",
-                "Ver llamada", () -> a.openIncoming(s.incoming().callId())));
+            top.addView(ui.banner(Tone.ACCENT, Glyph.CALL, "Llamada de " + s.incoming().alias(), null,
+                "Ver", () -> a.openIncoming(s.incoming().callId())));
         // Local chats stay available; admission only gates the realm's network and Nearby operations.
         if (s.admission() != null && !s.admission().admitted())
-            top.addView(ui.banner(s.admission().tone(), s.admission().glyph(), s.admission().title(),
-                "Sin admisión no hay servidor privado ni Nearby. Tus chats locales siguen disponibles.", "Admisión", a::admission));
+            top.addView(ui.banner(s.admission().tone(), s.admission().glyph(), s.admission().title(), null, "Admisión", a::admission));
         if (s.transportNotice() != null)
             top.addView(ui.banner(Tone.WARNING, Glyph.NETWORK_OFF, s.transportNotice(), null, "Detalles", a::networkDetails));
         top.addView(ui.segmented(new String[]{"Todos", "Personas", "Grupos"}, s.filter().ordinal(), null, i -> a.filter(Filter.values()[i])));
@@ -62,16 +61,15 @@ public final class HomeScreens {
             if (s.filter() == Filter.ALL || (s.filter() == Filter.GROUPS) == c.group()) shown.add(c);
 
         if (s.filter() == Filter.GROUPS && shown.isEmpty()) {
-            LinearLayout empty = ui.emptyState(Glyph.GROUP, "Grupos", "Podrás conversar con varias personas verificadas a la vez. El cifrado de grupos todavía no existe en el motor, así que no se puede crear ninguno.", null, null);
+            LinearLayout empty = ui.emptyState(Glyph.GROUP, "Grupos", null, null, null);
             empty.addView(ui.pendingChip());
-            empty.addView(ui.button(Ui.ButtonKind.SECONDARY, "Ver cómo será crear un grupo", Glyph.GROUP, a::newGroup));
+            empty.addView(ui.button(Ui.ButtonKind.SECONDARY, "Vista previa", Glyph.GROUP, a::newGroup));
             return Screen.of(top, empty, nav);
         }
         if (shown.isEmpty())
-            return Screen.of(top, ui.emptyState(Glyph.CHAT, "Todavía no tienes conversaciones.",
-                "Agrega un contacto mediante una invitación segura.", "Agregar contacto", a::addContact), nav);
+            return Screen.of(top, ui.emptyState(Glyph.CHAT, "Sin conversaciones", null, "Agregar contacto", a::addContact), nav);
 
-        EditText search = ui.field("Buscar por alias");
+        EditText search = ui.field("Buscar");
         search.setCompoundDrawablesRelative(ui.icon(Glyph.SEARCH, UmbraColors.TEXT_TERTIARY, 20), null, null, null);
         search.setCompoundDrawablePadding(ui.dp(10)); search.setSingleLine(true);
         search.setContentDescription("Buscar conversaciones por alias");
@@ -119,10 +117,9 @@ public final class HomeScreens {
 
     public static Screen calls(Ui ui, List<CallRow> rows, boolean activeSession, CallsActions a, View nav) {
         LinearLayout top = ui.column();
-        top.addView(ui.topBar(null, ui.titleBlock("Llamadas", ui.chip(Tone.NEUTRAL, Glyph.SHIELD, "Solo contactos verificados · retransmisor autorizado"))));
+        top.addView(ui.topBar(null, ui.titleBlock("Llamadas", ui.chip(Tone.NEUTRAL, Glyph.SHIELD, "Solo verificados")), ui.helpButton(Help.CALL)));
         if (rows.isEmpty()) {
-            return Screen.of(top, ui.emptyState(Glyph.CALL, "Sin llamadas",
-                "Inicia una llamada desde la conversación de un contacto verificado. UMBRA no guarda historial de llamadas.", "Ir a chats", a::startFromChats), nav);
+            return Screen.of(top, ui.emptyState(Glyph.CALL, "Sin llamadas", null, "Ir a chats", a::startFromChats), nav);
         }
         ListView list = Lists.of(ui, rows, r -> {
             LinearLayout trailing = ui.column();
@@ -131,7 +128,7 @@ public final class HomeScreens {
             row.setContentDescription(r.alias() + ". " + r.state().phase() + (r.time() == null ? "" : ". " + r.time()));
             return row;
         }, false);
-        if (activeSession) top.addView(ui.banner(Tone.SUCCESS, Glyph.MIC, "Llamada en curso", "Toca la llamada para ver micrófono, voz y video.", null, null));
+        if (activeSession) top.addView(ui.banner(Tone.SUCCESS, Glyph.MIC, "Llamada en curso", null, null, null));
         return Screen.list(top, list, nav);
     }
 
@@ -150,44 +147,33 @@ public final class HomeScreens {
     public static Screen nearby(Ui ui, NearbyState s, NearbyActions a, View nav) {
         LinearLayout top = ui.column();
         top.addView(ui.topBar(null, ui.titleBlock("Cerca", ui.chip(s.nearbyActive() ? Tone.OFFLINE : Tone.NEUTRAL,
-            s.offlineEdition() ? Glyph.OFFLINE_BLUETOOTH : Glyph.BLUETOOTH, s.nearbyActive() ? "Nearby activo" : "Nearby detenido"))));
+            s.offlineEdition() ? Glyph.OFFLINE_BLUETOOTH : Glyph.BLUETOOTH, s.nearbyActive() ? "Cercanía activa" : "Cercanía detenida")), ui.helpButton(Help.NEARBY)));
         LinearLayout body = ui.column();
-        LinearLayout status = ui.card();
-        status.addView(ui.text(UmbraType.SECURITY_LABEL, "Nearby (Bluetooth)"));
-        TextView st = ui.text(UmbraType.HEADING, s.nearbyActive() ? s.transportStatus() : "Nearby detenido");
-        st.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-        status.addView(st, ui.margins(Ui.match(), 4, 4));
-        status.addView(ui.text(UmbraType.CAPTION, s.nearbyActive()
-            ? "Autorizado por ti hasta que lo detengas o bloquees UMBRA. Un enlace cercano a la vez; ambos teléfonos deben tener UMBRA abierta y desbloqueada."
-            : "UMBRA no escucha, no busca ni se anuncia por Bluetooth hasta que lo actives. Es independiente de la red: conectar no activa Bluetooth."));
-        body.addView(status);
-        if (!s.admitted())
-            body.addView(ui.banner(Tone.WARNING, Glyph.DEVICE_PENDING, "Este dispositivo no está admitido",
-                "El intercambio cercano exige una admisión vigente en ambos teléfonos.", null, null));
-        if (s.nearbyActive()) body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Detener Nearby", Glyph.STOP, a::stopNearby));
-        else {
-            Button start = ui.button(Ui.ButtonKind.PRIMARY, "Activar Nearby", Glyph.BLUETOOTH, a::startNearby);
+        if (s.nearbyActive()) {
+            TextView st = ui.text(UmbraType.HEADING, s.transportStatus());
+            st.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+            body.addView(st, ui.margins(Ui.match(), 4, 8));
+            body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Detener cercanía", Glyph.STOP, a::stopNearby));
+        } else {
+            if (!s.admitted()) body.addView(ui.banner(Tone.WARNING, Glyph.DEVICE_PENDING, "Requiere admisión", null, null, null));
+            Button start = ui.button(Ui.ButtonKind.PRIMARY, "Activar cercanía", Glyph.BLUETOOTH, a::startNearby);
             if (!s.admitted()) ui.disabled(start, "requiere admisión vigente");
             body.addView(start);
         }
         body.addView(ui.sectionHeader("Contactos verificados"));
-        Button listen = ui.button(Ui.ButtonKind.SECONDARY, "Esperar a un contacto verificado", Glyph.BLUETOOTH, a::listen);
-        Button connect = ui.button(Ui.ButtonKind.SECONDARY, "Conectar con un contacto verificado", Glyph.CHEVRON, a::connectVerified);
+        Button listen = ui.button(Ui.ButtonKind.SECONDARY, "Esperar contacto", Glyph.BLUETOOTH, a::listen);
+        Button connect = ui.button(Ui.ButtonKind.SECONDARY, "Conectar contacto", Glyph.CHEVRON, a::connectVerified);
         body.addView(listen); body.addView(connect);
         body.addView(ui.sectionHeader("Contacto nuevo"));
-        Button enroll = ui.button(Ui.ButtonKind.SECONDARY, "Vincular un nuevo contacto", Glyph.PERSON_ADD, a::enrollNew);
-        Button visible = ui.button(Ui.ButtonKind.SECONDARY, "Hacer visible este teléfono (120 s)", Glyph.EYE, a::makeVisible);
+        Button enroll = ui.button(Ui.ButtonKind.SECONDARY, "Vincular", Glyph.PERSON_ADD, a::enrollNew);
+        Button visible = ui.button(Ui.ButtonKind.SECONDARY, "Visible 120 s", Glyph.EYE, a::makeVisible);
         body.addView(enroll); body.addView(visible);
-        if (!s.nearbyActive()) for (Button b : new Button[]{listen, connect, enroll, visible}) ui.disabled(b, "activa Nearby primero");
-        body.addView(ui.button(Ui.ButtonKind.GHOST, "Emparejar en ajustes de Android", Glyph.SETTINGS, a::systemSettings));
+        if (!s.nearbyActive()) for (Button b : new Button[]{listen, connect, enroll, visible}) ui.disabled(b, "activa cercanía");
+        body.addView(ui.button(Ui.ButtonKind.GHOST, "Emparejar en Android", Glyph.SETTINGS, a::systemSettings));
         if (!s.offlineEdition()) {
             body.addView(ui.sectionHeader("Red"));
-            body.addView(ui.listRow(ui.iconTile(s.connectivity().glyph(), s.connectivity().tone()), s.connectivity().title(),
-                "Internet y Nearby tienen consentimientos separados.", ui.chevron(), a::networkSettings));
+            body.addView(ui.listRow(ui.iconTile(s.connectivity().glyph(), s.connectivity().tone()), s.connectivity().title(), null, ui.chevron(), a::networkSettings));
         }
-        body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Después de conectar",
-            "El contacto aparece en Chats como no verificado. Comparen el código de seguridad en ambos teléfonos antes de enviar.", null, null));
-        body.addView(ui.text(UmbraType.CAPTION, "El alcance depende de los teléfonos y del entorno. No es una red de malla ni una conexión a distancia.", UmbraColors.WARNING_FG));
         return Screen.of(top, body, nav);
     }
 
@@ -198,7 +184,7 @@ public final class HomeScreens {
         LinearLayout top = ui.column();
         top.addView(ui.topBar(null, ui.titleBlock("Ajustes", ui.connectionChip(connectivity))));
         LinearLayout body = ui.column();
-        LinearLayout me = ui.listRow(ui.avatar(alias, false, 52), alias, "Tu perfil e identidad pública", ui.chevron(), () -> a.open(SettingsSection.PROFILE));
+        LinearLayout me = ui.listRow(ui.avatar(alias, false, 52), alias, "Perfil", ui.chevron(), () -> a.open(SettingsSection.PROFILE));
         body.addView(me);
         body.addView(ui.divider());
         for (SettingsSection section : SettingsSection.values()) {

@@ -10,9 +10,9 @@ public record ConversationItem(String id, String title, boolean group, TrustLeve
     public static ConversationItem direct(String id, String alias, TrustLevel trust, String timeLabel) {
         TrustPresentation p = TrustPresentation.of(trust);
         String subtitle = switch (trust) {
-            case VERIFIED -> "Verificado · cifrado de extremo a extremo";
-            case UNVERIFIED -> "Verificación pendiente · envío bloqueado";
-            case IDENTITY_CHANGED -> "La identidad cambió · verifica de nuevo";
+            case VERIFIED -> "Verificado";
+            case UNVERIFIED -> "Sin verificar";
+            case IDENTITY_CHANGED -> "Identidad cambió";
             case BLOCKED -> p.label();
         };
         return new ConversationItem(id, alias, false, trust, subtitle, timeLabel, 0, false, 2);

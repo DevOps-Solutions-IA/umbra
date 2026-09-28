@@ -30,7 +30,7 @@ public class UiTrustPresentationTest {
     }
     @Test public void identityChangeIsExplainedWithoutCryptographicJargon() {
         TrustPresentation changed = TrustPresentation.of(TrustLevel.IDENTITY_CHANGED);
-        assertEquals("La identidad criptográfica de este contacto cambió. Verifica nuevamente antes de continuar con operaciones sensibles.", changed.explanation());
+        assertEquals("Verifica de nuevo antes de continuar.", changed.explanation());
         for (TrustLevel level : TrustLevel.values()) {
             String all = (TrustPresentation.of(level).label() + TrustPresentation.of(level).explanation()).toLowerCase(Locale.ROOT);
             for (String jargon : new String[]{"x3dh", "signature", "mismatch", "ratchet", "prekey", "libsignal"})

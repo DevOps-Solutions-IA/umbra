@@ -2,15 +2,15 @@ package app.umbra.ui.model;
 
 /** Settings are split in sections; no single screen carries every control. */
 public enum SettingsSection {
-    PROFILE("Perfil", "Alias e identidad pública", Glyph.PERSON),
-    PRIVACY("Privacidad", "Pantalla, recientes, notificaciones", Glyph.EYE_OFF),
-    SECURITY("Seguridad", "Bloqueo, bóveda e identidad", Glyph.LOCK),
-    DEVICES("Dispositivos", "Este teléfono y dispositivos vinculados", Glyph.DEVICES),
-    ADMISSION("Admisión", "Autorización de este dispositivo en el entorno", Glyph.DEVICE_AUTHORIZED),
-    NOTIFICATIONS("Notificaciones", "Qué se muestra fuera de UMBRA", Glyph.BELL_OFF),
-    NETWORK("Red y Nearby", "Conexión explícita, servidor privado y Bluetooth", Glyph.CLOUD),
-    STORAGE("Almacenamiento", "Caducidad y datos locales", Glyph.TIMER),
-    ABOUT("Acerca de UMBRA", "Versión y estado de las funciones", Glyph.INFO);
+    PROFILE("Perfil", null, Glyph.PERSON),
+    PRIVACY("Privacidad", null, Glyph.EYE_OFF),
+    SECURITY("Seguridad", null, Glyph.LOCK),
+    DEVICES("Dispositivos", null, Glyph.DEVICES),
+    ADMISSION("Admisión", null, Glyph.DEVICE_AUTHORIZED),
+    NOTIFICATIONS("Notificaciones", null, Glyph.BELL_OFF),
+    NETWORK("Red", null, Glyph.CLOUD),
+    STORAGE("Datos", null, Glyph.TIMER),
+    ABOUT("Acerca de", null, Glyph.INFO);
 
     public final String title, subtitle; public final Glyph glyph;
     SettingsSection(String title, String subtitle, Glyph glyph) { this.title = title; this.subtitle = subtitle; this.glyph = glyph; }

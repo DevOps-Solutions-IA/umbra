@@ -24,11 +24,11 @@ public final class PasswordPolicy {
 
     public enum Problem {
         OK(null),
-        EMPTY("Escribe tu contraseña personal."),
-        TOO_SHORT("Usa al menos " + MIN_BYTES + " bytes en UTF-8 (letras con tilde o emoji cuentan más de uno)."),
-        TOO_LONG("La contraseña supera " + MAX_BYTES + " bytes en UTF-8."),
-        INVALID_CHARACTER("Contiene un carácter que no se puede codificar en UTF-8."),
-        MISMATCH("Las dos contraseñas no coinciden.");
+        EMPTY("Escribe la contraseña."),
+        TOO_SHORT("Muy corta: mínimo " + MIN_BYTES + "."),
+        TOO_LONG("Muy larga: máximo " + MAX_BYTES + " bytes."),
+        INVALID_CHARACTER("Carácter no válido."),
+        MISMATCH("No coinciden.");
         public final String message;
         Problem(String message) { this.message = message; }
     }

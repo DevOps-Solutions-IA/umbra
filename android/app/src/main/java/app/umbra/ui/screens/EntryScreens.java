@@ -22,82 +22,64 @@ public final class EntryScreens {
 
     public static Screen lock(Ui ui, LockState s, LockActions a) {
         LinearLayout body = ui.column(); body.setGravity(Gravity.CENTER_HORIZONTAL);
-        body.setPadding(ui.dp(8), ui.dp(56), ui.dp(8), ui.dp(24));
-        body.addView(ui.logo(64, UmbraColors.ACCENT_MUTED));
-        TextView brand = ui.heading(UmbraType.DISPLAY, "UMBRA"); brand.setLetterSpacing(0.18f); brand.setGravity(Gravity.CENTER);
-        body.addView(brand, ui.margins(Ui.match(), 20, 0));
-        TextView tagline = ui.text(UmbraType.BODY_SECONDARY, "Mensajería privada entre personas que ya se conocen."); tagline.setGravity(Gravity.CENTER);
-        body.addView(tagline, ui.margins(Ui.match(), 6, 28));
-        LinearLayout card = ui.elevatedCard();
-        LinearLayout head = ui.row(); head.addView(ui.iconView(Glyph.LOCK, UmbraColors.TEXT_PRIMARY, 20));
-        TextView title = ui.heading(UmbraType.HEADING, "Bóveda bloqueada"); title.setPadding(ui.dp(10), 0, 0, 0); head.addView(title);
-        card.addView(head);
-        card.addView(ui.text(UmbraType.CAPTION, "Se abre con el bloqueo de pantalla de este teléfono (Android Keystore) y, si la configuraste, tu contraseña personal."), ui.margins(Ui.match(), 6, 0));
-        card.addView(ui.chip(Tone.NEUTRAL, Glyph.NETWORK_OFF, s.offlineEdition() ? "Modo offline · sin conexión" : "Bloqueada · sin conexión"));
-        card.addView(ui.text(UmbraType.CAPTION, "Mientras está bloqueada, UMBRA no abre conexiones ni activa Bluetooth."), ui.margins(Ui.match(), 4, 0));
-        body.addView(card);
+        body.setPadding(ui.dp(8), ui.dp(96), ui.dp(8), ui.dp(16));
+        body.addView(ui.logo(72, UmbraColors.ACCENT_MUTED));
+        TextView brand = ui.heading(UmbraType.DISPLAY, "UMBRA"); brand.setLetterSpacing(0.22f); brand.setGravity(Gravity.CENTER);
+        body.addView(brand, ui.margins(Ui.match(), 20, 18));
+        LinearLayout chips = ui.row(); chips.setGravity(Gravity.CENTER);
+        chips.addView(ui.chip(Tone.NEUTRAL, Glyph.LOCK, "Bóveda bloqueada"));
+        chips.addView(ui.chip(Tone.NEUTRAL, Glyph.NETWORK_OFF, "Sin conexión"));
+        body.addView(chips, Ui.match());
+        if (s.notice() != null) body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, s.notice(), null, null, null), ui.margins(Ui.match(), 16, 0));
+        if (s.problem() != null) body.addView(ui.banner(Tone.DANGER, Glyph.WARNING, s.problem(), null, null, null), ui.margins(Ui.match(), 16, 0));
+        LinearLayout bottom = ui.column();
         if (!s.deviceSecure()) {
-            body.addView(ui.banner(Tone.WARNING, Glyph.WARNING, "Falta un bloqueo de pantalla",
-                "Activa un PIN, contraseña o biometría en Android antes de crear tu identidad.", null, null));
-            body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Configurar bloqueo de Android", Glyph.SETTINGS, a::openSecuritySettings));
-        } else {
-            if (s.notice() != null) body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Bóveda bloqueada", s.notice(), null, null));
-            if (s.problem() != null) body.addView(ui.banner(Tone.DANGER, Glyph.WARNING, "No se pudo desbloquear", s.problem(), null, null));
-            body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Desbloquear", Glyph.UNLOCK, a::unlock));
-        }
-        TextView foot = ui.text(UmbraType.CAPTION, "Sin número de teléfono · Sin correo · Sin agenda compartida"); foot.setGravity(Gravity.CENTER);
-        body.addView(foot, ui.margins(Ui.match(), 18, 4));
-        TextView dev = ui.text(UmbraType.CAPTION, "Versión de desarrollo. No auditada para uso sensible.", UmbraColors.WARNING_FG); dev.setGravity(Gravity.CENTER);
-        body.addView(dev);
-        return Screen.of(null, body, null);
+            bottom.addView(ui.banner(Tone.WARNING, Glyph.WARNING, "Falta bloqueo de pantalla", "Activa PIN, contraseña o biometría en Android.", null, null));
+            bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Configurar bloqueo", Glyph.SETTINGS, a::openSecuritySettings));
+        } else bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Desbloquear", Glyph.UNLOCK, a::unlock));
+        TextView dev = ui.text(UmbraType.CAPTION, "VERSIÓN DE DESARROLLO", UmbraColors.TEXT_TERTIARY); dev.setGravity(Gravity.CENTER); dev.setLetterSpacing(0.08f);
+        bottom.addView(dev, ui.margins(Ui.match(), 10, 0));
+        return Screen.of(null, body, bottom);
     }
 
     public interface OnboardingActions { void step(int next); void create(String alias); }
 
-    /** Three short steps: what UMBRA is (no phone/email), verification, local identity. */
+    /** Three short steps: what UMBRA is, verification, local identity. */
     public static Screen onboarding(Ui ui, int step, boolean offlineEdition, OnboardingActions a) {
         LinearLayout body = ui.column(); body.setPadding(ui.dp(4), ui.dp(24), ui.dp(4), ui.dp(16));
-        TextView progress = ui.text(UmbraType.SECURITY_LABEL, "Paso " + (step + 1) + " de 3"); body.addView(progress);
+        body.addView(ui.text(UmbraType.SECURITY_LABEL, "Paso " + (step + 1) + " de 3"));
         LinearLayout bottom = ui.column();
         switch (step) {
             case 0 -> {
                 body.addView(ui.logo(48, UmbraColors.ACCENT_MUTED), ui.margins(new LinearLayout.LayoutParams(ui.dp(48), ui.dp(48)), 16, 0));
-                body.addView(ui.heading(UmbraType.DISPLAY, "Bienvenido a UMBRA"), ui.margins(Ui.match(), 10, 8));
-                body.addView(ui.text(UmbraType.BODY_SECONDARY, "Mensajería privada para un grupo cerrado de personas autorizadas."));
-                body.addView(point(ui, Glyph.PERSON, "Sin teléfono ni correo", "Tu identidad se crea en este dispositivo. No se usa tu número, tu correo ni tu agenda."));
-                body.addView(point(ui, Glyph.SHIELD_CHECK, "Cifrado antes de salir", "El contenido se cifra en tu teléfono. El servidor privado solo transporta datos cifrados."));
-                body.addView(point(ui, offlineEdition ? Glyph.OFFLINE_BLUETOOTH : Glyph.CLOUD, offlineEdition ? "Edición offline" : "Conectado o cercano",
-                    offlineEdition ? "Esta edición no usa internet: funciona por Bluetooth con teléfonos cercanos." : "Usa tu servidor privado o Bluetooth con teléfonos cercanos."));
+                body.addView(ui.heading(UmbraType.DISPLAY, "UMBRA"), ui.margins(Ui.match(), 10, 8));
+                body.addView(point(ui, Glyph.PERSON, "Sin teléfono ni correo", "Identidad creada en este dispositivo."));
+                body.addView(point(ui, Glyph.SHIELD_CHECK, "Cifrado en el teléfono", "El servidor solo transporta datos cifrados."));
+                body.addView(point(ui, offlineEdition ? Glyph.OFFLINE_BLUETOOTH : Glyph.CLOUD, offlineEdition ? "Sin internet" : "Servidor o cercanía",
+                    offlineEdition ? "Solo Bluetooth con teléfonos cercanos." : "Tu servidor privado o Bluetooth cercano."));
                 bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Continuar", Glyph.CHEVRON, () -> a.step(1)));
             }
             case 1 -> {
                 body.addView(ui.heading(UmbraType.DISPLAY, "Verifica a cada persona"), ui.margins(Ui.match(), 10, 8));
-                body.addView(ui.text(UmbraType.BODY_SECONDARY, "Antes de conversar, comparen un código de seguridad en persona o por un canal en el que ya confíen."));
+                body.addView(ui.text(UmbraType.BODY_SECONDARY, "Comparen el código de seguridad en persona."));
                 LinearLayout states = ui.card();
                 for (TrustLevel level : TrustLevel.values()) {
-                    TrustPresentation p = TrustPresentation.of(level);
                     LinearLayout r = ui.row(); r.setPadding(0, ui.dp(6), 0, ui.dp(6));
-                    r.addView(ui.trustBadge(p));
+                    r.addView(ui.trustBadge(TrustPresentation.of(level)));
                     states.addView(r);
-                    states.addView(ui.text(UmbraType.CAPTION, p.explanation()));
                 }
                 body.addView(states);
                 bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Entendido", Glyph.CHEVRON, () -> a.step(2)));
                 bottom.addView(ui.button(Ui.ButtonKind.GHOST, "Atrás", Glyph.BACK, () -> a.step(0)));
             }
             default -> {
-                body.addView(ui.heading(UmbraType.DISPLAY, "Crea tu identidad"), ui.margins(Ui.match(), 10, 8));
-                body.addView(ui.text(UmbraType.BODY_SECONDARY, "Elige un alias. Solo lo verán los contactos que agregues."));
-                EditText alias = ui.field("Tu alias privado");
+                body.addView(ui.heading(UmbraType.DISPLAY, "Tu identidad"), ui.margins(Ui.match(), 10, 8));
+                EditText alias = ui.field("Alias privado");
                 alias.setSingleLine(true);
                 body.addView(ui.labeledField("Alias", alias));
-                body.addView(ui.banner(Tone.WARNING, Glyph.WARNING, "Una identidad, este dispositivo",
-                    "No hay llave maestra ni recuperación del historial. Perder el teléfono o invalidar su bloqueo puede dejar los datos inaccesibles.", null, null));
-                LinearLayout next = ui.card();
-                next.addView(ui.text(UmbraType.LABEL, "Después: admisión de este dispositivo"));
-                next.addView(ui.text(UmbraType.CAPTION, "Para usar el entorno privado, el administrador debe admitir este teléfono. Crear la identidad no lo admite ni conecta nada."));
-                body.addView(next);
-                bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Crear identidad protegida", Glyph.SHIELD_CHECK, () -> a.create(alias.getText().toString().trim())));
+                body.addView(ui.banner(Tone.WARNING, Glyph.WARNING, "Sin recuperación", "Si pierdes el teléfono, pierdes los datos.", null, null));
+                body.addView(ui.chip(Tone.NEUTRAL, Glyph.DEVICE_PENDING, "Después: admisión"));
+                bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Crear identidad", Glyph.SHIELD_CHECK, () -> a.create(alias.getText().toString().trim())));
                 bottom.addView(ui.button(Ui.ButtonKind.GHOST, "Atrás", Glyph.BACK, () -> a.step(1)));
             }
         }
@@ -116,11 +98,10 @@ public final class EntryScreens {
     /** Future emergency lock control. Rendered disabled until the engine provides the domain action. */
     public static LinearLayout emergencyLock(Ui ui, FeatureAvailability features, Runnable trigger) {
         LinearLayout box = ui.column();
-        android.widget.Button b = ui.button(Ui.ButtonKind.DESTRUCTIVE, "BLOQUEAR UMBRA", Glyph.EMERGENCY_LOCK, trigger);
+        android.widget.Button b = ui.button(Ui.ButtonKind.DESTRUCTIVE, "Bloqueo de emergencia", Glyph.EMERGENCY_LOCK, trigger);
         if (!features.available(Feature.EMERGENCY_LOCK)) {
-            ui.disabled(b, "el bloqueo de emergencia aún no existe en el motor");
+            ui.disabled(b, "próximamente");
             box.addView(b); box.addView(ui.pendingChip());
-            box.addView(ui.text(UmbraType.CAPTION, "Cuando exista, disparará una única acción del motor y mostrará la confirmación del estado local."));
         } else box.addView(b);
         return box;
     }

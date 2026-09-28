@@ -14,13 +14,13 @@ public record MessageItem(String id, Kind kind, boolean outgoing, String text, S
             return switch (status) {
                 case "Pendiente" -> new Delivery("Pendiente", Glyph.TIMER, Tone.NEUTRAL);
                 case "En cola del servidor" -> new Delivery("En el servidor", Glyph.CLOUD, Tone.NEUTRAL);
-                case "Enlace Bluetooth" -> new Delivery("Enviado por Bluetooth", Glyph.BLUETOOTH, Tone.OFFLINE);
+                case "Enlace Bluetooth" -> new Delivery("Por Bluetooth", Glyph.BLUETOOTH, Tone.OFFLINE);
                 case "Entregado" -> new Delivery("Entregado", Glyph.CHECK, Tone.SUCCESS);
                 case "Recibido" -> new Delivery("", Glyph.CHECK, Tone.NEUTRAL);
                 default -> new Delivery(status, Glyph.INFO, Tone.NEUTRAL);
             };
         }
-        public static Delivery failed() { return new Delivery("No enviado · toca para reintentar", Glyph.RETRY, Tone.DANGER); }
+        public static Delivery failed() { return new Delivery("No enviado · reintentar", Glyph.RETRY, Tone.DANGER); }
     }
 
     public static MessageItem text(String id, boolean outgoing, String text, String time, String status, String sender) {

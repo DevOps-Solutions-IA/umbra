@@ -14,16 +14,16 @@ public record CallPresentation(String phase, String detail, Tone tone, boolean l
     public static CallPresentation of(String signaling, String media) {
         String m = media == null ? "" : media.toUpperCase(Locale.ROOT);
         String s = signaling == null ? "" : signaling.toUpperCase(Locale.ROOT);
-        if (m.equals("ACTIVE")) return new CallPresentation("En llamada", "Conexión privada mediante tu retransmisor autorizado", Tone.SUCCESS, true, false, false);
-        if (m.equals("FAILED")) return new CallPresentation("No se pudo conectar", "La conexión privada no se estableció. El micrófono se liberó.", Tone.DANGER, false, true, false);
-        if (m.equals("ENDED")) return new CallPresentation("Llamada finalizada", "El audio se detuvo.", Tone.NEUTRAL, false, true, false);
-        if (m.equals("NEGOTIATING")) return new CallPresentation("Conectando…", "Estableciendo el canal de audio", Tone.NEUTRAL, false, false, false);
-        if (TERMINAL.contains(s)) return new CallPresentation(terminalLabel(s), "No hay audio ni video activos.", Tone.NEUTRAL, false, true, false);
+        if (m.equals("ACTIVE")) return new CallPresentation("En llamada", "", Tone.SUCCESS, true, false, false);
+        if (m.equals("FAILED")) return new CallPresentation("No se pudo conectar", "Micrófono liberado.", Tone.DANGER, false, true, false);
+        if (m.equals("ENDED")) return new CallPresentation("Llamada finalizada", "", Tone.NEUTRAL, false, true, false);
+        if (m.equals("NEGOTIATING")) return new CallPresentation("Conectando…", "", Tone.NEUTRAL, false, false, false);
+        if (TERMINAL.contains(s)) return new CallPresentation(terminalLabel(s), "", Tone.NEUTRAL, false, true, false);
         return switch (s) {
-            case "INCOMING" -> new CallPresentation("Llamada entrante", "Responder no activa tu micrófono ni tu cámara sin tu confirmación.", Tone.ACCENT, false, false, true);
-            case "OUTGOING" -> new CallPresentation("Llamando…", "Esperando respuesta. Todavía no se transmite audio.", Tone.NEUTRAL, false, false, false);
-            case "ACCEPTING" -> new CallPresentation("Respondiendo…", "Confirmando el dispositivo de la llamada", Tone.NEUTRAL, false, false, true);
-            case "SELECTED", "NEGOTIATING" -> new CallPresentation("Lista para audio", "Autoriza el micrófono para empezar a hablar.", Tone.NEUTRAL, false, false, false);
+            case "INCOMING" -> new CallPresentation("Llamada entrante", "Micrófono y cámara piden confirmación.", Tone.ACCENT, false, false, true);
+            case "OUTGOING" -> new CallPresentation("Llamando…", "Sin audio todavía.", Tone.NEUTRAL, false, false, false);
+            case "ACCEPTING" -> new CallPresentation("Respondiendo…", "", Tone.NEUTRAL, false, false, true);
+            case "SELECTED", "NEGOTIATING" -> new CallPresentation("Lista para audio", "Autoriza el micrófono.", Tone.NEUTRAL, false, false, false);
             default -> new CallPresentation("Sin llamada", "", Tone.NEUTRAL, false, true, false);
         };
     }

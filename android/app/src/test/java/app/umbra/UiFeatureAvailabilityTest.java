@@ -14,7 +14,7 @@ public class UiFeatureAvailabilityTest {
         for (FeatureAvailability a : new FeatureAvailability[]{FeatureAvailability.forBuild(true, true), FeatureAvailability.forBuild(false, false)})
             for (Feature f : PENDING_SECURITY) {
                 assertFalse(f.name(), a.available(f));
-                assertEquals(f.name(), "UI preparada · Backend pendiente", a.label(f));
+                assertEquals(f.name(), "Próximamente", a.label(f));
             }
     }
     @Test public void offlineExcludesInternetMediaAndRelay() {

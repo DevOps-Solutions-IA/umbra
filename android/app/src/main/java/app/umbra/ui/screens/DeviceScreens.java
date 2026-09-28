@@ -22,11 +22,11 @@ public final class DeviceScreens {
 
     public static Screen devices(Ui ui, DevicesState s, DevicesActions a) {
         LinearLayout top = ui.column();
-        top.addView(ui.topBar(a::back, ui.titleBlock("Tus dispositivos", null)));
+        top.addView(ui.topBar(a::back, ui.titleBlock("Dispositivos", null), ui.helpButton(Help.DEVICES)));
         LinearLayout body = ui.column();
         if (s.problem() != null) body.addView(ui.errorState(ErrorPresentation.of(ErrorKind.GENERIC).withBody(s.problem()), null, false));
         if (!s.rosterConfigured())
-            body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Solo este dispositivo", "Todavía no existe una lista firmada de dispositivos para tu identidad.", null, null));
+            body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Solo este dispositivo", null, null, null));
         for (DeviceItem d : s.own()) {
             LinearLayout trailing = ui.column(); trailing.setGravity(Gravity.END);
             Glyph state = d.current() ? Glyph.DEVICE_CURRENT : d.active() ? Glyph.DEVICE_AUTHORIZED : Glyph.DEVICE_REVOKED;
@@ -35,24 +35,23 @@ public final class DeviceScreens {
             LinearLayout row = ui.listRow(ui.iconTile(state, d.current() ? Tone.ACCENT : Tone.NEUTRAL), d.title(), d.detail(), trailing, null);
             body.addView(row);
             if (d.revocable()) {
-                Button revoke = ui.button(Ui.ButtonKind.DESTRUCTIVE, "Revocar " + d.title(), Glyph.DEVICE_REVOKED, () -> a.revoke(d));
+                Button revoke = ui.button(Ui.ButtonKind.DESTRUCTIVE, "Revocar", Glyph.DEVICE_REVOKED, () -> a.revoke(d));
                 body.addView(revoke);
                 if (!s.features().available(Feature.DEVICE_REVOCATION)) {
-                    ui.disabled(revoke, "falta el flujo que comunica la revocación a tus contactos");
+                    ui.disabled(revoke, "próximamente");
                     body.addView(ui.pendingChip());
                 }
             }
             body.addView(ui.divider());
         }
-        Button add = ui.button(Ui.ButtonKind.SECONDARY, "Agregar dispositivo", Glyph.ADD, a::add);
-        if (!s.features().available(Feature.DEVICE_LINKING_WIZARD)) { ui.disabled(add, "asistente de vinculación pendiente"); body.addView(add); body.addView(ui.pendingChip()); }
+        Button add = ui.button(Ui.ButtonKind.SECONDARY, "Agregar", Glyph.ADD, a::add);
+        if (!s.features().available(Feature.DEVICE_LINKING_WIZARD)) { ui.disabled(add, "próximamente"); body.addView(add); body.addView(ui.pendingChip()); }
         else body.addView(add);
-        body.addView(ui.text(UmbraType.CAPTION, "Revocar es definitivo: el dispositivo deja de recibir mensajes nuevos. No borra lo que ya tenga guardado."), ui.margins(Ui.match(), 8, 0));
         if (!s.contacts().isEmpty()) {
-            body.addView(ui.sectionHeader("Dispositivos de tus contactos"));
+            body.addView(ui.sectionHeader("De tus contactos"));
             for (ContactDevices c : s.contacts())
                 body.addView(ui.listRow(ui.avatar(c.alias(), false, 40), c.alias(),
-                    c.approved() < 0 ? "Lista no aprobada o caducada · sin ubicación ni llamadas" : c.approved() + (c.approved() == 1 ? " dispositivo en su lista firmada" : " dispositivos en su lista firmada"), null, null));
+                    c.approved() < 0 ? "Sin lista aprobada" : c.approved() + (c.approved() == 1 ? " dispositivo" : " dispositivos"), null, null));
         }
         return Screen.of(top, body, null);
     }
@@ -64,8 +63,8 @@ public final class DeviceScreens {
     /** Precision, live/one-off, duration and a plain summary before the engine review. */
     public static LinearLayout locationSheet(Ui ui, LocationSheetState s, LocationActions a) {
         LinearLayout box = ui.column();
-        box.addView(ui.heading(UmbraType.TITLE, "Compartir ubicación"));
-        box.addView(ui.text(UmbraType.CAPTION, "Solo mientras UMBRA esté abierta y desbloqueada. Bloquear o salir la detiene."), ui.margins(Ui.match(), 2, 8));
+        LinearLayout head = ui.row(); head.addView(ui.heading(UmbraType.TITLE, "Ubicación"), Ui.weight()); head.addView(ui.helpButton(Help.LOCATION));
+        box.addView(head, ui.margins(Ui.match(), 0, 8));
         box.addView(ui.segmented(new String[]{"Un punto", "En vivo"}, s.live() ? 1 : 0, null, i -> a.live(i == 1)));
         box.addView(ui.sectionHeader("Precisión"));
         for (LocationShareDraft.Precision p : LocationShareDraft.Precision.values()) {
@@ -80,7 +79,7 @@ public final class DeviceScreens {
         }
         EditText lat = null, lon = null;
         if (s.precision() == LocationShareDraft.Precision.MANUAL) {
-            lat = ui.field("Latitud (por ejemplo 4.6097)"); lon = ui.field("Longitud (por ejemplo -74.0817)");
+            lat = ui.field("4.6097"); lon = ui.field("-74.0817");
             lat.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL | android.text.InputType.TYPE_NUMBER_FLAG_SIGNED);
             lon.setInputType(lat.getInputType());
             box.addView(ui.labeledField("Latitud", lat)); box.addView(ui.labeledField("Longitud", lon));
@@ -97,13 +96,11 @@ public final class DeviceScreens {
             summary.addView(ui.text(UmbraType.SECURITY_LABEL, line[0]), ui.margins(Ui.match(), 6, 0));
             summary.addView(ui.text(UmbraType.BODY, line[1]));
         }
-        summary.addView(ui.text(UmbraType.CAPTION, "Antes de enviar verás los dispositivos exactos aprobados que la recibirán."), ui.margins(Ui.match(), 8, 0));
         box.addView(summary);
         final EditText flat = lat, flon = lon;
-        box.addView(ui.button(Ui.ButtonKind.PRIMARY, "Revisar y compartir", Glyph.LOCATION,
+        box.addView(ui.button(Ui.ButtonKind.PRIMARY, "Revisar", Glyph.LOCATION,
             () -> a.review(flat == null ? null : flat.getText().toString(), flon == null ? null : flon.getText().toString())));
-        box.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "DETENER UBICACIÓN", Glyph.LOCATION_OFF, a::stopAll));
-        box.addView(ui.text(UmbraType.CAPTION, "Detiene la captura y cancela las entregas de ubicación pendientes. No pide contraseña."));
+        box.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Detener todo", Glyph.LOCATION_OFF, a::stopAll));
         return box;
     }
 

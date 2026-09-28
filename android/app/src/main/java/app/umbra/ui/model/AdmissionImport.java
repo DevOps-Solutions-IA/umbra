@@ -62,13 +62,13 @@ public final class AdmissionImport {
     /** Human label for a confirmation dialog; never claims validity. */
     public static String describe(Kind kind) {
         return switch (kind) {
-            case REALM -> "Configuración pública de un entorno UMBRA";
-            case REQUEST -> "Solicitud de admisión de otro dispositivo";
-            case RENEWAL_REQUEST -> "Solicitud de renovación de otro dispositivo";
-            case CREDENTIAL -> "Credencial de admisión firmada";
-            case REJECTION -> "Rechazo firmado de una solicitud";
+            case REALM -> "Entorno";
+            case REQUEST -> "Solicitud de admisión";
+            case RENEWAL_REQUEST -> "Solicitud de renovación";
+            case CREDENTIAL -> "Credencial firmada";
+            case REJECTION -> "Rechazo firmado";
             case REVOCATION -> "Revocación firmada";
-            case RENEWAL_RESULT -> "Renovación firmada (credencial nueva y revocación de la anterior)";
+            case RENEWAL_RESULT -> "Renovación firmada";
             case UNKNOWN -> "Archivo no reconocido";
         };
     }

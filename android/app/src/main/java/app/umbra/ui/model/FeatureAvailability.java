@@ -6,7 +6,7 @@ import java.util.Map;
 /**
  * Single source of truth for what the interface may present as working. A feature is AVAILABLE only
  * when a real engine/service implementation exists in this build; otherwise its UI is shown as
- * "UI preparada · backend pendiente" (or hidden when the flavor excludes it) and cannot be triggered.
+ * "Próximamente" (or hidden when the flavor excludes it) and cannot be triggered.
  */
 public final class FeatureAvailability {
     public enum Status { AVAILABLE, PENDING_BACKEND, NOT_IN_FLAVOR }
@@ -52,8 +52,8 @@ public final class FeatureAvailability {
     public static String label(Status status) {
         return switch (status) {
             case AVAILABLE -> "Disponible";
-            case PENDING_BACKEND -> "UI preparada · Backend pendiente";
-            case NOT_IN_FLAVOR -> "No incluido en la edición offline";
+            case PENDING_BACKEND -> "Próximamente";
+            case NOT_IN_FLAVOR -> "No incluido en esta edición";
         };
     }
     public String label(Feature feature) { return label(status(feature)); }
