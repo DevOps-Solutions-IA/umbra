@@ -167,7 +167,7 @@ public final class ConnectivityService {
     public Lease startNearby(boolean confirmed) {
         Frame f=online.get(); if(cleanupFailed || !confirmed || f.vault==null || f.state==State.DISCONNECTING) throw denied(); f.vault.run();
         Lease lease=new Lease(f,true);
-        if(!nearby.compareAndSet(null,lease)) throw new IllegalStateException("Nearby already requested");
+        if(!nearby.compareAndSet(null,lease)) throw new ConnectivityException(ConnectivityException.Code.NEARBY_ALREADY_REQUESTED);
         try { lease.check(); return lease; } catch(RuntimeException failed) { lease.close(); throw failed; }
     }
     public boolean isNearbySessionAllowed() {
@@ -176,7 +176,7 @@ public final class ConnectivityService {
     }
     public void stopNearby() { Lease lease=nearby.getAndSet(null); if(lease!=null) lease.close(); }
     public void admissionInvalidated() { networkLost(); stopNearby(); }
-    private static SecurityException denied() { return new SecurityException("Explicit connectivity consent required"); }
+    private static SecurityException denied() { return new ConnectivityException(ConnectivityException.Code.CONSENT_OR_SESSION_UNAVAILABLE); }
 
     public final class Lease implements AutoCloseable {
         private final Frame granted;

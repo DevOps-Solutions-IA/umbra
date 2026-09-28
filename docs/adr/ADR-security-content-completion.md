@@ -32,3 +32,27 @@ Admission snapshots/errors, nonvisual privacy adapters and restricted-content
 blocks B/C require subsequent implementation and validation. This ADR does not
 claim those features exist. Restricted access must eventually be enforced by
 persistent atomic consumption and bounded sessions, not presentation flags.
+
+## Nonvisual privacy adapters
+
+Android framework only; no dependency added. `PrivateAndroidSurface` must be
+invoked by the presentation owner before window/surface attachment. It sets
+FLAG_SECURE, overlay rejection and (API33+) recents screenshot prohibition.
+It cannot retroactively secure a frame already displayed; product integration
+remains Claude's task. Generic notification construction accepts no message,
+name, location or intent. Sensitive inputs disable restoration/content capture
+and request no IME personalised learning; a compromised IME/OS remains outside
+this guarantee. The domain-owned buffer has bounded, single-transfer ownership.
+
+`ImagePreparation` accepts JPEG/PNG only, <=4MiB compressed and <=2048 each axis /
+4MiPixels decoded. Framework ImageDecoder handles orientation into a software
+sRGB bitmap; a fresh PNG is encoded in memory with <=256KiB output. No source
+metadata/EXIF is copied; originals remain untouched. Output too large is rejected,
+not a reason to increase the existing attachment limit. Cancellation rechecks the
+vault lease before/after native decode/encode, which cannot be interrupted mid-call.
+These are preparation APIs, not restricted-content session capabilities.
+
+References reviewed 2026-09-28:
+https://developer.android.com/reference/android/graphics/ImageDecoder
+https://developer.android.com/security/fraud-prevention/activities
+https://developer.android.com/privacy-and-security/risks/secure-clipboard-handling

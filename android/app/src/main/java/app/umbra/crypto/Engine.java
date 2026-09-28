@@ -55,7 +55,7 @@ public final class Engine {
             // A missing identity is only a fresh install when no application records remain.
             // Never offer re-enrollment over a partially lost or damaged vault.
             for (String bucket : new String[]{"meta", "contact", "trusted", "session", "prekey", "signed", "kyber",
-                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export", "pairing-issued", "pairing-pending", "device-roster", "device-index", "device-issued", "device-pending", "device-relay", "location-out", "location-in", "calls", "admission", "admission-secret", "admission-peers", "admission-revoked", "admission-decisions", "admission-nonces", "admission-challenges"})
+                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export", "pairing-issued", "pairing-pending", "device-roster", "device-index", "device-issued", "device-pending", "device-relay", "location-out", "location-in", "calls", "admission", "admission-secret", "admission-peers", "admission-revoked", "admission-decisions", "admission-nonces", "admission-challenges", "admission-peer-evidence"})
                 if (!db.keys(bucket).isEmpty()) throw new IllegalStateException("Identity missing from existing vault");
             return false;
         }

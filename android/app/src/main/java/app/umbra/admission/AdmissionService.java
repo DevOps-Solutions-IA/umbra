@@ -30,7 +30,7 @@ public final class AdmissionService {
     }
     private boolean hasAdmissionRecords() {
         for(String bucket:new String[]{"admission","admission-secret","admission-peers","admission-revoked",
-                "admission-decisions","admission-nonces","admission-challenges"})
+                "admission-decisions","admission-nonces","admission-challenges","admission-peer-evidence"})
             if(!db.keys(bucket).isEmpty()) return true;
         return false;
     }
@@ -114,11 +114,11 @@ public final class AdmissionService {
     }
     /** Provisioning pins public authority only; local confirmation is required by the caller. */
     public void installRealmConfig(String wire,boolean confirmed) throws Exception {
-        RealmConfig proposed=RealmConfig.decode(wire); Runnable check=lease();
+        Runnable check=lease(); RealmConfig proposed=RealmConfig.decode(wire);
         db.transaction(() -> {
             check.run(); if(!confirmed) throw AdmissionCodec.invalid(); signalPublic();
             String old=read("realm");
-            if(old!=null && !old.equals(proposed.encode())) throw new SecurityException("Admission authority mismatch");
+            if(old!=null && !old.equals(proposed.encode())) throw new AdmissionException(AdmissionException.Code.AUTHORITY_MISMATCH);
             if(old==null) {
                 if(hasAdmissionRecords()) throw AdmissionCodec.invalid();
                 byte[] key=Bytes.random(32);
@@ -145,7 +145,7 @@ public final class AdmissionService {
         return db.transaction(() -> {
             check.run(); RealmConfig r=realm();
             String pending=read("pending");
-            if(pending!=null && read("rejection")==null && AdmissionRequest.decode(pending).expiresAt()>clock.getAsLong()) throw new SecurityException("Admission request pending");
+            if(pending!=null && read("rejection")==null && AdmissionRequest.decode(pending).expiresAt()>clock.getAsLong()) throw new AdmissionException(AdmissionException.Code.REQUEST_PENDING);
             byte[] key=seed("device");
             try {
                 AdmissionRequest request=AdmissionRequest.create(r,key,signalPublic(),clock.getAsLong());
@@ -170,15 +170,15 @@ public final class AdmissionService {
         finally { Arrays.fill(key,(byte)0); }
     }
     public Review reviewAdmissionRequest(String wire) throws Exception {
-        AdmissionRequest request=AdmissionRequest.decode(wire); Runnable check=lease();
+        Runnable check=lease(); AdmissionRequest request=AdmissionRequest.decode(wire);
         return db.transaction(() -> {
             check.run(); authority(); request.validate(realm(),clock.getAsLong()); unconsumed(request);
             return new Review(request,check);
         });
     }
     private void unconsumed(AdmissionRequest request) {
-        if(db.get("admission-decisions",request.requestId())!=null || db.get("admission-nonces",request.nonce())!=null) throw new SecurityException("Admission request consumed");
-        if(db.keys("admission-decisions").size()>=MAX_DECISIONS) throw new SecurityException("Admission authority capacity reached");
+        if(db.get("admission-decisions",request.requestId())!=null || db.get("admission-nonces",request.nonce())!=null) throw new AdmissionException(AdmissionException.Code.REQUEST_CONSUMED);
+        if(db.keys("admission-decisions").size()>=MAX_DECISIONS) throw new AdmissionException(AdmissionException.Code.CAPACITY_REACHED);
     }
     private void consent(Review review,boolean confirmed) {
         if(review==null || review.owner!=this || !confirmed) throw AdmissionCodec.invalid();
@@ -341,7 +341,40 @@ public final class AdmissionService {
             challenge.validate(c,verifier,operation,clock.getAsLong()); challenge.verifyProof(c,proof);
             if(db.get("admission-peers",expectedDevice)==null && db.keys("admission-peers").size()>=MAX_PEERS) throw AdmissionCodec.invalid();
             check.run(); valid(c); challenge.validate(c,verifier,operation,clock.getAsLong());
-            db.remove("admission-challenges",challenge.nonce()); challengeLeases.remove(challenge.nonce()); db.put("admission-peers",expectedDevice,Bytes.utf8(c.wire())); return null;
+            db.remove("admission-challenges",challenge.nonce()); challengeLeases.remove(challenge.nonce()); db.put("admission-peers",expectedDevice,Bytes.utf8(c.wire())); recordPeerEvidence(c,PeerSource.CHALLENGE_PROOF); return null;
+        });
+    }
+    public enum PeerState { UNKNOWN, VALID_LOCALLY, EXPIRED, REVOKED, INVALID }
+    public enum PeerSource { UNKNOWN_LEGACY, PUBLIC_CREDENTIAL, CHALLENGE_PROOF, NEARBY_PROOF }
+    /** Observation is historical, never a live possession proof or global revocation freshness. */
+    public record PeerStatus(PeerState state,PeerSource source,Long observedAt,Long expiresAt) {}
+    private void recordPeerEvidence(AdmissionCredential credential,PeerSource source) {
+        String value="1\n"+source.name()+"\n"+clock.getAsLong()+"\n"+Bytes.sha256(Bytes.utf8(credential.wire()));
+        db.put("admission-peer-evidence",credential.deviceId(),Bytes.utf8(value));
+    }
+    public PeerStatus peerStatus(String deviceId) throws Exception {
+        Runnable check=lease();
+        return db.transaction(() -> {
+            check.run(); byte[] wire=db.get("admission-peers",deviceId);
+            if(wire==null) return new PeerStatus(PeerState.UNKNOWN,PeerSource.UNKNOWN_LEGACY,null,null);
+            try {
+                AdmissionCredential c=AdmissionCredential.decode(Bytes.text(wire),realm());
+                if(!c.deviceId().equals(deviceId)) throw AdmissionCodec.invalid();
+                PeerSource source=PeerSource.UNKNOWN_LEGACY; Long observed=null;
+                byte[] metadata=db.get("admission-peer-evidence",deviceId);
+                if(metadata!=null) {
+                    if(metadata.length>180) throw AdmissionCodec.invalid();
+                    String[] parts=Bytes.text(metadata).split("\n",-1);
+                    if(parts.length!=4 || !parts[0].equals("1") || !parts[3].equals(Bytes.sha256(wire))) throw AdmissionCodec.invalid();
+                    source=PeerSource.valueOf(parts[1]); observed=AdmissionCodec.number(parts[2]);
+                }
+                PeerState state=db.get("admission-revoked",c.credentialId())!=null?PeerState.REVOKED:
+                        clock.getAsLong()>=c.expiresAt()?PeerState.EXPIRED:
+                        clock.getAsLong()<c.notBefore()?PeerState.INVALID:PeerState.VALID_LOCALLY;
+                check.run(); return new PeerStatus(state,source,observed,c.expiresAt());
+            } catch(AdmissionException | IllegalArgumentException invalid) {
+                check.run(); return new PeerStatus(PeerState.INVALID,PeerSource.UNKNOWN_LEGACY,null,null);
+            }
         });
     }
     public void requirePeer(String deviceId) throws Exception {
@@ -358,7 +391,7 @@ public final class AdmissionService {
             check.run(); AdmissionCredential c=AdmissionCredential.decode(wire,realm()); valid(c);
             if(!c.deviceId().equals(expectedDevice)) throw AdmissionCodec.invalid();
             if(db.get("admission-peers",expectedDevice)==null && db.keys("admission-peers").size()>=MAX_PEERS) throw AdmissionCodec.invalid();
-            db.put("admission-peers",expectedDevice,Bytes.utf8(wire)); return null;
+            db.put("admission-peers",expectedDevice,Bytes.utf8(wire)); recordPeerEvidence(c,PeerSource.PUBLIC_CREDENTIAL); return null;
         });
     }
     /** Signs only a purpose-separated hash of the existing role/identity/nonces Signal transcript. */
@@ -383,7 +416,7 @@ public final class AdmissionService {
             if(!Arrays.equals(fields,new String[]{c.realmId(),c.credentialId(),Bytes.sha256(Bytes.utf8(c.wire())),
                     Bytes.sha256(signalTranscript)})) throw AdmissionCodec.invalid();
             AdmissionCodec.verify("nearby",proof,c.devicePublicKey(),fields);
-            check.run(); installPeerCredential(credential,expectedDevice); return null;
+            check.run(); installPeerCredential(credential,expectedDevice); recordPeerEvidence(c,PeerSource.NEARBY_PROOF); return null;
         });
     }
     public AdmissionRevocation revokeAdmission(String credential,boolean confirmed,String reason) throws Exception {
