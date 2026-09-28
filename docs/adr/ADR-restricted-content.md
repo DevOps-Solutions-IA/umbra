@@ -1,4 +1,4 @@
-# Restricted content v1 — design checkpoint (implementation pending)
+# Restricted content v1 — evolving implementation checkpoint
 
 The implementation must be shared by picture, voice note, short video and PDF.
 It is an application policy for cooperating clients, not DRM against a modified
@@ -49,16 +49,18 @@ failure leaves closure incomplete. No exported URI, FileProvider, share intent,
 clipboard, seek/repeat API or external viewer for restricted objects. Network,
 Nearby, location and capture consent remain independent.
 
-Android image preparation is currently implemented separately; session-integrated
-image, audio, video and PDF adapters remain pending. PDF requires a seekable
+Session-integrated PNG and AAC adapters have scoped Android and transport
+acceptance recorded in the dated evidence. PDF-derived pages are under native
+validation; restricted video files remain unimplemented. PDF requires a seekable
 read-only in-memory/proxy descriptor; plaintext disk staging is forbidden. Codecs
 must have duration/resolution/output bounds and stop on route/focus loss. No
 claims of acceptance until real Android debug/R8 and transport tests execute.
 
 ## Initial implementation checkpoint limits
 
-Only PNG is accepted in the current incremental parser; AAC/video/PDF are NOT
-implemented yet and must not be advertised. Tombstones are currently retained
+The original implementation accepted PNG only. The current parser additionally
+accepts AAC_ADTS and the pending-validation PDF_PAGES static document profile.
+Video files remain unimplemented and must not be advertised. Tombstones are currently retained
 indefinitely with a 4096 total cap (fail closed on exhaustion); only expired
 payloads are purged. No early tombstone eviction or silent reset. At most four
 persistent busy reservations may overlap; repeatable objects require waiting
@@ -72,5 +74,5 @@ the emergency coordinator retains its existing incomplete/timeout semantics.
 Periodic 250ms checks and all decoder boundaries revalidate local authorization;
 this is a design bound to measure, not an observed cancellation guarantee.
 Ordinary clipboard export deliberately accepts only a stored, unexpired text
-message and never arbitrary restricted bytes. Full media/PDF and Android session
-acceptance remain outstanding.
+message and never arbitrary restricted bytes. Full cumulative media/PDF acceptance remains outstanding; consult per-SHA
+evidence rather than treating all formats as validated.

@@ -126,3 +126,18 @@ terminal outcome (COMPLETED/INTERRUPTED/FAILED/CLOSED); it is not a cleanup rece
 Lock can legitimately produce INTERRUPTED with successfully confirmed closure.
 Creation/start/render belong on their documented threads with the original lease;
 new unlock cannot reuse those objects. Native failures remain generic to UI.
+
+### PDF static-copy preparation — provisional, Android acceptance pending
+
+`RestrictedDocuments.prepare(Context, Engine, RestrictedContentService.Review,
+byte[] pdf, boolean confirmed)` runs on a worker with the original send review.
+The input remains caller-owned. The adapter uses a private OS-isolated parser and
+returns `Prepared` only after confirmed parser closure. Up to four pages become
+fresh bounded PNG rasters (768 px edge, total 256 KiB). This is a static copy,
+not preservation of PDF text/forms/vector fidelity. No external viewer is used.
+`RestrictedDocuments.Decoder(Session)` exposes `pageCount()`,
+`render(int, Canvas, Rect)`, and `close()`; no raw bitmap, URI, print or export.
+Claude must protect the surface before rendering and clear it at invalidation.
+Page navigation does not create another opening. See RESTRICTED_DOCUMENTS.md.
+This API is not a claim of completed C: native acceptance and file-video remain
+pending. Do not enable a finished-product control solely from this entry.

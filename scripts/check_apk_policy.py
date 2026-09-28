@@ -61,9 +61,17 @@ def validate_manifest(root: ET.Element, variant: str, build_type: str) -> tuple[
     if app.get("android:testOnly", "false") != "false":
         raise RuntimeError("Test-only app cannot be a production variant")
     components = [e for e in app if e.tag in {"activity", "activity-alias", "service", "receiver", "provider"}]
-    if len(components) != 1 or components[0].tag != "activity" or components[0].get("android:name") != "app.umbra.ui.MainActivity":
+    if len(components) != 2:
         raise RuntimeError("Unexpected app component")
-    activity = components[0]
+    activities = [e for e in components if e.tag == "activity" and e.get("android:name") == "app.umbra.ui.MainActivity"]
+    services = [e for e in components if e.tag == "service" and e.get("android:name") == "app.umbra.content.RestrictedPdfService"]
+    if len(activities) != 1 or len(services) != 1:
+        raise RuntimeError("Unexpected app component")
+    service = services[0]
+    if (service.get("android:exported") != "false" or service.get("android:isolatedProcess") != "true" or
+            service.get("android:process") != ":restricted_pdf" or len(service) != 0):
+        raise RuntimeError("PDF parser must remain private and OS-isolated")
+    activity = activities[0]
     if activity.get("android:exported") != "true" or {e.get("android:name") for e in activity.iter("action")} != {"android.intent.action.MAIN"} or {e.get("android:name") for e in activity.iter("category")} != {"android.intent.category.LAUNCHER"}:
         raise RuntimeError("Unexpected exported entry point")
     refs = tuple(app.get("android:" + name, "") for name in ("networkSecurityConfig", "dataExtractionRules"))
@@ -91,7 +99,7 @@ def validate_mapping(text: str) -> None:
         raise RuntimeError("Missing R8 class map")
     # R8 can inline a test/lab method into a production class. Its origin then
     # appears only on a method mapping line, not as a retained class declaration.
-    forbidden = r"(?<![\w.$])(?:app\.umbra\.lab(?:[.$]|$)|androidx\.test(?:[.$]|$)|app\.umbra\.(?:MemoryRecords|DeviceMemoryRecords|VoiceNativeFixtureListener|media[.$](?:Voice(?:Engine|Restart)FixtureListener|CameraProviderFixtureListener|SyntheticVideoCapturer))(?:[.$\s:]|$))"
+    forbidden = r"(?<![\w.$])(?:app\.umbra\.lab(?:[.$]|$)|androidx\.test(?:[.$]|$)|app\.umbra\.(?:MemoryRecords|DeviceMemoryRecords|VoiceNativeFixtureListener|content[.$](?:SyntheticRestrictedAudio|SyntheticDocuments)|media[.$](?:Voice(?:Engine|Restart)FixtureListener|CameraProviderFixtureListener|SyntheticVideoCapturer))(?:[.$\s:]|$))"
     if re.search(forbidden, text, re.MULTILINE):
         raise RuntimeError("Test/lab code retained or inlined by R8")
 
@@ -106,7 +114,7 @@ def validate_dex(package: zipfile.ZipFile) -> None:
         if re.fullmatch(r"classes\d*\.dex", name):
             data = package.read(name)
             if (b"Lapp/umbra/lab/" in data or b"Landroidx/test/" in data or
-                    re.search(rb"Lapp/umbra/(?:MemoryRecords|DeviceMemoryRecords|VoiceNativeFixtureListener|media/(?:Voice(?:Engine|Restart)FixtureListener|CameraProviderFixtureListener|SyntheticVideoCapturer))[;$]", data)):
+                    re.search(rb"Lapp/umbra/(?:MemoryRecords|DeviceMemoryRecords|VoiceNativeFixtureListener|content/(?:SyntheticRestrictedAudio|SyntheticDocuments)|media/(?:Voice(?:Engine|Restart)FixtureListener|CameraProviderFixtureListener|SyntheticVideoCapturer))[;$]", data)):
                 raise RuntimeError("Test/lab code in application DEX")
 
 
