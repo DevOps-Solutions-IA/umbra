@@ -46,15 +46,23 @@ def execute(commands,report):
             print('Failure source locations: '+json.dumps(failure_summary(report,name)),flush=True)
     return 1 if not results or any(row['exitCode']!=0 for row in results) else 0
 
+def partition(commands, shard, shards):
+    if not 1 <= shards <= 8 or not 0 <= shard < shards:
+        raise ValueError("Invalid video matrix shard")
+    selected=commands[shard::shards]
+    if not selected: raise ValueError("Empty video matrix shard")
+    return selected
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--a',required=True);parser.add_argument('--b',required=True)
     parser.add_argument('--reports',type=Path,required=True);parser.add_argument('--optimized',action='store_true')
+    parser.add_argument("--shard",type=int,default=0);parser.add_argument("--shards",type=int,default=1)
     args=parser.parse_args();args.reports.mkdir(parents=True,exist_ok=True)
     optimized=['--optimized'] if args.optimized else []
     commands=[('camera-provider',[sys.executable,'scripts/run_camera_provider.py','--serial',args.a,*optimized,'--reports',str(args.reports/'camera-provider')])]
     for name,options in cases():
         commands.append((name,[sys.executable,'scripts/run_voice_integration.py','--a',args.a,'--b',args.b,*optimized,'--video',*options,'--reports',str(args.reports/name)]))
-    return execute(commands,args.reports)
+    return execute(partition(commands,args.shard,args.shards),args.reports)
 
 if __name__=='__main__':sys.exit(main())

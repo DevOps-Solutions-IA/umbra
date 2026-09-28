@@ -245,7 +245,7 @@ def main():
                 processes[serial]=subprocess.Popen([adb,"-s",serial,"shell","am","instrument","-w","-r",
                     "-e","class","app.umbra.DeviceSignalTest","-e","listener","app.umbra.media.VoiceEngineFixtureListener",
                     PACKAGE+".test/androidx.test.runner.AndroidJUnitRunner"],stdout=stream,stderr=subprocess.STDOUT)
-            deadline=time.monotonic()+(160 if args.modulation else 90)
+            deadline=time.monotonic()+(160 if args.modulation else 140 if args.video else 90)
             approvals={}
             for serial in (args.a,args.b):
                 request=read(serial,"synthetic-admission-request.json",processes[serial],deadline)

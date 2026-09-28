@@ -247,3 +247,51 @@ de coste. La implementación corregida pasó 207 JVM connected/150 offline,
 167 herramientas, build debug/release/lint/JNI/APK policies y los 28 controles
 de integración HTTPS real (todos exit 0). La nueva carrera de invitación
 aprobó el rechazo de reconexión mientras espera una transacción.
+
+## Validación de 512c02e y presupuesto del laboratorio
+
+HEAD `512c02e7738bfa7725314ba5386892b774912b61`, checkout de Actions
+`ed3d285820abd528b0904e24f7821e82c319f6de`, mismo árbol
+`387903e8a8d387c30cbc1adfc208f3fa6b4734e6` (API git/commits verificada).
+Verify 36358139220 SUCCESS: 42/40 instrumentadas connected/offline,
+RFCOMM emulado positivo y rechazo de no admitido, APK/JNI/lint y backend.
+Password 36358139176, admission 36358139183, startup 36358139191,
+voz R8 36358139185 y modulación 36358139186: SUCCESS.
+Focused 36358139180: R8/Nearby SUCCESS en intento 1; debug falló antes de
+media con toybox nc `Network is unreachable` en el preflight UDP. Un único
+reintento acotado aprobó sus nueve casos. No se demostró la causa de esa
+intermitencia ni se modificó el preflight; ambos resultados se conservan.
+
+Video 36358139192: R8 aprobó 32 casos. Debug completó 30 PASS y un FAIL,
+y Actions lo canceló a los 45 minutos durante IPv6/TLS (NO EJECUTADO completo).
+El FAIL fue degraded-network: ambos extremos llegaron ACTIVE, decodificaron
+patrones remotos, apagaron cámara y conservaron audio; agotaron el presupuesto
+compartido de 70 s en stage=4, reactivación, todavía con native=ACTIVE/failure=none.
+La primera negociación/observación consumió ~19 s (1911/1948 callbacks de audio)
+bajo netem 128 kbit, 80 ms y 2% pérdida; la parada observada consumió 4.2–5 s.
+No se trata de cámara capturando tras apagar ni de fallo UDP en este caso.
+
+Se conserva el presupuesto de voz de 70 s y se asignan 25 s para cada una de
+las dos negociaciones adicionales de video: presupuesto total de arnés 120 s,
+host 140 s con margen de coordinación. Modulación permanece 140/160 s.
+No se cambia el TTL productivo de invitación de 60 s ni sesión de 180 s, ni
+los límites de cancelación, silencio, frames o patrones. Se registra ahora
+el tiempo monotónico transcurrido en cada recibo de video. La aceptación
+remota de esta corrección está pendiente de la nueva CI; no es éxito por diseño.
+
+La matriz de video se divide en dos particiones de 16 casos por configuración,
+con artefactos distintos y el mismo timeout global de 45 minutos. Una regresión
+comprueba cobertura exacta, sin duplicados/omisiones y rechazo de particiones
+vacías o inválidas. Todos los errores siguen propagándose. No se elimina ningún
+escenario. Los artefactos históricos están preservados fuera del repositorio en
+`/home/wundah/umbra-evidence/private-startup-512c02e/` y en las ejecuciones citadas.
+
+Repetición local de test_local.sh sobre 512c02e: exit 0, 204 backend, 20 utility,
+85 JVM adicionales. Advertencia Starlette/httpx conservada, sin supresión.
+
+Validación local de la partición/presupuesto: 168 pruebas de herramientas,
+repository_guard (378 archivos), build debug/release/lint/APK y compilación
+instrumentada debug y R8: exit 0. Un comando inicial intentó combinar la tarea
+debugAndroidTest con -PumbraMediaLab=true y falló porque ese perfil selecciona
+otro testBuildType. Se ejecutaron correctamente en invocaciones separadas;
+no se modificó la configuración para ocultar el error de invocación.

@@ -32,3 +32,15 @@ class VideoMatrixTest(unittest.TestCase):
         names=[name for name,_ in matrix.cases()]
         self.assertEqual(len(names),len(set(names)))
         self.assertIn('wrong-fingerprint',names);self.assertIn('ipv6-tls',names)
+
+    def test_shards_preserve_every_case_once_and_propagate_failure(self):
+        commands=[('camera-provider',[])]+matrix.cases()
+        shards=[matrix.partition(commands,i,2) for i in range(2)]
+        self.assertEqual(32,len(commands))
+        self.assertEqual(sorted(name for name,_ in commands),sorted(name for shard in shards for name,_ in shard))
+        self.assertFalse(set(name for name,_ in shards[0]) & set(name for name,_ in shards[1]))
+        for shard,count in ((-1,2),(2,2),(0,0),(0,9),(1,2)):
+            if (shard,count)==(1,2):
+                with self.assertRaises(ValueError):matrix.partition([('only',[])],shard,count)
+            else:
+                with self.assertRaises(ValueError):matrix.partition(commands,shard,count)

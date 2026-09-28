@@ -167,7 +167,12 @@ public final class VoiceEngineFixtureListener extends RunListener {
             write("synthetic-voice-ready.json",new JSONObject().put("ready",true));
             waitFor("synthetic-voice-start.json",SystemClock.elapsedRealtime()+20_000);
             String id=caller?engine.calls().invite(engine.calls().reviewInvite(peer,NetworkPolicy.RELAY_ONLY),true):null;
-            long deadline=SystemClock.elapsedRealtime()+(modulation?140_000:70_000); boolean accepted=false;
+            // Voice's 70 s includes setup/mute. Video adds two authenticated negotiations:
+            // 25 s each accommodates measured ~19 s under 128 kbit/80 ms/2% loss.
+            // This is a TOTAL test budget, not a relaxed capture/cancellation bound.
+            // Product invitation (60 s) and call lifetime (180 s) remain enforced.
+            long fixtureStarted=SystemClock.elapsedRealtime();
+            long deadline=fixtureStarted+(modulation?140_000:withVideo?120_000:70_000); boolean accepted=false;
             while(SystemClock.elapsedRealtime()<deadline) {
                 pump(relay,engine);
                 if(id==null) for(JSONObject row:engine.calls().sessions()) {
@@ -392,6 +397,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                                 .put("decodedRemotePatterns",videoDecoded.frames.get()-videoFrameBaseline).put("distinctPatternPhases",oneWay&&caller?0:2)
                                 .put("sendPermitted",!oneWay||caller).put("receivePermitted",!oneWay||!caller)
                                 .put("decodedAudioDuringVideo",decoded.get()-videoAudioBaseline).put("capturedFrames",videoCaptured.get())
+                                .put("fixtureElapsedMillis",SystemClock.elapsedRealtime()-fixtureStarted)
                                 .put("generation",engine.calls().session(id).getInt("generation")).put("videoCodec",new JSONObject(voice.videoStats()).getString("codec")).put("sdpAddressAudit",true));
                             videoStage=videoStage==1?2:5;
                         }
