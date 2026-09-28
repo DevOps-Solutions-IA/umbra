@@ -297,6 +297,15 @@ public final class RelayClient implements AutoCloseable {
         // Closing the underlying stream first also unblocks TLS reads, without waiting
         // for the server, HTTP body drain, close_notify, or application acknowledgements.
         for(var group:java.util.List.of(plainSockets,tlsSockets))for(var socket:group) {
+            // JSSE may drain a pending TLS record during close when no reader holds
+            // its read lock. Bound that cancellation-only drain; ordinary requests
+            // retain their configured timeout and the default TLS authentication.
+            if(socket instanceof javax.net.ssl.SSLSocket && !socket.isClosed()) {
+                try {socket.setSoTimeout(1);}
+                catch(IOException | RuntimeException failure) {
+                    closure.completeExceptionally(new IOException("Relay cancellation configuration failed"));
+                }
+            }
             try {socket.close();group.remove(socket);}
             catch(IOException | RuntimeException failure) {closure.completeExceptionally(new IOException("Relay socket closure failed"));}
         }

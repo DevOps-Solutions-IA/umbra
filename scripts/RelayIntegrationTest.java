@@ -149,20 +149,38 @@ public final class RelayIntegrationTest {
             // A separate hostile TLS fixture withholds a PUBLIC realm response body.
             // No unadmitted private API is opened to exercise cancellation.
             ExecutorService pendingExecutor = Executors.newSingleThreadExecutor();
-            try (RelayClient pendingClient = new RelayClient(args[2],()->true,bob.admission())) {
-                Future<Boolean> failed = pendingExecutor.submit(() -> {
-                    try { pendingClient.publicRealm(); return false; }
-                    catch (Exception expected) { return true; }
-                });
-                long startedDeadline = System.nanoTime() + 10_000_000_000L;
-                while (!Files.exists(exchange.resolve("pending-response"))) {
-                    if (System.nanoTime() > startedDeadline) throw new AssertionError("hostile response did not start");
-                    Thread.sleep(10);
+            try {
+                for(int attempt=0;attempt<8;attempt++) {
+                    bob.connectivity().disconnect();
+                    bob.connectivity().connect(args[2],true); // Fresh explicit synthetic consent for each cancellation sample.
+                    Files.deleteIfExists(exchange.resolve("pending-response"));
+                    CountDownLatch betweenReads = new CountDownLatch(1), resumeRead = new CountDownLatch(1);
+                    boolean pauseBetweenReads = attempt % 2 == 0;
+                    try (RelayClient pendingClient = new RelayClient(args[2],()-> {
+                        if(pauseBetweenReads && Files.exists(exchange.resolve("pending-response"))) {
+                            betweenReads.countDown();
+                            try { if(!resumeRead.await(15,TimeUnit.SECONDS)) throw new IllegalStateException("Test read barrier expired"); }
+                            catch(InterruptedException stopped) {Thread.currentThread().interrupt();return false;}
+                        }
+                        return true;
+                    },bob.admission())) {
+                        Future<Boolean> failed = pendingExecutor.submit(() -> {
+                            try { pendingClient.publicRealm(); return false; }
+                            catch (Exception expected) { return true; }
+                        });
+                        long startedDeadline = System.nanoTime() + 10_000_000_000L;
+                        while (!Files.exists(exchange.resolve("pending-response"))) {
+                            if (System.nanoTime() > startedDeadline) throw new AssertionError("hostile response did not start");
+                            Thread.sleep(10);
+                        }
+                        if(pauseBetweenReads && !betweenReads.await(10,TimeUnit.SECONDS))
+                            throw new AssertionError("TLS between-read boundary not reached");
+                        long closing = System.nanoTime();
+                        try {pendingClient.close();} finally {resumeRead.countDown();}
+                        require(System.nanoTime() - closing < 2_000_000_000L, "locking cancels a pending HTTPS read promptly (sample "+attempt+")");
+                        require(failed.get(2, TimeUnit.SECONDS), "cancelled HTTPS read never reports success");
+                    }
                 }
-                long closing = System.nanoTime();
-                pendingClient.close();
-                require(System.nanoTime() - closing < 2_000_000_000L, "locking cancels a pending HTTPS read promptly");
-                require(failed.get(2, TimeUnit.SECONDS), "cancelled HTTPS read never reports success");
             } finally { pendingExecutor.shutdownNow(); }
             // A cancellation wrapper must not bypass HTTPS endpoint identity. The lab
             // certificate covers localhost, deliberately NOT the 127.0.0.1 IP literal.
