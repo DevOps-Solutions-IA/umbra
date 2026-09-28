@@ -317,3 +317,37 @@ raw peak 8 / RMS 4.032612415125585; decoded peak 11 / RMS 3.9148875091832234,
 Capture-test correction compiled and linted locally (exit 0, 22 seconds).
 The runner still starts AVDs with `-no-audio` in `scripts/ci_emulator.sh`;
 no production audio source, codec, security threshold or offline permission changed.
+
+### 126ac2f native acceptance of the capture-test correction
+
+HEAD `126ac2f2d07c2e0ec4227cb961d7007643abcc08`, privacy run 36456403088,
+checkout `20d39152149271190fb95621e505999878f2d051`: **SUCCESS debug and R8**.
+Each matrix completed connected 10 tests and offline 9 tests, plus the separate
+force-stop receipts and connected HTTPS fixture. This validates the scoped
+capture/codec and playback checks, not physical microphones/speakers, hardware
+Keystore, all route-loss conditions or the complete master.
+- debug artifact 10986435468 SHA-256 `d0ea7c196137d088294f80bdf5f4debf808b3b0b524c5f017f75017fe81bf656`.
+- R8 artifact 10985339769 SHA-256 `536e22190cc3026a763a58758dc3039c8a62045953b7ccebd60cf2eb2d900ffe`.
+
+Next independent coverage correction: the prior tone test called preparation but
+checked frequency/tail on the original encoding. It now generates synthetic ADTS,
+prepares it through the real decode/re-encode API, delivers the **prepared** copy
+via Signal and verifies its decoded frequency/tail after persistent consumption.
+No thresholds change. The small internal encoder-byte primitive remains package
+private; no public raw-content/export API is added. Temporary codec buffers are
+also wiped in nested finally blocks even if native release throws. Local builds
+of both test APKs and lint passed (27 seconds); new native result remains pending.
+
+126ac2f focused run 36456403163: **nearby job SUCCESS**, three positive exchanges
+per flavor and an unadmitted rejection per flavor. Both native endpoint receipts
+explicitly include restricted PNG and native AAC decoded/consumed plus duplicate
+and ACK checks. Artifact 10986740961 SHA-256
+`bab81e7fd47885821fe258c6dee116af200c06251622a82c58404e6f7861e671`.
+This is real emulated RFCOMM, not physical radio or Vault durability; other jobs
+in the focused workflow must be evaluated separately.
+
+Local optimized build for the pending sanitized-copy test: the first command
+omitted `-PumbraVaultLab=true` and failed before compilation because the tasks
+were absent (exit 1). With the project's documented property, both vaultLab apps
+and test APKs built (exit 0, 1m10s). This working-tree build is not final Android
+runtime acceptance. Preserve both logs; no project version/dependency changed.

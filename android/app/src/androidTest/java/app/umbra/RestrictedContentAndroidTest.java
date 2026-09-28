@@ -74,7 +74,7 @@ public class RestrictedContentAndroidTest {
         try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
             String id=a.restricted().send(a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),
-                SyntheticRestrictedAudio.tone(ar.authorization()),true);
+                SyntheticRestrictedAudio.sanitizedTone(ar.authorization()),true);
             for(var row:a.outbox()){b.receive(row.getJSONObject("envelope"));b.receive(row.getJSONObject("envelope"));}
             assertTrue(b.messages(a.id()).isEmpty());assertEquals(1,b.restricted().received(a.id()).size());
             var session=b.restricted().open(b.restricted().reviewOpen(id),true);

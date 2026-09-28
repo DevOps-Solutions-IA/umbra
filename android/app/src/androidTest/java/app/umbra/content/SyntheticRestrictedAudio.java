@@ -10,6 +10,20 @@ public final class SyntheticRestrictedAudio {
         for(int i=0;i<pcm.length;i++)pcm[i]=(short)(8000*Math.sin(2*Math.PI*(i>=pcm.length-640?1320:440)*i/RestrictedAudio.SAMPLE_RATE));
         try{return RestrictedAudio.encode(pcm,authorization);}finally{Arrays.fill(pcm,(short)0);}
     }
+    /** The delivered bytes are the sanitizer result, not the original synthetic ADTS. */
+    public static RestrictedContentService.Prepared sanitizedTone(Runnable authorization)throws Exception {
+        short[] pcm=new short[RestrictedAudio.SAMPLE_RATE];byte[] original=null;
+        for(int i=0;i<pcm.length;i++)pcm[i]=(short)(8000*Math.sin(2*Math.PI*(i>=pcm.length-640?1320:440)*i/RestrictedAudio.SAMPLE_RATE));
+        try {
+            original=RestrictedAudio.encodeBytes(pcm,authorization);
+            byte[] unchanged=original.clone();
+            try {
+                var prepared=RestrictedAudio.prepare(original,authorization);
+                try {org.junit.Assert.assertArrayEquals(unchanged,original);return prepared;}
+                catch(RuntimeException | Error failure){prepared.close();throw failure;}
+            } finally {Arrays.fill(unchanged,(byte)0);}
+        } finally {Arrays.fill(pcm,(short)0);if(original!=null)Arrays.fill(original,(byte)0);}
+    }
     public record Observation(int samples,double rms,double targetEnergy,double otherEnergy,int encodedFrames,double tailFraction) {}
     public static RestrictedContentService.Prepared silence(Runnable authorization)throws Exception {
         short[] pcm=new short[RestrictedAudio.SAMPLE_RATE];

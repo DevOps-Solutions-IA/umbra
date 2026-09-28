@@ -75,11 +75,15 @@ public final class RestrictedAudio {
             }
             authorization.run();if(samples<1024)throw RestrictedPayload.invalid();return Arrays.copyOf(pcm,samples);
         } finally {
-            try{if(codec!=null)codec.release();}finally{extractor.release();Arrays.fill(pcm,(short)0);}
+            try{if(codec!=null)codec.release();}finally{try{extractor.release();}finally{Arrays.fill(pcm,(short)0);}}
         }
     }
     /** Internal capture/test codec input; no public PCM getter or persisted recording. */
     static RestrictedContentService.Prepared encode(short[] pcm,Runnable authorization)throws Exception {
+        return new RestrictedContentService.Prepared(RestrictedPayload.Format.AAC_ADTS,encodeBytes(pcm,authorization));
+    }
+    /** Internal codec primitive; caller owns and wipes the result or transfers it to Prepared. */
+    static byte[] encodeBytes(short[] pcm,Runnable authorization)throws Exception {
         if(pcm.length<FRAME_SAMPLES || pcm.length>SAMPLE_RATE*9-3*FRAME_SAMPLES)throw RestrictedPayload.invalid();
         authorization.run();
         android.media.MediaCodec codec=android.media.MediaCodec.createByCodecName("c2.android.aac.encoder");
@@ -123,8 +127,8 @@ public final class RestrictedAudio {
                 }
             }
             if(frames<1)throw RestrictedPayload.invalid();authorization.run();
-            return new RestrictedContentService.Prepared(RestrictedPayload.Format.AAC_ADTS,Arrays.copyOf(encoded,written));
-        } finally {codec.release();Arrays.fill(encoded,(byte)0);}
+            return Arrays.copyOf(encoded,written);
+        } finally {try{codec.release();}finally{Arrays.fill(encoded,(byte)0);}}
     }
 
     /** ISO ADTS header for the fixed AAC-LC/16kHz/mono profile, one raw access unit. */
