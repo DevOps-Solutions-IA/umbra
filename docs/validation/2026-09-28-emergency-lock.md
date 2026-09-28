@@ -261,3 +261,15 @@ es la regresión de integración; no se cuenta este diagnóstico como test extra
 Verify 42eace1 terminó SUCCESS (36370491720), instrumentación 48 connected y
 46 offline. Emergency 675b9fd terminó con sus cinco jobs SUCCESS (36372125769).
 Ambos son antecedentes, no validación automática del siguiente HEAD.
+
+Emergency Nearby b6e1b3e (36372667832, job 108772037646) falló antes de
+RFCOMM: uiautomator devolvió `null root node returned by UiTestAutomationBridge`
+en el segundo AVD. Es ausencia de ventana accesible, no evidencia de fallo del
+handshake. [DumpCommand AOSP](https://android.googlesource.com/platform/frameworks/uiautomator/+/17fac436d78f6ac642386a245fb4fdb7243a91a4/cmds/uiautomator/src/com/android/commands/uiautomator/DumpCommand.java)
+confirma que ese camino termina sin generar XML. Se permite nueva adquisición
+solo para ese diagnóstico conocido, conservando tres intentos y deadline global
+originales; se elimina el snapshot previo y nunca se trata null como aprobación.
+No se reintenta una prueba Bluetooth fallida. Regresión específica RED (exit 1)
+antes y GREEN después; errores desconocidos/XML inválido continúan fallando.
+177 pruebas de herramientas PASS. La causa de que Android no ofreciera raíz
+activa en ese instante no se atribuye al producto sin evidencia adicional.
