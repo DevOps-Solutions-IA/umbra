@@ -72,3 +72,31 @@ this is a candidate fix until native execution, not an accepted codec workaround
 Android C2 AAC source reviewed for EOS handling:
 https://android.googlesource.com/platform/frameworks/av/+/dbda76adf06a0df34edd68fab017031e95ddb40c/media/codec2/components/aac/C2SoftAacEnc.cpp
 No encoder, dependency or test threshold was replaced to hide the failure.
+
+## Third attempt — 299049b: duration alone concealed missing tail
+
+Privacy 36450536633 failed. Debug artifact 10983726492 SHA-256
+`84204d7c1ad7cc789f51fa5da26815f5e0633842255b5bf3186fc800959b6c26`.
+It produced 16 AAC access units / 16384 decoded samples, but final-marker spectral
+fraction was 0.00010624 (required >0.6). Alignment repaired sample count, NOT the
+lost final content. The new assertion prevented a false pass.
+
+Candidate next correction restricts encoding to the AOSP software
+`c2.android.aac.encoder`, fails closed if absent, and supplies two final zero AAC
+blocks before EOS. This is bounded codec drain, not relaxed observation: the
+original 40ms marker, energy and duration assertions remain. AOSP FDK AAC-LC
+MDCT/block-switch delay is 1600 samples (1024 + 4.5*128); two 1024-sample blocks
+cover that delay. OEM codecs are not assumed equivalent. The input bound reserves
+three blocks within the existing nine-second decoded-memory cap (one alignment,
+two drain). Recording remains <=8s. AOSP source reviewed:
+https://android.googlesource.com/platform/external/aac/+/master/libAACenc/src/aacenc_lib.cpp
+The exact emulator system-image source revision has not been independently
+reconstructed; native tests must still verify the output, not source inference.
+
+Independent local checks: content error presentation contract passed both JVM
+flavors (exit 0); restart-fixture instrumentation build and both lints passed
+(exit 0). Three privacy runner validator tests passed. New host force-stop
+acceptance is NOT executed locally: /dev/kvm remains unavailable (accel-check 11).
+The fixture requires a positive decoded PNG before kill, then persisted consumption
+and duplicate rejection after restart. It uses synthetic plaintext test SQLite,
+not a production Keystore fallback and not death during commit.

@@ -8,6 +8,10 @@ import java.util.Arrays;
 /** Narrow Android AAC-LC note preparation, RAM only. No capture or permission request here. */
 public final class RestrictedAudio {
     public static final int SAMPLE_RATE=16000,MAX_FRAMES=156;
+    // The reviewed AOSP FDK AAC-LC path delays 1024 + 4.5 * 128 = 1600
+    // samples (MDCT/block-switch lookahead). Two silent access units drain it.
+    // No opaque OEM encoder is assumed to have this delay contract.
+    private static final int FRAME_SAMPLES=1024,DRAIN_SAMPLES=2*FRAME_SAMPLES;
     private RestrictedAudio() {}
     static void requireFormat(MediaFormat format) {
         if(!MediaFormat.MIMETYPE_AUDIO_AAC.equals(format.getString(MediaFormat.KEY_MIME)) ||
@@ -76,15 +80,16 @@ public final class RestrictedAudio {
     }
     /** Internal capture/test codec input; no public PCM getter or persisted recording. */
     static RestrictedContentService.Prepared encode(short[] pcm,Runnable authorization)throws Exception {
-        if(pcm.length<1024 || pcm.length>SAMPLE_RATE*9)throw RestrictedPayload.invalid();
+        if(pcm.length<FRAME_SAMPLES || pcm.length>SAMPLE_RATE*9-3*FRAME_SAMPLES)throw RestrictedPayload.invalid();
         authorization.run();
-        android.media.MediaCodec codec=android.media.MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
+        android.media.MediaCodec codec=android.media.MediaCodec.createByCodecName("c2.android.aac.encoder");
         byte[] encoded=new byte[RestrictedPayload.MAX_BYTES];int written=0,queued=0,frames=0;
         // AAC-LC encodes 1024-sample access units. Do not rely on an encoder
         // emitting an incomplete PCM frame at EOS; append only zero alignment samples.
-        int alignedSamples=((pcm.length+1023)/1024)*1024;
+        int alignedSamples=((pcm.length+FRAME_SAMPLES-1)/FRAME_SAMPLES)*FRAME_SAMPLES+DRAIN_SAMPLES;
         long started=System.nanoTime();boolean inputEnded=false,outputEnded=false;
         try {
+            if(!codec.getCodecInfo().isSoftwareOnly() || !"c2.android.aac.encoder".equals(codec.getCanonicalName()))throw RestrictedPayload.invalid();
             MediaFormat format=MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC,SAMPLE_RATE,1);
             format.setInteger(MediaFormat.KEY_AAC_PROFILE,android.media.MediaCodecInfo.CodecProfileLevel.AACObjectLC);
             format.setInteger(MediaFormat.KEY_BIT_RATE,24000);format.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE,2048);
