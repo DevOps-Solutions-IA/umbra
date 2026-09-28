@@ -7,8 +7,7 @@ import static org.junit.Assert.*;
 
 /** No capability is presented as working without a real implementation in the build. */
 public class UiFeatureAvailabilityTest {
-    private static final Feature[] PENDING_SECURITY = {Feature.GROUP_CHAT, Feature.VAULT_PASSWORD, Feature.PRIVATE_ADMISSION,
-        Feature.PRIVATE_STARTUP, Feature.EMERGENCY_LOCK, Feature.NOTIFICATION_PRIVACY, Feature.CLIPBOARD_PROTECTION,
+    private static final Feature[] PENDING_SECURITY = {Feature.GROUP_CHAT, Feature.EMERGENCY_LOCK, Feature.NOTIFICATION_PRIVACY, Feature.CLIPBOARD_PROTECTION,
         Feature.PHOTO_METADATA_CLEANING, Feature.QR_SCAN, Feature.MESSAGE_REPLY, Feature.DEVICE_REVOCATION, Feature.DEVICE_LINKING_WIZARD};
 
     @Test public void plannedSecurityFeaturesAreNeverAvailable() {
@@ -40,7 +39,12 @@ public class UiFeatureAvailabilityTest {
         FeatureAvailability a = FeatureAvailability.forBuild(true, false);
         assertFalse(a.visible(Feature.VOICE_CALLS));
     }
-    @Test public void privateStartupHasNoClaimedState() {
-        assertEquals(PrivateStartupState.UNAVAILABLE, PrivateStartupState.values()[0]);
+    /** Backed by real domain APIs in this build (vault password, admission, private startup), in both editions. */
+    @Test public void implementedSecurityFeaturesAreAvailableInBothEditions() {
+        for (FeatureAvailability a : new FeatureAvailability[]{FeatureAvailability.forBuild(true, true), FeatureAvailability.forBuild(false, false)})
+            for (Feature f : new Feature[]{Feature.VAULT_PASSWORD, Feature.PRIVATE_ADMISSION, Feature.PRIVATE_STARTUP}) {
+                assertTrue(f.name(), a.available(f));
+                assertTrue(f.name(), a.visible(f));
+            }
     }
 }

@@ -6,8 +6,9 @@ public enum SettingsSection {
     PRIVACY("Privacidad", "Pantalla, recientes, notificaciones", Glyph.EYE_OFF),
     SECURITY("Seguridad", "Bloqueo, bóveda e identidad", Glyph.LOCK),
     DEVICES("Dispositivos", "Este teléfono y dispositivos vinculados", Glyph.DEVICES),
+    ADMISSION("Admisión", "Autorización de este dispositivo en el entorno", Glyph.DEVICE_AUTHORIZED),
     NOTIFICATIONS("Notificaciones", "Qué se muestra fuera de UMBRA", Glyph.BELL_OFF),
-    NETWORK("Red", "Servidor privado y modo de conexión", Glyph.CLOUD),
+    NETWORK("Red y Nearby", "Conexión explícita, servidor privado y Bluetooth", Glyph.CLOUD),
     STORAGE("Almacenamiento", "Caducidad y datos locales", Glyph.TIMER),
     ABOUT("Acerca de UMBRA", "Versión y estado de las funciones", Glyph.INFO);
 

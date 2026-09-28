@@ -36,6 +36,10 @@ public final class FeatureAvailability {
         a.status.put(Feature.VOICE_MODULATION, media);
         a.status.put(Feature.EMBEDDED_VIDEO_SURFACE, calls ? Status.PENDING_BACKEND : Status.NOT_IN_FLAVOR);
         a.status.put(Feature.RELAY_SYNC, connected ? Status.AVAILABLE : Status.NOT_IN_FLAVOR);
+        // Domain APIs exist in both editions (docs/VAULT_PASSWORD.md, ADMISSION.md, PRIVATE_STARTUP.md).
+        a.status.put(Feature.VAULT_PASSWORD, Status.AVAILABLE);
+        a.status.put(Feature.PRIVATE_ADMISSION, Status.AVAILABLE);
+        a.status.put(Feature.PRIVATE_STARTUP, Status.AVAILABLE);
         return a;
     }
 

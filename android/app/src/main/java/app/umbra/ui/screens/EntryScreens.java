@@ -13,8 +13,11 @@ import app.umbra.ui.model.*;
 public final class EntryScreens {
     private EntryScreens() {}
 
-    /** @param deviceSecure false when Android has no PIN/password/biometric (vault cannot be created). */
-    public record LockState(boolean deviceSecure, boolean offlineEdition, String problem) {}
+    /**
+     * @param deviceSecure false when Android has no PIN/password/biometric (vault cannot be created)
+     * @param notice       neutral result of the last operation (e.g. password created, vault locked again)
+     */
+    public record LockState(boolean deviceSecure, boolean offlineEdition, String problem, String notice) {}
     public interface LockActions { void unlock(); void openSecuritySettings(); }
 
     public static Screen lock(Ui ui, LockState s, LockActions a) {
@@ -29,14 +32,16 @@ public final class EntryScreens {
         LinearLayout head = ui.row(); head.addView(ui.iconView(Glyph.LOCK, UmbraColors.TEXT_PRIMARY, 20));
         TextView title = ui.heading(UmbraType.HEADING, "Bóveda bloqueada"); title.setPadding(ui.dp(10), 0, 0, 0); head.addView(title);
         card.addView(head);
-        card.addView(ui.text(UmbraType.CAPTION, "Tu identidad y tus conversaciones se abren con el bloqueo de pantalla de este teléfono (Android Keystore)."), ui.margins(Ui.match(), 6, 0));
-        if (s.offlineEdition()) card.addView(ui.chip(Tone.OFFLINE, Glyph.OFFLINE_BLUETOOTH, "Modo offline · sin conexión a internet"));
+        card.addView(ui.text(UmbraType.CAPTION, "Se abre con el bloqueo de pantalla de este teléfono (Android Keystore) y, si la configuraste, tu contraseña personal."), ui.margins(Ui.match(), 6, 0));
+        card.addView(ui.chip(Tone.NEUTRAL, Glyph.NETWORK_OFF, s.offlineEdition() ? "Modo offline · sin conexión" : "Bloqueada · sin conexión"));
+        card.addView(ui.text(UmbraType.CAPTION, "Mientras está bloqueada, UMBRA no abre conexiones ni activa Bluetooth."), ui.margins(Ui.match(), 4, 0));
         body.addView(card);
         if (!s.deviceSecure()) {
             body.addView(ui.banner(Tone.WARNING, Glyph.WARNING, "Falta un bloqueo de pantalla",
                 "Activa un PIN, contraseña o biometría en Android antes de crear tu identidad.", null, null));
             body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Configurar bloqueo de Android", Glyph.SETTINGS, a::openSecuritySettings));
         } else {
+            if (s.notice() != null) body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Bóveda bloqueada", s.notice(), null, null));
             if (s.problem() != null) body.addView(ui.banner(Tone.DANGER, Glyph.WARNING, "No se pudo desbloquear", s.problem(), null, null));
             body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Desbloquear", Glyph.UNLOCK, a::unlock));
         }
@@ -88,11 +93,10 @@ public final class EntryScreens {
                 body.addView(ui.labeledField("Alias", alias));
                 body.addView(ui.banner(Tone.WARNING, Glyph.WARNING, "Una identidad, este dispositivo",
                     "No hay llave maestra ni recuperación del historial. Perder el teléfono o invalidar su bloqueo puede dejar los datos inaccesibles.", null, null));
-                LinearLayout pending = ui.card();
-                pending.addView(ui.text(UmbraType.LABEL, "Admisión privada y contraseña personal"));
-                pending.addView(ui.text(UmbraType.CAPTION, "Se integrarán aquí cuando el motor las implemente. Hoy no protegen nada y no se simulan."));
-                pending.addView(ui.pendingChip());
-                body.addView(pending);
+                LinearLayout next = ui.card();
+                next.addView(ui.text(UmbraType.LABEL, "Después: admisión de este dispositivo"));
+                next.addView(ui.text(UmbraType.CAPTION, "Para usar el entorno privado, el administrador debe admitir este teléfono. Crear la identidad no lo admite ni conecta nada."));
+                body.addView(next);
                 bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Crear identidad protegida", Glyph.SHIELD_CHECK, () -> a.create(alias.getText().toString().trim())));
                 bottom.addView(ui.button(Ui.ButtonKind.GHOST, "Atrás", Glyph.BACK, () -> a.step(1)));
             }
@@ -120,18 +124,4 @@ public final class EntryScreens {
         } else box.addView(b);
         return box;
     }
-
-    /** Future private-startup indicator; only renders a claim when the engine reports one. */
-    public static LinearLayout privateStartup(Ui ui, PrivateStartupState state) {
-        LinearLayout box = ui.card();
-        box.addView(ui.text(UmbraType.LABEL, "Inicio privado"));
-        if (state == PrivateStartupState.UNAVAILABLE) {
-            box.addView(ui.text(UmbraType.CAPTION, "Mostrará «UMBRA bloqueada · Sin conexión» cuando el motor lo implemente. Hoy la red se usa solo tras desbloquear y según tu elección en Red."));
-            box.addView(ui.pendingChip());
-        } else {
-            box.addView(ui.chip(Tone.OFFLINE, Glyph.NETWORK_OFF, state == PrivateStartupState.LOCKED_NO_NETWORK ? "UMBRA bloqueada · Sin conexión" : "Desbloqueada"));
-        }
-        return box;
-    }
-
 }

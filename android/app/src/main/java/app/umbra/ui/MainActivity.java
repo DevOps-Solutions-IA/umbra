@@ -22,7 +22,11 @@ import app.umbra.crypto.Engine;
 import app.umbra.pairing.PairingService;
 import app.umbra.data.Vault;
 import app.umbra.transport.*;
+import app.umbra.admission.AdmissionService;
+import app.umbra.connectivity.AndroidConnectivity;
 import app.umbra.ui.design.*;
+import app.umbra.ui.flow.AdmissionFlow;
+import app.umbra.ui.flow.VaultFlow;
 import app.umbra.ui.model.*;
 import app.umbra.ui.screens.*;
 import com.google.zxing.BarcodeFormat;
@@ -43,7 +47,8 @@ import java.util.function.Consumer;
  * presentation state built here from engine-reported values; navigation rules live in {@link Navigator}.
  */
 public final class MainActivity extends Activity {
-    private static final int PICK_CONTACT = 201, EXPORT_CONTACT = 202, PICK_FILE = 203, EXPORT_FILE = 204;
+    private static final int PICK_CONTACT = 201, EXPORT_CONTACT = 202, PICK_FILE = 203, EXPORT_FILE = 204,
+        PICK_ADMISSION = 205, PICK_ADMIN_REVIEW = 206, PICK_ADMIN_REVOKE = 207, EXPORT_ADMISSION = 208;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final AtomicBoolean syncBusy = new AtomicBoolean(false);
@@ -96,6 +101,22 @@ public final class MainActivity extends Activity {
     private String activeSinceCall; private long activeSince;
     private final CallScreens.Handles callHandles = new CallScreens.Handles();
     private final Map<String, Bitmap> qrCache = new HashMap<>();
+    // Entry flow after Android authentication. Presentation only: the domain re-checks every operation.
+    private AccessStep accessStep;
+    private boolean accessBusy, legacyDeferred, passwordConfigured;
+    private String accessProblem, lockNotice;
+    private int autoLockIndex = PasswordPolicy.DEFAULT_AUTO_LOCK_INDEX;
+    private boolean changeBusy; private String changeProblem;
+    // Last domain snapshots (refreshed on the worker); never persisted or restored as authorization.
+    private AdmissionFlow.Snapshot admission;
+    private String connectivityState = "LOCKED_PRIVATE";
+    private boolean canConnect, nearbyActive, connectBusy, adminBusy;
+    private volatile boolean relayResponded;
+    /** Authority review held only in memory between the review sheet and the decision; cleared on lock. */
+    private record PendingReview(AdmissionService.Review review, String oldCredential, AdmissionScreens.ReviewInfo info, boolean own) {}
+    private PendingReview pendingReview;
+    /** Posts a UI lock when the domain closes the gate (vault auto-lock, create/change password, key loss). */
+    private final Runnable gateInvalidated = () -> main.post(this::gateCheck);
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -103,6 +124,7 @@ public final class MainActivity extends Activity {
         getWindow().setHideOverlayWindows(true);
         if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false);
         ui = new Ui(this);
+        gate.onInvalidation(gateInvalidated);
         if (Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(0, this::back);
         showLocked(); main.postDelayed(tick, 4000);
     }
@@ -132,16 +154,179 @@ public final class MainActivity extends Activity {
     private void completeAuthentication() {
         if (!resumed || destroyed || isFinishing()) return;
         authenticationGranted = false; externalUi = false; gate.unlock(); unlocked = true; authAt = SystemClock.elapsedRealtime();
-        action(() -> {
-            if (vault == null) vault = new Vault(getApplicationContext(), gate);
-            engine = new Engine(vault, SystemClock::elapsedRealtime); initialised = engine.initialized();
-            engine.connectivity().vaultUnlocked();
-            if (initialised) { vault.get("meta", "identity"); engine.expire(); }
-            return initialised;
-        }, ready -> { if (ready) { nav.home(); refresh(); resumeExternalResult(); } else onboarding(); });
+        lockNotice = null; accessProblem = null; accessBusy = false; accessStep = null; engine = null; initialised = false;
+        int ticket = generation;
+        mount(Screen.of(null, ui.skeleton(3), null));
+        worker.submit(() -> {
+            Engine opened = null; boolean ready = false; AccessStep step; Exception failure = null;
+            try {
+                if (!unlocked || ticket != generation) return;
+                gate.requireUnlocked();
+                if (vault == null) vault = new Vault(getApplicationContext(), gate);
+                step = VaultFlow.step(vault);
+                if (step == AccessStep.LEGACY_ENROLLMENT) {
+                    // Not enrolled yet: Android authentication alone opens it, exactly as before v1.
+                    opened = VaultFlow.openLegacy(vault, SystemClock::elapsedRealtime); ready = opened.initialized();
+                    if (ready) { vault.get("meta", "identity"); opened.expire(); }
+                }
+            } catch (Exception e) { failure = e; step = null; }
+            final Engine engineResult = opened; final boolean readyResult = ready; final AccessStep stepResult = step; final Exception problem = failure;
+            main.post(() -> {
+                if (destroyed || !unlocked || ticket != generation) return;
+                if (problem != null) {
+                    if (hasVaultFailure(problem)) { lock(); return; }
+                    accessStep = AccessStep.CORRUPT; render(); return;
+                }
+                accessStep = stepResult;
+                if (engineResult != null) { engine = engineResult; initialised = readyResult; passwordConfigured = false; }
+                if (accessStep == AccessStep.LEGACY_ENROLLMENT && legacyDeferred) vaultOpened(); else render();
+            });
+        });
+    }
+    /** Vault open (password or legacy): continue to onboarding or home. Connectivity is UNLOCKED_OFFLINE. */
+    private void vaultOpened() {
+        accessStep = AccessStep.OPEN; accessBusy = false; accessProblem = null;
+        if (initialised) { nav.home(); refresh(); resumeExternalResult(); } else onboarding();
+    }
+    // ------------------------------------------------------------------ personal password
+    private void renderAccess() {
+        AccessStep step = accessStep;
+        if (step == null) { mount(Screen.of(null, ui.skeleton(3), null)); return; }
+        switch (step) {
+            case CREATE_PASSWORD, LEGACY_ENROLLMENT -> mount(AccessScreens.create(ui, new AccessScreens.CreateState(step == AccessStep.LEGACY_ENROLLMENT, accessBusy, accessProblem), new AccessScreens.CreateActions() {
+                @Override public void submit(EditText password, EditText confirmation) { submitCreate(password, confirmation); }
+                @Override public void later() { if (accessBusy || engine == null) return; legacyDeferred = true; vaultOpened(); }
+                @Override public void lockNow() { lock(); }
+            }));
+            case PASSWORD_UNLOCK, OPEN -> mount(AccessScreens.unlock(ui, new AccessScreens.UnlockState(accessBusy, accessProblem, autoLockIndex, !BuildConfig.ALLOW_RELAY), new AccessScreens.UnlockActions() {
+                @Override public void submit(EditText password) { submitUnlock(password); }
+                @Override public void autoLock(int index) { if (!accessBusy) { autoLockIndex = index; render(); } }
+                @Override public void lockNow() { lock(); }
+            }));
+            case CORRUPT, KEY_UNAVAILABLE -> mount(AccessScreens.failure(ui, step, this::lock));
+        }
+    }
+    /** Reads the typed characters on the main thread into caller-owned UTF-8 bytes and clears the fields. */
+    private byte[] secret(EditText field) throws java.nio.charset.CharacterCodingException {
+        try { return PasswordPolicy.encode(field.getText()); } finally { field.getText().clear(); }
+    }
+    private static void clear(EditText... fields) { for (EditText f : fields) f.getText().clear(); }
+    private void submitCreate(EditText password, EditText confirmation) {
+        if (accessBusy || !unlocked) return;
+        PasswordPolicy.Problem problem = PasswordPolicy.checkNew(password.getText(), confirmation.getText());
+        if (problem != PasswordPolicy.Problem.OK) { clear(password, confirmation); accessProblem = problem.message; render(); return; }
+        byte[] secret;
+        try { secret = secret(password); } catch (Exception invalid) { accessProblem = PasswordPolicy.Problem.INVALID_CHARACTER.message; render(); return; }
+        finally { clear(password, confirmation); }
+        accessBusy = true; accessProblem = null; render();
+        final Vault target = vault; final int ticket = generation;
+        worker.submit(() -> {
+            Exception failure = null;
+            try {
+                if (!unlocked || ticket != generation) { PasswordPolicy.erase(secret); return; }
+                // Legacy engine leases end with enrollment: the domain migrates and finishes locked.
+                VaultFlow.createPassword(target, secret);
+            } catch (Exception e) { failure = e; }
+            finally { PasswordPolicy.erase(secret); }
+            final Exception problemResult = failure;
+            main.post(() -> passwordOperationFinished(ticket, problemResult, AccessStep.LOCKED_AFTER_CREATE,
+                "No se pudo crear la contraseña. La bóveda no cambió."));
+        });
+    }
+    /**
+     * Create/change end with the gate locked by the domain. The result may arrive after that lock: it only
+     * adds the notice to the lock screen and never reopens anything. Failures keep the current session.
+     */
+    private void passwordOperationFinished(int ticket, Exception failure, String lockedNotice, String failedText) {
+        if (destroyed) return;
+        boolean ours = ticket == generation || (!unlocked && generation == ticket + 1);
+        if (!ours) return;
+        if (failure == null) {
+            lockNotice = lockedNotice;
+            if (unlocked) lock(); else showLocked();
+            return;
+        }
+        if (!unlocked) return;
+        if (hasVaultFailure(failure)) { lock(); return; }
+        accessBusy = false; changeBusy = false;
+        if (onRoute(Route.Kind.CHANGE_PASSWORD)) changeProblem = failedText; else accessProblem = failedText;
+        render();
+    }
+    private void submitUnlock(EditText password) {
+        if (accessBusy || !unlocked) return;
+        PasswordPolicy.Problem problem = PasswordPolicy.check(password.getText());
+        if (problem != PasswordPolicy.Problem.OK) { password.getText().clear(); accessProblem = problem.message; render(); return; }
+        byte[] secret;
+        try { secret = secret(password); } catch (Exception invalid) { accessProblem = PasswordPolicy.Problem.INVALID_CHARACTER.message; render(); return; }
+        long autoLock = PasswordPolicy.AUTO_LOCK_MILLIS[autoLockIndex];
+        accessBusy = true; accessProblem = null; render();
+        final Vault target = vault; final int ticket = generation;
+        worker.submit(() -> {
+            Engine opened = null; boolean ready = false; Exception failure = null; AccessStep after = null;
+            try {
+                if (!unlocked || ticket != generation) return;
+                opened = VaultFlow.unlock(target, secret, autoLock, SystemClock::elapsedRealtime);
+                ready = opened.initialized();
+                if (ready) { target.get("meta", "identity"); opened.expire(); }
+            } catch (Exception e) {
+                failure = e;
+                try { after = VaultFlow.step(target); } catch (RuntimeException locked) { after = null; }
+            } finally { PasswordPolicy.erase(secret); }
+            final Engine engineResult = opened; final boolean readyResult = ready; final Exception problemResult = failure; final AccessStep afterResult = after;
+            main.post(() -> {
+                // A late result after lock/destroy is discarded; the lock already invalidated its lease.
+                if (destroyed || !unlocked || ticket != generation) return;
+                accessBusy = false;
+                if (problemResult != null) {
+                    if (hasVaultFailure(problemResult) || afterResult == null) { lock(); return; }
+                    accessStep = afterResult == AccessStep.OPEN ? AccessStep.PASSWORD_UNLOCK : afterResult;
+                    accessProblem = AccessStep.UNLOCK_FAILED; render(); return;
+                }
+                engine = engineResult; initialised = readyResult; passwordConfigured = true;
+                vaultOpened();
+            });
+        });
+    }
+    private void renderChangePassword() {
+        mount(AccessScreens.change(ui, new AccessScreens.ChangeState(changeBusy, changeProblem), new AccessScreens.ChangeActions() {
+            @Override public void back() { if (!changeBusy) { changeProblem = null; MainActivity.this.back(); } }
+            @Override public void submit(EditText current, EditText replacement, EditText confirmation) { submitChange(current, replacement, confirmation); }
+        }));
+    }
+    private void submitChange(EditText current, EditText replacement, EditText confirmation) {
+        if (changeBusy || !unlocked || vault == null) return;
+        PasswordPolicy.Problem problem = PasswordPolicy.check(current.getText());
+        if (problem == PasswordPolicy.Problem.OK) problem = PasswordPolicy.checkNew(replacement.getText(), confirmation.getText());
+        if (problem != PasswordPolicy.Problem.OK) { clear(current, replacement, confirmation); changeProblem = problem.message; render(); return; }
+        byte[] old, next;
+        try { old = secret(current); } catch (Exception invalid) { clear(current, replacement, confirmation); changeProblem = PasswordPolicy.Problem.INVALID_CHARACTER.message; render(); return; }
+        try { next = secret(replacement); } catch (Exception invalid) { PasswordPolicy.erase(old); clear(replacement, confirmation); changeProblem = PasswordPolicy.Problem.INVALID_CHARACTER.message; render(); return; }
+        finally { clear(confirmation); }
+        changeBusy = true; changeProblem = null; render();
+        final Vault target = vault; final int ticket = generation;
+        worker.submit(() -> {
+            Exception failure = null;
+            try {
+                if (!unlocked || ticket != generation) return;
+                VaultFlow.changePassword(target, old, next);
+            } catch (Exception e) { failure = e; }
+            finally { PasswordPolicy.erase(old); PasswordPolicy.erase(next); }
+            final Exception problemResult = failure;
+            main.post(() -> passwordOperationFinished(ticket, problemResult, AccessStep.LOCKED_AFTER_CHANGE,
+                "No se cambió la contraseña. Revisa la contraseña actual; la bóveda sigue igual."));
+        });
+    }
+
+    /** Runs on the main thread after a gate invalidation; stale authorizations never reopen content. */
+    private void gateCheck() {
+        if (!unlocked || destroyed) return;
+        try { gate.requireUnlocked(); } catch (AccessGate.LockedException closed) { lock(); }
     }
     private void lock() {
         stopLocationLocally(); authenticationGranted = false; gate.lock(); unlocked = false; networkPaused = true; networkStateLoaded = false; generation++; cancelRelay();
+        engine = null; initialised = false; accessStep = null; accessBusy = false; accessProblem = null; changeBusy = false; changeProblem = null;
+        admission = null; connectivityState = "LOCKED_PRIVATE"; canConnect = false; nearbyActive = false; connectBusy = false; adminBusy = false;
+        pendingReview = null; relayResponded = false; relayUnreachable = false;
         for (Dialog dialog : new ArrayList<>(dialogs)) dialog.dismiss(); dialogs.clear();
         nav.lock(); drafts.clear(); messages = List.of(); locations = List.of(); contacts = List.of(); callSessions = List.of(); trust = Map.of(); contactDevices = Map.of();
         devicesState = null; profile = null; loadedPeer = null; groupSelection.clear(); groupName = ""; qrCache.clear(); videoIntent.clear(); modulatorOpen = false; verifyTechnical = false;
@@ -206,7 +391,12 @@ public final class MainActivity extends Activity {
             main.postDelayed(this, 1000);
         }
     };
-    private <T> void action(Callable<T> operation, Consumer<T> success) {
+    private <T> void action(Callable<T> operation, Consumer<T> success) { action(operation, success, e -> notice(safeError(e))); }
+    /**
+     * Worker operation bound to the current authentication generation. Results and failures that arrive after
+     * a lock are dropped, so a late callback can never repopulate a screen or restore a session.
+     */
+    private <T> void action(Callable<T> operation, Consumer<T> success, Consumer<Exception> failure) {
         int ticket = generation;
         if (worker.isShutdown()) return;
         worker.submit(() -> {
@@ -219,7 +409,7 @@ public final class MainActivity extends Activity {
                 main.post(() -> {
                     if (!destroyed && unlocked && ticket == generation) {
                         if (hasVaultFailure(e)) { lock(); notice("La bóveda necesita desbloqueo o su clave fue invalidada. No se borraron tus datos."); }
-                        else notice(safeError(e));
+                        else failure.accept(e);
                     }
                 });
             }
@@ -322,10 +512,11 @@ public final class MainActivity extends Activity {
                         }
                     }
                 }
-                if (relay != null) { transportStatus = "Internet disponible · relay cifrado"; relayUnreachable = false; }
+                // A real poll/send round trip: the only basis for saying the server responded.
+                if (relay != null && ticket == generation) { relayUnreachable = false; relayResponded = true; }
             } catch (Exception e) {
                 if (hasVaultFailure(e)) main.post(() -> { if (ticket == generation) lock(); });
-                else { transportStatus = "Sin respuesta del relay · mensajes pendientes"; relayUnreachable = true; }
+                else if (relay != null && ticket == generation) { relayUnreachable = true; relayResponded = false; }
             } finally {
                 if (relay != null) { relay.close(); if (activeRelay == relay) activeRelay = null; }
                 syncBusy.set(false);
@@ -353,10 +544,33 @@ public final class MainActivity extends Activity {
         try { return result.get(12, TimeUnit.SECONDS); }
         catch (TimeoutException | InterruptedException e) { result.cancel(false); if (e instanceof InterruptedException) Thread.currentThread().interrupt(); throw e; }
     }
+    /** The active Nearby link. Radio actions never create consent implicitly: Nearby must be started first. */
     private BluetoothLink link() {
-        if (bluetooth != null) return bluetooth;
+        BluetoothLink active = bluetooth;
+        if (active == null) throw new SecurityException("Activa Nearby primero");
+        return active;
+    }
+    /** Explicit user action only (never from onCreate/onResume, render, network callbacks or restored state). */
+    private void startNearby() {
+        if (!unlocked || engine == null) return;
+        BluetoothLink stale = bluetooth;
+        if (stale != null) {
+            if (engine.connectivity().isNearbySessionAllowed()) return;
+            bluetooth = null; stale.close(); // The domain already ended that consent (lock, revocation).
+        }
+        try { bluetooth = newLink(engine.connectivity().startNearby(true)); transportStatus = "Nearby activo · sin enlace"; }
+        catch (Exception refused) { notice("No se pudo activar Nearby. Requiere la bóveda abierta y una admisión vigente."); }
+        refresh();
+    }
+    private void stopNearby() {
+        BluetoothLink active = bluetooth; bluetooth = null;
+        if (active != null) active.close();
+        if (engine != null) engine.connectivity().stopNearby();
+        transportStatus = "Nearby detenido"; refresh();
+    }
+    private BluetoothLink newLink(app.umbra.connectivity.ConnectivityService.Lease consent) {
         final int ticket = generation;
-        bluetooth = new BluetoothLink(this, new BluetoothLink.Listener() {
+        return new BluetoothLink(this, new BluetoothLink.Listener() {
             @Override public String ownId() throws Exception { return nearbyOperation(ticket, () -> engine.id()); }
             @Override public JSONObject ownCard() throws Exception { return nearbyOperation(ticket, () -> engine.createCard()); }
             @Override public String acceptCard(JSONObject card) throws Exception {
@@ -382,8 +596,7 @@ public final class MainActivity extends Activity {
             @Override public void status(String text) {
                 main.post(() -> { if (unlocked && ticket == generation) { transportStatus = text; if (onTab(HomeTab.NEARBY)) refresh(); } });
             }
-        }, engine.connectivity().startNearby(true));
-        return bluetooth;
+        }, consent);
     }
     private boolean bluetoothPermission() {
         String[] permissions = {Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_ADVERTISE};
@@ -405,7 +618,8 @@ public final class MainActivity extends Activity {
 
     // ================================================================== state snapshot
     private record Snapshot(JSONObject profile, List<JSONObject> contacts, Map<String, TrustLevel> trust, List<JSONObject> messages,
-                            List<JSONObject> locations, List<JSONObject> calls, Map<String, Integer> devices, DeviceScreens.DevicesState own) {}
+                            List<JSONObject> locations, List<JSONObject> calls, Map<String, Integer> devices, DeviceScreens.DevicesState own,
+                            String connectivity, boolean canConnect, boolean nearby, AdmissionFlow.Snapshot admission, boolean passwordConfigured) {}
 
     private String currentPeer() {
         Route r = nav.current();
@@ -420,7 +634,11 @@ public final class MainActivity extends Activity {
         boolean wantDevices = onRoute(Route.Kind.DEVICES);
         action(() -> {
             // Domain-owned connectivity snapshot; persisted profile preferences never restore consent.
-            networkPaused = !engine.connectivity().isNetworkSessionAllowed();
+            var conn = engine.connectivity();
+            networkPaused = !conn.isNetworkSessionAllowed();
+            String connState = conn.getConnectivityState().name(); boolean connectable = conn.canConnect(), near = conn.isNearbySessionAllowed();
+            AdmissionFlow.Snapshot adm = AdmissionFlow.read(engine.admission(), Bytes.now());
+            boolean enrolled = vault.isPasswordConfigured();
             JSONObject me = engine.profile();
             List<JSONObject> all = engine.contacts();
             Map<String, TrustLevel> levels = new HashMap<>(); Map<String, Integer> counts = new HashMap<>();
@@ -431,9 +649,12 @@ public final class MainActivity extends Activity {
             }
             List<JSONObject> calls = BuildConfig.ALLOW_RELAY && app.umbra.calls.CallPlatform.ENABLED ? engine.calls().sessions() : List.of();
             return new Snapshot(me, all, levels, selected == null ? List.of() : engine.messages(selected),
-                selected == null ? List.of() : engine.locations().received(selected), calls, counts, wantDevices ? ownDevices(all, counts) : null);
+                selected == null ? List.of() : engine.locations().received(selected), calls, counts, wantDevices ? ownDevices(all, counts) : null,
+                connState, connectable, near, adm, enrolled);
         }, s -> {
             profile = s.profile();
+            connectivityState = s.connectivity(); canConnect = s.canConnect(); nearbyActive = s.nearby();
+            admission = s.admission(); passwordConfigured = s.passwordConfigured();
             networkStateLoaded = true;
             contacts = s.contacts(); trust = s.trust(); contactDevices = s.devices(); callSessions = s.calls();
             if (s.own() != null) devicesState = s.own();
@@ -489,7 +710,7 @@ public final class MainActivity extends Activity {
     }
     private void showLocked() {
         nav.lock();
-        mount(EntryScreens.lock(ui, new EntryScreens.LockState(deviceSecure, !BuildConfig.ALLOW_RELAY, lockProblem), new EntryScreens.LockActions() {
+        mount(EntryScreens.lock(ui, new EntryScreens.LockState(deviceSecure, !BuildConfig.ALLOW_RELAY, lockProblem, lockNotice), new EntryScreens.LockActions() {
             @Override public void unlock() { authenticate(); }
             @Override public void openSecuritySettings() { external(new Intent(Settings.ACTION_SECURITY_SETTINGS), 0); }
         }));
@@ -499,6 +720,7 @@ public final class MainActivity extends Activity {
     private void render() {
         if (!unlocked) { showLocked(); return; }
         callHandles.duration = null;
+        if (accessStep != AccessStep.OPEN) { renderAccess(); return; }
         Route route = nav.current();
         if (route.kind() == Route.Kind.ONBOARDING) { renderOnboarding(); return; }
         if (profile == null) return;
@@ -513,6 +735,9 @@ public final class MainActivity extends Activity {
             case SETTINGS_SECTION -> renderSettings(SettingsSection.valueOf(route.arg()));
             case CALL -> renderCall(route.arg());
             case INCOMING_CALL -> renderIncoming(route.arg());
+            case ADMISSION -> renderAdmission();
+            case ADMISSION_ADMIN -> renderAdmin();
+            case CHANGE_PASSWORD -> renderChangePassword();
             default -> { nav.home(); renderHome(); }
         }
     }
@@ -522,7 +747,8 @@ public final class MainActivity extends Activity {
         mount(EntryScreens.onboarding(ui, onboardingStep, !BuildConfig.ALLOW_RELAY, new EntryScreens.OnboardingActions() {
             @Override public void step(int next) { onboardingStep = next; renderOnboarding(); }
             @Override public void create(String alias) {
-                action(() -> { engine.initialize(alias); initialised = true; return true; }, ok -> { nav.home(); refresh(); });
+                // Identity creation never admits or connects; continue to this device's admission.
+                action(() -> { engine.initialize(alias); initialised = true; return true; }, ok -> { nav.home(); nav.push(Route.of(Route.Kind.ADMISSION)); refresh(); });
             }
         }));
     }
@@ -536,9 +762,17 @@ public final class MainActivity extends Activity {
                 @Override public void open(HomeScreens.CallRow row) { go(Route.of(row.state().incoming() && "INCOMING".equals(sessionState(row.callId())) ? Route.Kind.INCOMING_CALL : Route.Kind.CALL, row.callId())); }
                 @Override public void startFromChats() { nav.selectTab(HomeTab.CHATS); render(); }
             }, bar));
-            case NEARBY -> mount(HomeScreens.nearby(ui, new HomeScreens.NearbyState(transportStatus, !BuildConfig.ALLOW_RELAY, networkPaused, BuildConfig.ALLOW_RELAY), nearbyActions(), bar));
-            case SETTINGS -> mount(HomeScreens.settings(ui, profile.optString("alias"), !BuildConfig.ALLOW_RELAY, networkPaused, new HomeScreens.SettingsActions() {
-                @Override public void open(SettingsSection section) { go(section == SettingsSection.DEVICES ? Route.of(Route.Kind.DEVICES) : Route.of(Route.Kind.SETTINGS_SECTION, section.name())); if (section == SettingsSection.DEVICES) refresh(); }
+            case NEARBY -> mount(HomeScreens.nearby(ui, new HomeScreens.NearbyState(transportStatus, !BuildConfig.ALLOW_RELAY, connectivity(),
+                nearbyActive && bluetooth != null, admissionPresentation().admitted()), nearbyActions(), bar));
+            case SETTINGS -> mount(HomeScreens.settings(ui, profile.optString("alias"), connectivity(), new HomeScreens.SettingsActions() {
+                @Override public void open(SettingsSection section) {
+                    Route target = switch (section) {
+                        case DEVICES -> Route.of(Route.Kind.DEVICES);
+                        case ADMISSION -> Route.of(Route.Kind.ADMISSION);
+                        default -> Route.of(Route.Kind.SETTINGS_SECTION, section.name());
+                    };
+                    go(target); refresh();
+                }
                 @Override public void lockNow() { lock(); }
             }, bar));
             default -> {
@@ -547,7 +781,8 @@ public final class MainActivity extends Activity {
                 HomeScreens.IncomingCall incoming = null;
                 for (JSONObject s : callSessions) if ("INCOMING".equals(s.optString("state"))) { incoming = new HomeScreens.IncomingCall(callId(s), aliasFor(otherParty(s))); break; }
                 String notice = relayUnreachable && BuildConfig.ALLOW_RELAY && !networkPaused ? ErrorPresentation.of(ErrorKind.RELAY_UNAVAILABLE).title() : null;
-                mount(HomeScreens.chats(ui, new HomeScreens.ChatsState(items, false, chatsFilter, features, !BuildConfig.ALLOW_RELAY, networkPaused, notice, incoming), new HomeScreens.ChatsActions() {
+                mount(HomeScreens.chats(ui, new HomeScreens.ChatsState(items, false, chatsFilter, features, !BuildConfig.ALLOW_RELAY, connectivity(),
+                    admission == null ? null : admissionPresentation(), notice, incoming), new HomeScreens.ChatsActions() {
                     @Override public void open(ConversationItem item) { go(Route.of(item.group() ? Route.Kind.GROUP_CHAT : Route.Kind.CHAT, item.id())); refresh(); }
                     @Override public void newMessage() { go(Route.of(Route.Kind.NEW_CHAT)); }
                     @Override public void newGroup() { groupStep = 0; go(Route.of(Route.Kind.NEW_GROUP)); }
@@ -555,6 +790,7 @@ public final class MainActivity extends Activity {
                     @Override public void filter(HomeScreens.Filter f) { chatsFilter = f; render(); }
                     @Override public void openIncoming(String id) { go(Route.of(Route.Kind.INCOMING_CALL, id)); }
                     @Override public void networkDetails() { go(Route.of(Route.Kind.SETTINGS_SECTION, SettingsSection.NETWORK.name())); }
+                    @Override public void admission() { go(Route.of(Route.Kind.ADMISSION)); refresh(); }
                 }, bar));
             }
         }
@@ -562,14 +798,11 @@ public final class MainActivity extends Activity {
 
     private HomeScreens.NearbyActions nearbyActions() {
         return new HomeScreens.NearbyActions() {
-            // Only an explicit user toggle reaches here; the domain decides and refresh() re-reads its state.
-            @Override public void bluetoothOnly(boolean checked) {
-                if (checked) { networkPaused = true; engine.connectivity().disconnect(); cancelRelay(); }
-                action(() -> { if (!checked) app.umbra.connectivity.AndroidConnectivity.connect(MainActivity.this, engine.connectivity(), engine.profile().getString("relay"), true); return true; },
-                    ok -> refresh());
-            }
-            @Override public void listen() { if (!bluetoothPermission()) return; try { link().listen(); render(); } catch (Exception e) { notice(safeError(e)); } }
-            @Override public void makeVisible() { if (!bluetoothPermission()) return; external(new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120), 0); }
+            @Override public void startNearby() { MainActivity.this.startNearby(); }
+            @Override public void stopNearby() { MainActivity.this.stopNearby(); }
+            @Override public void networkSettings() { go(Route.of(Route.Kind.SETTINGS_SECTION, SettingsSection.NETWORK.name())); }
+            @Override public void listen() { if (bluetooth == null) { notice("Activa Nearby primero"); return; } if (!bluetoothPermission()) return; try { link().listen(); render(); } catch (Exception e) { notice(safeError(e)); } }
+            @Override public void makeVisible() { if (bluetooth == null) { notice("Activa Nearby primero"); return; } if (!bluetoothPermission()) return; external(new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 120), 0); }
             @Override public void connectVerified() { chooseBluetooth(false); }
             @Override public void enrollNew() {
                 confirm("Vinculación explícita", "Esta acción intercambia una tarjeta con identidad pública, alias y permiso de escritura al buzón. Verifica después el código completo en persona.", "Continuar", false, () ->
@@ -581,10 +814,37 @@ public final class MainActivity extends Activity {
                         }).setNegativeButton("Cancelar", null).show());
             }
             @Override public void systemSettings() { external(new Intent(Settings.ACTION_BLUETOOTH_SETTINGS), 0); }
-            @Override public void disconnect() { BluetoothLink b = bluetooth; if (b != null) b.close(); bluetooth = null; transportStatus = "Bluetooth desconectado"; render(); }
         };
     }
+
+    // ------------------------------------------------------------------ explicit network consent
+    private ConnectivityPresentation connectivity() {
+        ConnectivityPresentation.Service service = relayUnreachable ? ConnectivityPresentation.Service.UNREACHABLE
+            : relayResponded ? ConnectivityPresentation.Service.RESPONDED : ConnectivityPresentation.Service.NOT_OBSERVED;
+        boolean relayKnown = profile != null && !profile.optString("relay").isEmpty();
+        return ConnectivityPresentation.of(connectivityState, !BuildConfig.ALLOW_RELAY, canConnect, nearbyActive && bluetooth != null, relayKnown, service);
+    }
+    private AdmissionPresentation admissionPresentation() {
+        AdmissionFlow.Snapshot a = admission;
+        if (a == null) return AdmissionPresentation.notRead();
+        return AdmissionPresentation.of(a.state(), a.request() != null, a.request() != null && a.request().expired());
+    }
+    /** The person pressed "Conectar": the only place that requests an online session (confirmed=true). */
+    private void connectNetwork() {
+        if (!BuildConfig.ALLOW_RELAY || connectBusy || !unlocked || engine == null) return;
+        connectBusy = true; relayUnreachable = false; relayResponded = false;
+        action(() -> { AndroidConnectivity.connect(this, engine.connectivity(), engine.profile().getString("relay"), true); return engine.connectivity().isNetworkSessionAllowed(); },
+            allowed -> { connectBusy = false; networkPaused = !allowed; refresh(); if (allowed) syncNow(); },
+            failure -> { connectBusy = false; notice("No se habilitó la red. Requiere admisión vigente, una red disponible y el servidor configurado."); refresh(); });
+    }
+    /** Revokes the online session without locking the vault or stopping Nearby. */
+    private void disconnectNetwork() {
+        if (engine == null) return;
+        networkPaused = true; engine.connectivity().disconnect(); cancelRelay(); relayResponded = false; relayUnreachable = false;
+        refresh();
+    }
     private void chooseBluetooth(boolean enroll) {
+        if (bluetooth == null) { notice("Activa Nearby primero"); return; }
         if (!bluetoothPermission()) return;
         if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             notice("Se necesita permiso para consultar los dispositivos cercanos."); return;
@@ -793,7 +1053,8 @@ public final class MainActivity extends Activity {
     private void renderSettings(SettingsSection section) {
         int expiryIndex = ttl == 3600 ? 0 : ttl == 604800 ? 2 : 1;
         mount(SettingsScreens.section(ui, new SettingsScreens.SettingsState(section, profile.optString("alias"), profile.optString("id"), features,
-            !BuildConfig.ALLOW_RELAY, networkPaused, profile.optBoolean("registered"), profile.optString("relay"), ttlName(), expiryIndex, BuildConfig.VERSION_NAME), new SettingsScreens.SettingsActions() {
+            !BuildConfig.ALLOW_RELAY, connectivity(), profile.optBoolean("registered"), profile.optString("relay"), ttlName(), expiryIndex, BuildConfig.VERSION_NAME,
+            passwordConfigured, PasswordPolicy.AUTO_LOCK_LABELS[autoLockIndex], admissionPresentation()), new SettingsScreens.SettingsActions() {
             @Override public void back() { MainActivity.this.back(); }
             @Override public void createInvitation() { MainActivity.this.createInvitation(); }
             @Override public void importInvitation() { pickContact(); }
@@ -811,10 +1072,12 @@ public final class MainActivity extends Activity {
                 if (!BuildConfig.ALLOW_RELAY) return;
                 action(() -> {
                     String base = RelayClient.validate(address);
-                    app.umbra.connectivity.AndroidConnectivity.connect(MainActivity.this, engine.connectivity(), base, true);
+                    // Explicit consent for this origin, requested by the person's "Conectar y registrar" action.
+                    if (!engine.connectivity().isNetworkSessionAllowed()) AndroidConnectivity.connect(MainActivity.this, engine.connectivity(), base, true);
                     try (RelayClient relay = openRelay(base, generation, false)) { relay.register(engine.profile(), invite); }
                     engine.updateRelay(base, true); return true;
-                }, ok -> { networkPaused = false; networkStateLoaded = true; notice("Buzón registrado."); refresh(); syncNow(); });
+                }, ok -> { networkPaused = !engine.connectivity().isNetworkSessionAllowed(); notice("Buzón registrado."); refresh(); syncNow(); },
+                    failure -> { notice("No se registró el buzón. Revisa la dirección, la invitación y que este dispositivo esté admitido."); refresh(); });
             }
             @Override public void syncNow() { MainActivity.this.syncNow(); }
             @Override public void unregister() {
@@ -824,9 +1087,197 @@ public final class MainActivity extends Activity {
                     engine.updateRelay(me.getString("relay"), false); return true;
                 }, ok -> refresh()));
             }
-            @Override public void bluetoothOnly(boolean enabled) { nearbyActions().bluetoothOnly(enabled); }
+            @Override public void connect() { connectNetwork(); }
+            @Override public void disconnect() { disconnectNetwork(); }
+            @Override public void nearby() { nav.home(); nav.selectTab(HomeTab.NEARBY); render(); }
+            @Override public void changePassword() { changeProblem = null; go(Route.of(Route.Kind.CHANGE_PASSWORD)); }
+            @Override public void enrollPassword() {
+                confirm("Añadir contraseña personal", "La bóveda se volverá a cifrar en este teléfono y quedará bloqueada. Después necesitarás Android y la contraseña para abrirla. No existe recuperación.",
+                    "Continuar", false, () -> { if (unlocked && engine != null && !passwordConfigured) { accessStep = AccessStep.LEGACY_ENROLLMENT; legacyDeferred = false; accessProblem = null; render(); } });
+            }
+            @Override public void admission() { go(Route.of(Route.Kind.ADMISSION)); refresh(); }
             @Override public void devices() { go(Route.of(Route.Kind.DEVICES)); refresh(); }
         }));
+    }
+
+    // ------------------------------------------------------------------ private admission
+    private static String when(long epochSeconds) { return android.text.format.DateFormat.format("dd/MM HH:mm", new Date(epochSeconds * 1000)).toString(); }
+    private static String fp(String hex) { return hex == null ? null : Fingerprints.lines(hex, 4); }
+    private void renderAdmission() {
+        AdmissionFlow.Snapshot a = admission;
+        if (a == null) { mount(Screen.of(ui.topBar(this::back, ui.titleBlock("Admisión del dispositivo", null)), ui.skeleton(3), null)); return; }
+        AdmissionFlow.Request r = a.request();
+        AdmissionScreens.RequestInfo request = r == null ? null
+            : new AdmissionScreens.RequestInfo(fp(r.deviceFingerprint()), fp(r.identityFingerprint()), r.realmId(), when(r.expiresAt()), r.expired());
+        mount(AdmissionScreens.status(ui, new AdmissionScreens.AdmissionState(admissionPresentation(), a.realmId(), fp(a.authorityKeyId()),
+            fp(profile.optString("id")), request, a.credentialExpiresAt() == null ? null : when(a.credentialExpiresAt()), !BuildConfig.ALLOW_RELAY, adminBusy),
+            new AdmissionScreens.AdmissionActions() {
+                @Override public void back() { MainActivity.this.back(); }
+                @Override public void importFile() { external(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_ADMISSION); }
+                @Override public void createRequest() {
+                    if (adminBusy) return; adminBusy = true;
+                    action(() -> { engine.admission().createAdmissionRequest(); return true; },
+                        ok -> { adminBusy = false; notice("Solicitud generada en este teléfono. Todavía no se envió a nadie: expórtala y compártela."); refresh(); },
+                        failure -> { adminBusy = false; notice("No se generó la solicitud. Si hay una vigente, espera a que venza o importa la respuesta."); refresh(); });
+                }
+                @Override public void exportRequest() {
+                    AdmissionFlow.Snapshot current = admission;
+                    if (current == null || current.request() == null) return;
+                    // A renewal request carries the current public credential so the authority can renew atomically.
+                    String text = current.credentialWire() != null ? AdmissionImport.file(current.request().wire(), current.credentialWire()) : AdmissionImport.file(current.request().wire());
+                    exportAdmission(text, current.credentialWire() != null ? "umbra-solicitud-renovacion.txt" : "umbra-solicitud-admision.txt");
+                }
+                @Override public void admin() { go(Route.of(Route.Kind.ADMISSION_ADMIN)); }
+            }));
+    }
+    private void exportAdmission(String text, String name) {
+        action(() -> engine.stageExport(Bytes.utf8(text)), key -> {
+            pendingExportKey = key;
+            external(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, name), EXPORT_ADMISSION);
+        });
+    }
+    private void renderAdmin() {
+        AdmissionFlow.Snapshot a = admission;
+        boolean configured = a != null && a.realmId() != null;
+        mount(AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(configured, a == null ? null : a.realmId(), a == null ? null : fp(a.authorityKeyId()), adminBusy),
+            new AdmissionScreens.AdminActions() {
+                @Override public void back() { MainActivity.this.back(); }
+                @Override public void createRealm() {
+                    confirm("Crear entorno", "Este teléfono será la única autoridad del entorno. No hay recuperación ni rotación: si pierdes este teléfono o su bóveda, no podrás admitir más dispositivos.",
+                        "Crear y ser autoridad", true, () -> {
+                            if (adminBusy) return; adminBusy = true;
+                            action(() -> engine.admission().createAdmissionRealm(true),
+                                realm -> { adminBusy = false; notice("Entorno creado. Este teléfono es su autoridad, pero aún no está admitido: genera y revisa su propia solicitud."); refresh(); },
+                                failure -> { adminBusy = false; notice("No se creó el entorno. Ya existe una configuración de admisión en este teléfono."); refresh(); });
+                        });
+                }
+                @Override public void exportRealm() {
+                    action(() -> AdmissionImport.file(engine.admission().getRealmInfo().encode()), text -> exportAdmission(text, "umbra-entorno.txt"));
+                }
+                @Override public void reviewRequest() {
+                    AdmissionFlow.Snapshot own = admission;
+                    if (own != null && own.request() != null && !own.request().expired() && own.credentialWire() == null) {
+                        new SecureDialogBuilder().setTitle("Solicitud a revisar")
+                            .setItems(new String[]{"La de este teléfono", "Otra, desde un archivo"}, (d, which) -> {
+                                if (which == 0) reviewWire(AdmissionImport.classify(AdmissionImport.file(own.request().wire())), true);
+                                else external(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_ADMIN_REVIEW);
+                            }).setNegativeButton("Cancelar", null).show();
+                    } else external(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_ADMIN_REVIEW);
+                }
+                @Override public void revokeCredential() { external(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_ADMIN_REVOKE); }
+            }));
+    }
+    private static final String REVIEW_REJECTED = "No se puede revisar: la solicitud venció, ya fue decidida, pertenece a otro entorno o este teléfono no es la autoridad.";
+    /** Authority review: the domain validates signature, realm, expiry, consumption and authority before showing anything. */
+    private void reviewWire(AdmissionImport.Parsed parsed, boolean own) {
+        if (parsed.kind() != AdmissionImport.Kind.REQUEST && parsed.kind() != AdmissionImport.Kind.RENEWAL_REQUEST) { notice(AdmissionPresentation.IMPORT_REJECTED); return; }
+        action(() -> {
+            AdmissionService service = engine.admission();
+            AdmissionService.Review review = service.reviewAdmissionRequest(parsed.parts().get(0));
+            String old = parsed.kind() == AdmissionImport.Kind.RENEWAL_REQUEST ? parsed.parts().get(1) : null;
+            return new PendingReview(review, old, new AdmissionScreens.ReviewInfo(fp(review.deviceFingerprint()), fp(review.identityFingerprint()),
+                review.realmId(), when(review.expiresAt()), old != null), own);
+        }, holder -> { pendingReview = holder; showReviewSheet(holder); }, failure -> notice(REVIEW_REJECTED));
+    }
+    private void showReviewSheet(PendingReview holder) {
+        Dialog[] sheet = new Dialog[1];
+        sheet[0] = SecureDialogs.sheet(this, this::track, AdmissionScreens.reviewSheet(ui, holder.info(), new AdmissionScreens.ReviewActions() {
+            @Override public void approve(long ttl) {
+                sheet[0].dismiss();
+                confirm(holder.info().renewal() ? "Aprobar renovación" : "Aprobar admisión",
+                    "¿Comparaste las huellas con la persona por un canal confiable? Se firmará una credencial de " + (ttl >= 604_800 ? "7 días" : "24 horas") + ". Estar admitido no verifica a ningún contacto.",
+                    "Aprobar", false, () -> decide(holder, true, ttl));
+            }
+            @Override public void reject() {
+                sheet[0].dismiss();
+                confirm("Rechazar solicitud", "Se firmará un rechazo para esta solicitud. El dispositivo no quedará admitido.", "Rechazar", true, () -> decide(holder, false, 0));
+            }
+            @Override public void cancel() { pendingReview = null; sheet[0].dismiss(); }
+        }));
+    }
+    private record Decision(String exportText, String fileName, String notice) {}
+    private void decide(PendingReview holder, boolean approve, long ttl) {
+        if (adminBusy || pendingReview != holder) return;
+        adminBusy = true; pendingReview = null;
+        action(() -> {
+            AdmissionService service = engine.admission();
+            if (!approve) return new Decision(AdmissionImport.file(service.rejectAdmission(holder.review(), true).wire()), "umbra-rechazo.txt",
+                "Rechazo firmado. Entrégalo al dispositivo para que lo importe.");
+            if (holder.oldCredential() != null) {
+                AdmissionService.Renewal renewal = service.renewAdmission(holder.review(), holder.oldCredential(), true, ttl);
+                return new Decision(AdmissionImport.file(renewal.credential().wire(), renewal.revocation().wire()), "umbra-renovacion.txt",
+                    "Renovación firmada: credencial nueva y revocación de la anterior. Entrégala al dispositivo; los demás teléfonos conocen la revocación solo al recibirla.");
+            }
+            var credential = service.approveAdmission(holder.review(), true, ttl);
+            if (holder.own()) {
+                service.installAdmissionCredential(credential.wire());
+                return new Decision(null, null, "Este teléfono quedó admitido con la credencial que acabas de firmar.");
+            }
+            return new Decision(AdmissionImport.file(credential.wire()), "umbra-credencial.txt", "Credencial firmada. Entrégala al dispositivo para que la importe.");
+        }, decision -> {
+            adminBusy = false; notice(decision.notice()); refresh();
+            if (decision.exportText() != null) exportAdmission(decision.exportText(), decision.fileName());
+        }, failure -> { adminBusy = false; notice("No se firmó la decisión. La solicitud pudo vencer o ya estaba decidida; no se cambió nada."); refresh(); });
+    }
+    private void revokeWire(AdmissionImport.Parsed parsed) {
+        if (parsed.kind() != AdmissionImport.Kind.CREDENTIAL) { notice(AdmissionPresentation.IMPORT_REJECTED); return; }
+        String wire = parsed.parts().get(0);
+        action(() -> AdmissionFlow.describeCredential(engine.admission(), wire), info -> {
+            Dialog[] sheet = new Dialog[1];
+            sheet[0] = SecureDialogs.sheet(this, this::track, AdmissionScreens.revokeSheet(ui, new AdmissionScreens.RevokeInfo(fp(info.identityFingerprint()), when(info.expiresAt())),
+                new AdmissionScreens.RevokeActions() {
+                    @Override public void revoke(String reason) {
+                        sheet[0].dismiss();
+                        confirm("Revocar credencial", "Se firmará una revocación. No borra datos de ese dispositivo y los teléfonos sin conexión solo la conocerán al recibir el archivo.", "Revocar", true, () -> {
+                            if (adminBusy) return; adminBusy = true;
+                            action(() -> AdmissionImport.file(engine.admission().revokeAdmission(wire, true, reason).wire()),
+                                text -> { adminBusy = false; notice("Revocación firmada. Distribúyela a los demás teléfonos del entorno."); refresh(); exportAdmission(text, "umbra-revocacion.txt"); },
+                                failure -> { adminBusy = false; notice("No se firmó la revocación: la credencial no pertenece a este entorno, ya estaba revocada o este teléfono no es la autoridad."); });
+                        });
+                    }
+                    @Override public void cancel() { sheet[0].dismiss(); }
+                }));
+        }, failure -> notice(AdmissionPresentation.IMPORT_REJECTED));
+    }
+    /** Member import: the person confirms after seeing what the file claims to be; the domain decides. */
+    private record ImportPreview(AdmissionImport.Parsed parsed, String detail) {}
+    private void importAdmission(Uri uri) {
+        action(() -> {
+            byte[] bytes = readBounded(uri, AdmissionImport.MAX_WIRE * AdmissionImport.MAX_LINES + 2);
+            try {
+                AdmissionImport.Parsed parsed = AdmissionImport.classify(Bytes.text(bytes));
+                String detail = null;
+                if (parsed.kind() == AdmissionImport.Kind.REALM) {
+                    var realm = app.umbra.admission.RealmConfig.decode(parsed.parts().get(0)); // public parse for display only
+                    detail = "Entorno: " + realm.realmId() + "\nHuella de la autoridad: " + Fingerprints.lines(realm.authorityKeyId(), 4);
+                }
+                return new ImportPreview(parsed, detail);
+            } finally { Arrays.fill(bytes, (byte) 0); }
+        }, preview -> {
+            AdmissionImport.Kind kind = preview.parsed().kind();
+            boolean member = kind == AdmissionImport.Kind.REALM || kind == AdmissionImport.Kind.CREDENTIAL || kind == AdmissionImport.Kind.REJECTION
+                || kind == AdmissionImport.Kind.REVOCATION || kind == AdmissionImport.Kind.RENEWAL_RESULT;
+            if (!member) { notice(kind == AdmissionImport.Kind.REQUEST || kind == AdmissionImport.Kind.RENEWAL_REQUEST
+                ? "Es una solicitud de otro dispositivo: revísala en Herramientas del administrador." : AdmissionPresentation.IMPORT_REJECTED); return; }
+            String body = kind == AdmissionImport.Kind.REALM
+                ? preview.detail() + "\n\nCompara la huella con la que te dio el administrador. Configurar el entorno no admite este dispositivo."
+                : "UMBRA comprobará la firma y que corresponda a este dispositivo antes de aplicarlo.";
+            confirm("Importar: " + AdmissionImport.describe(kind), body, "Importar", false, () -> action(() -> {
+                AdmissionFlow.applyMember(engine.admission(), preview.parsed(), true);
+                return AdmissionFlow.read(engine.admission(), Bytes.now());
+            }, after -> {
+                admission = after;
+                notice(kind == AdmissionImport.Kind.REALM ? "Entorno UMBRA configurado. Este dispositivo todavía no está admitido." : admissionPresentation().title());
+                refresh();
+            }, failure -> notice(kind == AdmissionImport.Kind.REALM ? AdmissionPresentation.REALM_IMPORT_REJECTED : AdmissionPresentation.IMPORT_REJECTED)));
+        }, failure -> notice(AdmissionPresentation.IMPORT_REJECTED));
+    }
+    /** Admin file picks: read the bounded file, then hand it to the domain-validated review or revocation flow. */
+    private void importAdmin(Uri uri, boolean review) {
+        action(() -> {
+            byte[] bytes = readBounded(uri, AdmissionImport.MAX_WIRE * AdmissionImport.MAX_LINES + 2);
+            try { return AdmissionImport.classify(Bytes.text(bytes)); } finally { Arrays.fill(bytes, (byte) 0); }
+        }, parsed -> { if (review) reviewWire(parsed, false); else revokeWire(parsed); }, failure -> notice(AdmissionPresentation.IMPORT_REJECTED));
     }
 
     // ------------------------------------------------------------------ calls
@@ -1026,7 +1477,7 @@ public final class MainActivity extends Activity {
     @Override public void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data); externalUi = false;
         if (result != RESULT_OK || data == null || data.getData() == null) {
-            if (request == EXPORT_CONTACT || request == EXPORT_FILE) pendingExportKey = null;
+            if (request == EXPORT_CONTACT || request == EXPORT_FILE || request == EXPORT_ADMISSION) pendingExportKey = null;
             return;
         }
         pendingResult = new PendingResult(request, data.getData());
@@ -1040,6 +1491,8 @@ public final class MainActivity extends Activity {
             if (processed.exportKey() != null) exportPairing(processed.exportKey());
             else { verifyMethod = SecurityScreens.Method.CODE; nav.push(Route.of(Route.Kind.VERIFY, processed.peer())); refresh(); }
         }));
+        else if (request == PICK_ADMISSION) importAdmission(uri);
+        else if (request == PICK_ADMIN_REVIEW || request == PICK_ADMIN_REVOKE) importAdmin(uri, request == PICK_ADMIN_REVIEW);
         else if (request == PICK_FILE) {
             String recipient = pendingAttachmentPeer; long lifetime = pendingAttachmentTtl;
             action(() -> {
@@ -1047,7 +1500,7 @@ public final class MainActivity extends Activity {
                 try { return engine.sendFile(recipient, displayName(uri), bytes, lifetime); }
                 finally { Arrays.fill(bytes, (byte) 0); }
             }, id -> { refresh(); syncNow(); });
-        } else if (request == EXPORT_CONTACT || request == EXPORT_FILE) {
+        } else if (request == EXPORT_CONTACT || request == EXPORT_FILE || request == EXPORT_ADMISSION) {
             String key = pendingExportKey; pendingExportKey = null;
             if (key == null) { notice("La exportación no está disponible. Créala nuevamente."); return; }
             action(() -> {
@@ -1061,7 +1514,8 @@ public final class MainActivity extends Activity {
                     // Never clean up with a new authentication epoch. Expiry handles cancelled exports.
                     gate.check(lease); engine.clearExport(key);
                 }
-            }, ok -> notice("Documento exportado. La copia externa no está protegida por UMBRA."));
+            }, ok -> notice(request == EXPORT_ADMISSION ? "Archivo exportado. Solo contiene datos públicos firmados; entrégalo por un canal confiable."
+                : "Documento exportado. La copia externa no está protegida por UMBRA."));
         }
     }
     private byte[] readBounded(Uri uri, int max) throws Exception {

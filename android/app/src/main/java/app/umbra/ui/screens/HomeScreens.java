@@ -3,6 +3,7 @@ package app.umbra.ui.screens;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ListView;
@@ -32,20 +33,25 @@ public final class HomeScreens {
     public enum Filter { ALL, PEOPLE, GROUPS }
     public record IncomingCall(String callId, String alias) {}
     public record ChatsState(List<ConversationItem> conversations, boolean loading, Filter filter, FeatureAvailability features,
-                             boolean offlineEdition, boolean networkPaused, String transportNotice, IncomingCall incoming) {}
+                             boolean offlineEdition, ConnectivityPresentation connectivity, AdmissionPresentation admission,
+                             String transportNotice, IncomingCall incoming) {}
     public interface ChatsActions {
         void open(ConversationItem item); void newMessage(); void newGroup(); void addContact();
-        void filter(Filter filter); void openIncoming(String callId); void networkDetails();
+        void filter(Filter filter); void openIncoming(String callId); void networkDetails(); void admission();
     }
 
     public static Screen chats(Ui ui, ChatsState s, ChatsActions a, View nav) {
         LinearLayout top = ui.column();
-        top.addView(ui.topBar(null, ui.titleBlock("Chats", ui.connectionChip(s.offlineEdition(), s.networkPaused())),
+        top.addView(ui.topBar(null, ui.titleBlock("Chats", ui.connectionChip(s.connectivity())),
             ui.iconButton(Glyph.PERSON_ADD, "Agregar contacto", a::addContact),
             ui.iconButton(Glyph.ADD, "Nuevo mensaje", a::newMessage)));
         if (s.incoming() != null)
             top.addView(ui.banner(Tone.ACCENT, Glyph.CALL, "Llamada de " + s.incoming().alias(), "Responder no enciende tu micrófono ni tu cámara sin confirmación.",
                 "Ver llamada", () -> a.openIncoming(s.incoming().callId())));
+        // Local chats stay available; admission only gates the realm's network and Nearby operations.
+        if (s.admission() != null && !s.admission().admitted())
+            top.addView(ui.banner(s.admission().tone(), s.admission().glyph(), s.admission().title(),
+                "Sin admisión no hay servidor privado ni Nearby. Tus chats locales siguen disponibles.", "Admisión", a::admission));
         if (s.transportNotice() != null)
             top.addView(ui.banner(Tone.WARNING, Glyph.NETWORK_OFF, s.transportNotice(), null, "Detalles", a::networkDetails));
         top.addView(ui.segmented(new String[]{"Todos", "Personas", "Grupos"}, s.filter().ordinal(), null, i -> a.filter(Filter.values()[i])));
@@ -130,32 +136,55 @@ public final class HomeScreens {
     }
 
     // ------------------------------------------------------------------ Nearby (Bluetooth)
-    public record NearbyState(String transportStatus, boolean offlineEdition, boolean bluetoothOnly, boolean relayAllowed) {}
+    /**
+     * @param nearbyActive domain {@code isNearbySessionAllowed()}; the radio controls stay disabled until the
+     *                     person explicitly starts Nearby, which never happens on open, unlock or connect.
+     */
+    public record NearbyState(String transportStatus, boolean offlineEdition, ConnectivityPresentation connectivity,
+                              boolean nearbyActive, boolean admitted) {}
     public interface NearbyActions {
-        void bluetoothOnly(boolean enabled); void listen(); void makeVisible(); void connectVerified();
-        void enrollNew(); void systemSettings(); void disconnect();
+        void startNearby(); void stopNearby(); void listen(); void makeVisible(); void connectVerified();
+        void enrollNew(); void systemSettings(); void networkSettings();
     }
 
     public static Screen nearby(Ui ui, NearbyState s, NearbyActions a, View nav) {
         LinearLayout top = ui.column();
-        top.addView(ui.topBar(null, ui.titleBlock("Cerca", ui.chip(Tone.OFFLINE, s.offlineEdition() ? Glyph.OFFLINE_BLUETOOTH : Glyph.BLUETOOTH, s.offlineEdition() ? "Modo offline · Bluetooth" : "Bluetooth · sin internet"))));
+        top.addView(ui.topBar(null, ui.titleBlock("Cerca", ui.chip(s.nearbyActive() ? Tone.OFFLINE : Tone.NEUTRAL,
+            s.offlineEdition() ? Glyph.OFFLINE_BLUETOOTH : Glyph.BLUETOOTH, s.nearbyActive() ? "Nearby activo" : "Nearby detenido"))));
         LinearLayout body = ui.column();
         LinearLayout status = ui.card();
-        status.addView(ui.text(UmbraType.SECURITY_LABEL, "Estado del enlace"));
-        TextView st = ui.text(UmbraType.HEADING, s.transportStatus()); st.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        status.addView(ui.text(UmbraType.SECURITY_LABEL, "Nearby (Bluetooth)"));
+        TextView st = ui.text(UmbraType.HEADING, s.nearbyActive() ? s.transportStatus() : "Nearby detenido");
+        st.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         status.addView(st, ui.margins(Ui.match(), 4, 4));
-        status.addView(ui.text(UmbraType.CAPTION, "Un enlace cercano a la vez. Ambos teléfonos deben tener UMBRA abierta y desbloqueada."));
+        status.addView(ui.text(UmbraType.CAPTION, s.nearbyActive()
+            ? "Autorizado por ti hasta que lo detengas o bloquees UMBRA. Un enlace cercano a la vez; ambos teléfonos deben tener UMBRA abierta y desbloqueada."
+            : "UMBRA no escucha, no busca ni se anuncia por Bluetooth hasta que lo actives. Es independiente de la red: conectar no activa Bluetooth."));
         body.addView(status);
-        if (s.relayAllowed())
-            body.addView(ui.switchRow(ui.context().getString(app.umbra.R.string.bluetooth_only), "Pausa el servidor privado mientras esté activo.", s.bluetoothOnly(), null, a::bluetoothOnly));
+        if (!s.admitted())
+            body.addView(ui.banner(Tone.WARNING, Glyph.DEVICE_PENDING, "Este dispositivo no está admitido",
+                "El intercambio cercano exige una admisión vigente en ambos teléfonos.", null, null));
+        if (s.nearbyActive()) body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Detener Nearby", Glyph.STOP, a::stopNearby));
+        else {
+            Button start = ui.button(Ui.ButtonKind.PRIMARY, "Activar Nearby", Glyph.BLUETOOTH, a::startNearby);
+            if (!s.admitted()) ui.disabled(start, "requiere admisión vigente");
+            body.addView(start);
+        }
         body.addView(ui.sectionHeader("Contactos verificados"));
-        body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Esperar a un contacto verificado", Glyph.BLUETOOTH, a::listen));
-        body.addView(ui.button(Ui.ButtonKind.SECONDARY, "Conectar con un contacto verificado", Glyph.CHEVRON, a::connectVerified));
+        Button listen = ui.button(Ui.ButtonKind.SECONDARY, "Esperar a un contacto verificado", Glyph.BLUETOOTH, a::listen);
+        Button connect = ui.button(Ui.ButtonKind.SECONDARY, "Conectar con un contacto verificado", Glyph.CHEVRON, a::connectVerified);
+        body.addView(listen); body.addView(connect);
         body.addView(ui.sectionHeader("Contacto nuevo"));
-        body.addView(ui.button(Ui.ButtonKind.SECONDARY, "Vincular un nuevo contacto", Glyph.PERSON_ADD, a::enrollNew));
-        body.addView(ui.button(Ui.ButtonKind.SECONDARY, "Hacer visible este teléfono (120 s)", Glyph.EYE, a::makeVisible));
+        Button enroll = ui.button(Ui.ButtonKind.SECONDARY, "Vincular un nuevo contacto", Glyph.PERSON_ADD, a::enrollNew);
+        Button visible = ui.button(Ui.ButtonKind.SECONDARY, "Hacer visible este teléfono (120 s)", Glyph.EYE, a::makeVisible);
+        body.addView(enroll); body.addView(visible);
+        if (!s.nearbyActive()) for (Button b : new Button[]{listen, connect, enroll, visible}) ui.disabled(b, "activa Nearby primero");
         body.addView(ui.button(Ui.ButtonKind.GHOST, "Emparejar en ajustes de Android", Glyph.SETTINGS, a::systemSettings));
-        body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Desconectar Bluetooth", Glyph.CLOSE, a::disconnect));
+        if (!s.offlineEdition()) {
+            body.addView(ui.sectionHeader("Red"));
+            body.addView(ui.listRow(ui.iconTile(s.connectivity().glyph(), s.connectivity().tone()), s.connectivity().title(),
+                "Internet y Nearby tienen consentimientos separados.", ui.chevron(), a::networkSettings));
+        }
         body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Después de conectar",
             "El contacto aparece en Chats como no verificado. Comparen el código de seguridad en ambos teléfonos antes de enviar.", null, null));
         body.addView(ui.text(UmbraType.CAPTION, "El alcance depende de los teléfonos y del entorno. No es una red de malla ni una conexión a distancia.", UmbraColors.WARNING_FG));
@@ -165,9 +194,9 @@ public final class HomeScreens {
     // ------------------------------------------------------------------ Settings root
     public interface SettingsActions { void open(SettingsSection section); void lockNow(); }
 
-    public static Screen settings(Ui ui, String alias, boolean offlineEdition, boolean networkPaused, SettingsActions a, View nav) {
+    public static Screen settings(Ui ui, String alias, ConnectivityPresentation connectivity, SettingsActions a, View nav) {
         LinearLayout top = ui.column();
-        top.addView(ui.topBar(null, ui.titleBlock("Ajustes", ui.connectionChip(offlineEdition, networkPaused))));
+        top.addView(ui.topBar(null, ui.titleBlock("Ajustes", ui.connectionChip(connectivity))));
         LinearLayout body = ui.column();
         LinearLayout me = ui.listRow(ui.avatar(alias, false, 52), alias, "Tu perfil e identidad pública", ui.chevron(), () -> a.open(SettingsSection.PROFILE));
         body.addView(me);

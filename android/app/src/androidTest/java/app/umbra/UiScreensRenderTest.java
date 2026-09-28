@@ -41,6 +41,9 @@ public class UiScreensRenderTest {
     private static final int WIDTH = 1080, HEIGHT = 2340;
     private static final String ANA = "a1".repeat(32), BRUNO = "b2".repeat(32), CARLOS = "c3".repeat(32), ME = "d4".repeat(32);
     private static final FeatureAvailability FEATURES = FeatureAvailability.forBuild(BuildConfig.ALLOW_RELAY, app.umbra.calls.CallPlatform.ENABLED);
+    /** Synthetic presentation of an unlocked, admitted but not connected session (no domain state implied). */
+    private static final ConnectivityPresentation OFFLINE_SESSION = ConnectivityPresentation.of("UNLOCKED_OFFLINE", !BuildConfig.ALLOW_RELAY, true, false, true,
+        ConnectivityPresentation.Service.NOT_OBSERVED);
 
     // ------------------------------------------------------------------ harness
     private static Context themed(float fontScale) {
@@ -152,27 +155,28 @@ public class UiScreensRenderTest {
 
     // ------------------------------------------------------------------ tests
     @Test public void lockScreenShowsOnlyRealProtection() {
-        View v = render("01-lock", ui -> EntryScreens.lock(ui, new EntryScreens.LockState(true, !BuildConfig.ALLOW_RELAY, null), new EntryScreens.LockActions() {
+        View v = render("01-lock", ui -> EntryScreens.lock(ui, new EntryScreens.LockState(true, !BuildConfig.ALLOW_RELAY, null, null), new EntryScreens.LockActions() {
             public void unlock() {} public void openSecuritySettings() {}
         }));
         assertTrue(hasText(v, "Bóveda bloqueada"));
         assertNotNull(button(v, "Desbloquear"));
         assertTrue(hasText(v, "Versión de desarrollo. No auditada para uso sensible."));
         assertAccessible(v);
-        View insecure = render("01b-lock-no-device-credential", ui -> EntryScreens.lock(ui, new EntryScreens.LockState(false, false, null), new EntryScreens.LockActions() {
+        View insecure = render("01b-lock-no-device-credential", ui -> EntryScreens.lock(ui, new EntryScreens.LockState(false, false, null, null), new EntryScreens.LockActions() {
             public void unlock() {} public void openSecuritySettings() {}
         }));
         assertNull("no unlock without a device credential", button(insecure, "Desbloquear"));
         assertNotNull(button(insecure, "Configurar bloqueo de Android"));
     }
 
-    @Test public void onboardingIsShortAndMarksPendingAdmission() {
+    @Test public void onboardingIsShortAndLeadsToAdmission() {
         EntryScreens.OnboardingActions a = new EntryScreens.OnboardingActions() { public void step(int n) {} public void create(String s) {} };
         View first = render("02a-onboarding-intro", ui -> EntryScreens.onboarding(ui, 0, !BuildConfig.ALLOW_RELAY, a));
         assertTrue(hasText(first, "Sin teléfono ni correo"));
         assertTrue(hasText(first, "Paso 1 de 3"));
         View last = render("02c-onboarding-identity", ui -> EntryScreens.onboarding(ui, 2, !BuildConfig.ALLOW_RELAY, a));
-        assertTrue(hasText(last, "UI preparada · Backend pendiente"));
+        assertTrue(hasText(last, "Después: admisión de este dispositivo"));
+        assertFalse("identity creation never claims admission", hasText(last, "Dispositivo admitido"));
         assertAccessible(last);
         render("02b-onboarding-verification", ui -> EntryScreens.onboarding(ui, 1, !BuildConfig.ALLOW_RELAY, a));
     }
@@ -183,20 +187,20 @@ public class UiScreensRenderTest {
             ConversationItem.direct(CARLOS, "Carlos", TrustLevel.UNVERIFIED, ""));
         HomeScreens.ChatsActions a = new HomeScreens.ChatsActions() {
             public void open(ConversationItem i) {} public void newMessage() {} public void newGroup() {} public void addContact() {}
-            public void filter(HomeScreens.Filter f) {} public void openIncoming(String id) {} public void networkDetails() {}
+            public void filter(HomeScreens.Filter f) {} public void openIncoming(String id) {} public void networkDetails() {} public void admission() {}
         };
-        View v = render("03-home-chats", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(items, false, HomeScreens.Filter.ALL, FEATURES, !BuildConfig.ALLOW_RELAY, false, null, null), a, nav(ui, HomeTab.CHATS)));
+        View v = render("03-home-chats", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(items, false, HomeScreens.Filter.ALL, FEATURES, !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, null, null, null), a, nav(ui, HomeTab.CHATS)));
         String text = visibleText(v);
         assertTrue(text.contains("La identidad cambió · verifica de nuevo"));
         assertTrue(text.contains("Verificación pendiente · envío bloqueado"));
         assertEquals(BuildConfig.ALLOW_RELAY, text.contains("Llamadas"));
         assertAccessible(v);
-        View empty = render("17-empty-state", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(List.of(), false, HomeScreens.Filter.ALL, FEATURES, !BuildConfig.ALLOW_RELAY, false, null, null), a, nav(ui, HomeTab.CHATS)));
+        View empty = render("17-empty-state", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(List.of(), false, HomeScreens.Filter.ALL, FEATURES, !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, null, null, null), a, nav(ui, HomeTab.CHATS)));
         assertTrue(hasText(empty, "Todavía no tienes conversaciones."));
         assertTrue(hasText(empty, "Agrega un contacto mediante una invitación segura."));
-        View groups = render("03b-home-groups-pending", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(items, false, HomeScreens.Filter.GROUPS, FEATURES, !BuildConfig.ALLOW_RELAY, false, null, null), a, nav(ui, HomeTab.CHATS)));
+        View groups = render("03b-home-groups-pending", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(items, false, HomeScreens.Filter.GROUPS, FEATURES, !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, null, null, null), a, nav(ui, HomeTab.CHATS)));
         assertTrue(hasText(groups, "UI preparada · Backend pendiente"));
-        render("03c-home-loading", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(items, true, HomeScreens.Filter.ALL, FEATURES, !BuildConfig.ALLOW_RELAY, false, null, null), a, nav(ui, HomeTab.CHATS)));
+        render("03c-home-loading", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(items, true, HomeScreens.Filter.ALL, FEATURES, !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, null, null, null), a, nav(ui, HomeTab.CHATS)));
     }
 
     @Test public void verifiedChatShowsComposerAndContentKinds() {
@@ -341,17 +345,19 @@ public class UiScreensRenderTest {
 
     @Test public void settingsSectionsAreHonestAboutPendingControls() {
         HomeScreens.SettingsActions ra = new HomeScreens.SettingsActions() { public void open(SettingsSection s) {} public void lockNow() {} };
-        View rootSettings = render("13-settings", ui -> HomeScreens.settings(ui, "Ana", !BuildConfig.ALLOW_RELAY, false, ra, nav(ui, HomeTab.SETTINGS)));
+        View rootSettings = render("13-settings", ui -> HomeScreens.settings(ui, "Ana", OFFLINE_SESSION, ra, nav(ui, HomeTab.SETTINGS)));
         for (SettingsSection s : SettingsSection.values()) if (s != SettingsSection.PROFILE) assertTrue(s.title, hasText(rootSettings, s.title));
         assertAccessible(rootSettings);
         SettingsScreens.SettingsActions sa = new SettingsScreens.SettingsActions() {
             public void back() {} public void createInvitation() {} public void importInvitation() {} public void revokeInvitations() {} public void lockNow() {}
             public void destroyIdentity() {} public void expiry(int i) {} public void register(String a, String i) {} public void syncNow() {} public void unregister() {}
-            public void bluetoothOnly(boolean e) {} public void devices() {}
+            public void connect() {} public void disconnect() {} public void nearby() {} public void changePassword() {} public void enrollPassword() {}
+            public void admission() {} public void devices() {}
         };
         for (SettingsSection s : new SettingsSection[]{SettingsSection.PROFILE, SettingsSection.PRIVACY, SettingsSection.SECURITY, SettingsSection.NETWORK, SettingsSection.ABOUT}) {
             View v = render("13-settings-" + s.name().toLowerCase(Locale.ROOT), ui -> SettingsScreens.section(ui, new SettingsScreens.SettingsState(s, "Ana", ME, FEATURES,
-                !BuildConfig.ALLOW_RELAY, false, BuildConfig.ALLOW_RELAY, BuildConfig.ALLOW_RELAY ? "https://relay.example.test" : "", "24 horas", 1, BuildConfig.VERSION_NAME), sa));
+                !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, BuildConfig.ALLOW_RELAY, BuildConfig.ALLOW_RELAY ? "https://relay.example.test" : "", "24 horas", 1, BuildConfig.VERSION_NAME,
+                true, "4 min", AdmissionPresentation.of("ADMITTED", false, false)), sa));
             assertAccessible(v);
             if (s == SettingsSection.SECURITY) {
                 Button emergency = button(v, "BLOQUEAR UMBRA"); assertNotNull(emergency);
@@ -364,17 +370,19 @@ public class UiScreensRenderTest {
 
     @Test public void offlineEditionShowsBluetoothIdentityAndNoInternetFeatures() {
         HomeScreens.NearbyActions na = new HomeScreens.NearbyActions() {
-            public void bluetoothOnly(boolean e) {} public void listen() {} public void makeVisible() {} public void connectVerified() {} public void enrollNew() {} public void systemSettings() {} public void disconnect() {}
+            public void startNearby() {} public void stopNearby() {} public void listen() {} public void makeVisible() {} public void connectVerified() {}
+            public void enrollNew() {} public void systemSettings() {} public void networkSettings() {}
         };
-        View nearby = render("14-offline-nearby", ui -> HomeScreens.nearby(ui, new HomeScreens.NearbyState("Sin conexión activa", !BuildConfig.ALLOW_RELAY, true, BuildConfig.ALLOW_RELAY), na, nav(ui, HomeTab.NEARBY)));
+        View nearby = render("14-offline-nearby", ui -> HomeScreens.nearby(ui, new HomeScreens.NearbyState("Nearby activo · sin enlace", !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, true, true), na, nav(ui, HomeTab.NEARBY)));
         assertAccessible(nearby);
+        assertTrue(hasText(nearby, "Nearby activo"));
+        assertNotNull(button(nearby, "Detener Nearby"));
         if (!BuildConfig.ALLOW_RELAY) {
-            assertTrue(hasText(nearby, "Modo offline · Bluetooth"));
             assertFalse(hasText(nearby, "Llamadas"));
-            assertFalse(hasText(nearby, "Solo Bluetooth")); // No Internet switch where Internet does not exist.
+            assertFalse(hasText(nearby, "Red deshabilitada")); // No Internet control where Internet does not exist.
             View chat = render("14b-offline-chat", ui -> ChatScreens.direct(ui, chat(TrustLevel.VERIFIED, false), CHAT));
             for (View x : all(chat)) assertFalse("no call buttons offline", "Llamada de voz".contentEquals(String.valueOf(x.getContentDescription())) || "Videollamada".contentEquals(String.valueOf(x.getContentDescription())));
-        } else assertTrue(hasText(nearby, "Solo Bluetooth"));
+        } else assertTrue(hasText(nearby, "Red deshabilitada"));
     }
 
     @Test public void errorsAreHumanWithOptionalTechnicalDetails() {
@@ -391,7 +399,7 @@ public class UiScreensRenderTest {
     }
 
     @Test public void largeFontScaleWrapsWithoutHorizontalOverflow() {
-        View lock = render(2.0f, "20a-font-200-lock", ui -> EntryScreens.lock(ui, new EntryScreens.LockState(true, !BuildConfig.ALLOW_RELAY, null), new EntryScreens.LockActions() {
+        View lock = render(2.0f, "20a-font-200-lock", ui -> EntryScreens.lock(ui, new EntryScreens.LockState(true, !BuildConfig.ALLOW_RELAY, null, null), new EntryScreens.LockActions() {
             public void unlock() {} public void openSecuritySettings() {}
         }));
         assertAccessible(lock);

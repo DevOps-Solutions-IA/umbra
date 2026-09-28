@@ -296,10 +296,9 @@ public final class Ui {
         return t;
     }
     /** Connection indicator: connected (cloud), offline edition (bluetooth) or paused. */
-    public TextView connectionChip(boolean offlineEdition, boolean networkPaused) {
-        if (offlineEdition) return chip(Tone.OFFLINE, Glyph.OFFLINE_BLUETOOTH, "Modo offline · Bluetooth");
-        if (networkPaused) return chip(Tone.NEUTRAL, Glyph.NETWORK_OFF, "Internet en pausa");
-        return chip(Tone.ACCENT, Glyph.CLOUD, "Conectado · servidor privado");
+    /** Domain connectivity (consent), never a claim that the server is reachable. */
+    public TextView connectionChip(ConnectivityPresentation connectivity) {
+        return chip(connectivity.tone(), connectivity.glyph(), connectivity.chip());
     }
 
     // ---------------------------------------------------------------- lists
