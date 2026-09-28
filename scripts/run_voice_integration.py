@@ -78,6 +78,20 @@ def valid_stop(report, *, expected_expiry=False):
             and 0<=report["expiredDeliveriesRejected"]<=(1 if expected_expiry else 0))
 
 
+def valid_emergency_stop(report, *, video=False):
+    base={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"}
+    extra={"emergencyState","requestedNanos","invalidatedNanos","confirmedNanos","lateVideoCallbacks","lastAudioCaptureNanos","lastVideoCaptureNanos"}
+    return (set(report)==base|extra
+            and valid_stop({key:report[key] for key in base})
+            and report["emergencyState"]=="CLOSED"
+            and all(type(report[key]) is int for key in extra-{"emergencyState"})
+            and report["lateVideoCallbacks"]==0
+            and 0<report["requestedNanos"]<=report["invalidatedNanos"]<=report["confirmedNanos"]
+            and report["confirmedNanos"]-report["requestedNanos"]<=5_000_000_000
+            and 0<report["lastAudioCaptureNanos"]<=report["confirmedNanos"]
+            and (0<report["lastVideoCaptureNanos"]<=report["confirmedNanos"] if video else report["lastVideoCaptureNanos"]==0))
+
+
 def permission_granted(dump, name):
     values=re.findall(r'^\s*'+re.escape(name)+r': granted=(true|false)(?:,|$)',dump,re.MULTILINE)
     if len(values)!=1:raise ValueError("Missing or ambiguous runtime permission evidence")
@@ -362,17 +376,12 @@ def main():
                     docker("stop","--time","0",turn.name)
                 for serial in (args.a,args.b):
                     stopped=read(serial,"synthetic-voice-lost.json",processes[serial],deadline)
-                    closure_keys=("failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected")
-                    (args.reports/f"closure-observation-{serial}.json").write_text(json.dumps({key:stopped.get(key) for key in closure_keys},indent=2)+"\n")
-                    if not valid_stop(stopped,expected_expiry=args.scenario=="credential-expiry"):
-                        raise RuntimeError("Native media did not stop for scenario: "+args.scenario)
+                    (args.reports/f"closure-observation-{serial}.json").write_text(json.dumps(stopped,indent=2)+"\n")
                     if args.scenario=="emergency-lock":
-                        if (stopped.get("emergencyState")!="CLOSED" or stopped.get("lateVideoCallbacks")!=0
-                                or not 0<stopped.get("requestedNanos",0)<=stopped.get("invalidatedNanos",0)<=stopped.get("confirmedNanos",0)
-                                or stopped["confirmedNanos"]-stopped["requestedNanos"]>5_000_000_000
-                                or not 0<stopped.get("lastAudioCaptureNanos",0)<=stopped["confirmedNanos"]
-                                or args.video and not 0<stopped.get("lastVideoCaptureNanos",0)<=stopped["confirmedNanos"]):
+                        if not valid_emergency_stop(stopped,video=args.video):
                             raise RuntimeError("Emergency authorization/closure receipt missing or outside budget")
+                    elif not valid_stop(stopped,expected_expiry=args.scenario=="credential-expiry"):
+                        raise RuntimeError("Native media did not stop for scenario: "+args.scenario)
                     stop_evidence.append(stopped)
             if args.scenario in ("allocation-expiry","force-stop","permission-revoked","camera-permission-revoked"):
                 if args.scenario=="allocation-expiry":

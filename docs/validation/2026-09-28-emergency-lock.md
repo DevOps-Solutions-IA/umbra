@@ -141,3 +141,15 @@ a los recibos para investigar una nueva reproducción. No se modifica TURN.
 Suites existentes de este HEAD: admisión `36368708029`, contraseña
 `36368708017` e inicio privado `36368708001` SUCCESS. Otras aún no finalizadas
 al escribir esta entrada. Estos resultados no validan el commit siguiente.
+
+Media debug de la misma ejecución (`108760237344`) alcanzó cierre y produjo
+`failedClosed=true`, 1000 ms hasta observación, 500 ms observados, cero callbacks
+tardíos. Falló el verificador host: `valid_stop` exigía exactamente las cinco
+claves anteriores y rechazaba los campos adicionales de emergencia. Reproducido
+localmente en `emergency-media-receipt-before.log` (exit 1). Se añade un esquema
+estricto separado de emergencia, sin relajar ventanas ni aceptar campos desconocidos;
+171 pruebas de herramientas PASS (`emergency-media-receipt-after.log`). Los recibos
+completos se conservan antes de evaluar para no perder diagnóstico ante fallo.
+El cierre de proceso que aparece después del fallo host pertenece a su cleanup,
+no prueba por sí solo un crash previo del motor. La aceptación multimedia completa
+sigue pendiente de una ejecución que termine todos los controles.
