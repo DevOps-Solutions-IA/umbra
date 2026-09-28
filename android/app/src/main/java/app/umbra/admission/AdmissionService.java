@@ -165,6 +165,7 @@ public final class AdmissionService {
         @Override public String toString() { return "AdmissionReview[redacted]"; }
     }
     private void authority() {
+        if(db.get("admission-secret","authority")==null)throw new AdmissionException(AdmissionException.Code.NOT_AUTHORITY);
         byte[] key=seed("authority");
         try { if(!AdmissionCodec.encode(AdmissionCodec.publicFromSeed(key)).equals(realm().authorityPublicKey())) throw AdmissionCodec.invalid(); }
         finally { Arrays.fill(key,(byte)0); }
@@ -245,7 +246,7 @@ public final class AdmissionService {
         Runnable check=lease();
         db.transaction(() -> {
             check.run(); AdmissionCredential c=AdmissionCredential.decode(wire,realm()); c.validate(realm(),clock.getAsLong()); verifyOwn(c);
-            if(db.get("admission-revoked",c.credentialId())!=null) throw AdmissionCodec.invalid();
+            if(db.get("admission-revoked",c.credentialId())!=null) throw new AdmissionException(AdmissionException.Code.REVOKED);
             String pending=read("pending"); if(pending==null || read("rejection")!=null) throw AdmissionCodec.invalid();
             AdmissionRequest request=AdmissionRequest.decode(pending);
             if(!request.requestId().equals(c.requestId()) || !request.devicePublicKey().equals(c.devicePublicKey()) ||
@@ -286,7 +287,7 @@ public final class AdmissionService {
         byte[] key=seed("device");
         try {
             if(!AdmissionCodec.encode(AdmissionCodec.publicFromSeed(key)).equals(c.devicePublicKey()) ||
-                    !AdmissionCodec.encode(signalPublic()).equals(c.signalPublicKey())) throw AdmissionCodec.invalid();
+                    !AdmissionCodec.encode(signalPublic()).equals(c.signalPublicKey())) throw new AdmissionException(AdmissionException.Code.WRONG_DEVICE);
         } finally { Arrays.fill(key,(byte)0); }
     }
     public Records.Work<Void> authorization() throws Exception {
@@ -295,13 +296,13 @@ public final class AdmissionService {
     }
     public AdmissionCredential requireAdmission() throws Exception {
         return db.transaction(() -> {
-            lease(); String wire=read("credential"); if(wire==null) throw AdmissionCodec.invalid();
+            lease(); String wire=read("credential"); if(wire==null) throw new AdmissionException(AdmissionException.Code.NOT_ADMITTED);
             AdmissionCredential c=AdmissionCredential.decode(wire,realm()); verifyOwn(c); valid(c); return c;
         });
     }
     private void valid(AdmissionCredential c) {
         c.validate(realm(),clock.getAsLong());
-        if(db.get("admission-revoked",c.credentialId())!=null) throw AdmissionCodec.invalid();
+        if(db.get("admission-revoked",c.credentialId())!=null) throw new AdmissionException(AdmissionException.Code.REVOKED);
     }
     public String prove(AdmissionChallenge challenge,String expectedVerifier,String expectedOperation) throws Exception {
         Runnable check=lease();
@@ -424,7 +425,7 @@ public final class AdmissionService {
         return db.transaction(() -> {
             check.run(); if(!confirmed) throw AdmissionCodec.invalid(); authority();
             AdmissionCredential c=AdmissionCredential.decode(credential,realm());
-            if(db.get("admission-revoked",c.credentialId())!=null) throw AdmissionCodec.invalid();
+            if(db.get("admission-revoked",c.credentialId())!=null) throw new AdmissionException(AdmissionException.Code.REVOKED);
             long sequence=read("sequence")==null?1:AdmissionCodec.number(read("sequence"))+1;
             byte[] key=seed("authority");
             try {
