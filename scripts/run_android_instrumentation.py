@@ -40,9 +40,10 @@ def main() -> None:
             package + '.test/androidx.test.runner.AndroidJUnitRunner'], stdout=stream,
             stderr=subprocess.STDOUT, timeout=300)
     output = args.log.read_text(encoding='utf-8')
-    # Inventory (not a sum of branch totals): androidTest has 56 @Test methods in both variants
-    # (40 security/lab cases + 16 UiScreensRenderTest); androidTestConnected adds 2 video lifecycle cases.
-    expected=58 if args.flavor=='connected' else 56
+    # Inventory (not a sum of branch totals): androidTest has 62 @Test methods in both variants
+    # (40 security/lab cases, 19 UiScreensRenderTest, 3 UiSecurityFlowTest); androidTestConnected adds
+    # 2 video lifecycle cases.
+    expected=64 if args.flavor=='connected' else 62
     failed = result.returncode != 0 or not re.search(r'^OK \('+str(expected)+r' tests\)$', output, re.MULTILINE)
     failed |= 'INSTRUMENTATION_CODE: -1' not in output
     failed |= bool(re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', output))

@@ -385,6 +385,170 @@ public class UiScreensRenderTest {
         } else assertTrue(hasText(nearby, "Red deshabilitada"));
     }
 
+    // ------------------------------------------------------------------ vault password, admission and connectivity
+    private static List<EditText> fields(View root) {
+        List<EditText> out = new ArrayList<>(); for (View v : all(root)) if (v instanceof EditText e) out.add(e); return out;
+    }
+    /** Secret inputs: password type, labelled, never autofilled or saved, and the typed value never reaches accessibility text. */
+    private static void assertSecretInputs(View root, int expected) {
+        List<EditText> secrets = new ArrayList<>();
+        for (EditText e : fields(root)) if ((e.getInputType() & android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD) != 0) secrets.add(e);
+        assertEquals(expected, secrets.size());
+        for (EditText e : secrets) {
+            assertFalse(e.isSaveEnabled());
+            assertEquals(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS, e.getImportantForAutofill());
+            boolean labelled = false;
+            for (View v : all(root)) if (v instanceof TextView t && !(v instanceof EditText) && t.getLabelFor() == e.getId()) labelled = true;
+            assertTrue("secret field has a visible label", labelled);
+        }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { for (EditText e : secrets) e.setText("synthetic-typed-value"); });
+        for (View v : all(root)) {
+            CharSequence d = v.getContentDescription();
+            assertFalse("secret leaked to accessibility", d != null && d.toString().contains("synthetic-typed-value"));
+        }
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> { for (EditText e : secrets) e.getText().clear(); });
+    }
+
+    @Test public void passwordScreensLabelSecretsAndOfferNoRecoveryOrReset() {
+        AccessScreens.CreateActions ca = new AccessScreens.CreateActions() { public void submit(EditText p, EditText c) {} public void later() {} public void lockNow() {} };
+        View create = render("24a-password-create", ui -> AccessScreens.create(ui, new AccessScreens.CreateState(false, false, null), ca));
+        assertTrue(hasText(create, "Crea tu contraseña personal"));
+        assertTrue(hasText(create, "Sin recuperación"));
+        assertNotNull(button(create, "Crear contraseña"));
+        assertNull("no skip on a new install", button(create, "Ahora no (seguir solo con el bloqueo de Android)"));
+        assertSecretInputs(create, 2);
+        assertAccessible(create);
+        View legacy = render("24b-password-enroll-legacy", ui -> AccessScreens.create(ui, new AccessScreens.CreateState(true, false, PasswordPolicy.Problem.MISMATCH.message), ca));
+        assertNotNull(button(legacy, "Inscribir con contraseña"));
+        assertNotNull(button(legacy, "Ahora no (seguir solo con el bloqueo de Android)"));
+        assertTrue(hasText(legacy, "Las dos contraseñas no coinciden."));
+        AccessScreens.UnlockActions ua = new AccessScreens.UnlockActions() { public void submit(EditText p) {} public void autoLock(int i) {} public void lockNow() {} };
+        View unlock = render("24c-password-unlock", ui -> AccessScreens.unlock(ui, new AccessScreens.UnlockState(false, AccessStep.UNLOCK_FAILED, 2, !BuildConfig.ALLOW_RELAY), ua));
+        assertTrue(hasText(unlock, AccessStep.UNLOCK_FAILED));
+        assertTrue(hasText(unlock, BuildConfig.ALLOW_RELAY ? "Desbloquear no conecta" : "Modo offline · sin conexión"));
+        for (String label : PasswordPolicy.AUTO_LOCK_LABELS) assertNotNull(label, button(unlock, label));
+        assertNull("no five-minute option in v1", button(unlock, "5 min"));
+        assertSecretInputs(unlock, 1);
+        assertAccessible(unlock);
+        View busy = render("24d-password-unlock-busy", ui -> AccessScreens.unlock(ui, new AccessScreens.UnlockState(true, null, 2, !BuildConfig.ALLOW_RELAY), ua));
+        assertFalse("double submission prevented while the domain works", button(busy, "Abrir bóveda").isEnabled());
+        AccessScreens.ChangeActions cha = new AccessScreens.ChangeActions() { public void back() {} public void submit(EditText a, EditText b, EditText c) {} };
+        View change = render("24e-password-change", ui -> AccessScreens.change(ui, new AccessScreens.ChangeState(false, null), cha));
+        assertNotNull(button(change, "Cambiar y bloquear"));
+        assertSecretInputs(change, 3);
+        assertAccessible(change);
+        for (AccessStep failure : new AccessStep[]{AccessStep.CORRUPT, AccessStep.KEY_UNAVAILABLE}) {
+            View v = render("24f-vault-" + failure.name().toLowerCase(Locale.ROOT), ui -> AccessScreens.failure(ui, failure, () -> {}));
+            String text = visibleText(v).toLowerCase(Locale.ROOT);
+            assertFalse(text.contains("restablecer")); assertFalse(text.contains("recuperar"));
+            for (View x : all(v)) if (x instanceof Button b) assertEquals("only lock is offered", "Bloquear", b.getText().toString());
+        }
+    }
+
+    private static final String FP = "e5f6".repeat(16), REALM = "SyntheticRealmIdentifier_0123456789abcdefghij";
+    private static AdmissionScreens.AdmissionState admissionState(String state, boolean request, boolean expired) {
+        AdmissionScreens.RequestInfo info = request ? new AdmissionScreens.RequestInfo(Fingerprints.lines(FP, 4), Fingerprints.lines(ME, 4), REALM, "27/09 10:40", expired) : null;
+        boolean configured = !"UNCONFIGURED".equals(state);
+        return new AdmissionScreens.AdmissionState(AdmissionPresentation.of(state, request, expired), configured ? REALM : null, configured ? Fingerprints.lines(FP, 4) : null,
+            Fingerprints.lines(ME, 4), info, "ADMITTED".equals(state) ? "03/10 10:30" : null, !BuildConfig.ALLOW_RELAY, false);
+    }
+    @Test public void admissionScreensKeepEveryStateDistinctFromVerification() {
+        AdmissionScreens.AdmissionActions aa = new AdmissionScreens.AdmissionActions() {
+            public void back() {} public void importFile() {} public void createRequest() {} public void exportRequest() {} public void admin() {}
+        };
+        String[][] cases = {{"UNCONFIGURED", "0", "0"}, {"NOT_ADMITTED", "0", "0"}, {"REQUEST_PENDING", "1", "0"}, {"REJECTED", "0", "0"},
+            {"ADMITTED", "0", "0"}, {"EXPIRED", "1", "1"}, {"EXPIRED", "0", "0"}, {"REVOKED", "0", "0"}, {"INVALID", "0", "0"}};
+        for (String[] c : cases) {
+            boolean request = c[1].equals("1"), expired = c[2].equals("1");
+            AdmissionPresentation p = AdmissionPresentation.of(c[0], request, expired);
+            View v = render("25-admission-" + c[0].toLowerCase(Locale.ROOT) + (request ? "-request" : ""), ui -> AdmissionScreens.status(ui, admissionState(c[0], request, expired), aa));
+            assertTrue(c[0], hasText(v, p.title()));
+            assertFalse(c[0] + " never shown as verification", hasText(v, "Verificado"));
+            assertTrue(hasText(v, "Vincular otro dispositivo a tu identidad no lo admite"));
+            assertAccessible(v);
+            if (c[0].equals("REVOKED") || c[0].equals("INVALID"))
+                for (View x : all(v)) if (x instanceof Button b) assertFalse(c[0] + " offers no bypass: " + b.getText(),
+                    b.getText().toString().startsWith("Generar") || b.getText().toString().startsWith("Importar"));
+        }
+        View pending = render("25-admission-request_pending-detail", ui -> AdmissionScreens.status(ui, admissionState("REQUEST_PENDING", true, false), aa));
+        assertTrue(hasText(pending, "Generada no significa recibida"));
+        assertNotNull(button(pending, "Exportar solicitud (archivo)"));
+        assertNotNull(button(pending, "Importar respuesta del administrador"));
+        assertNull("no local approval", button(pending, "Aprobar"));
+        View unconfigured = render("25-admission-unconfigured-detail", ui -> AdmissionScreens.status(ui, admissionState("UNCONFIGURED", false, false), aa));
+        assertTrue(hasText(unconfigured, "No admite este dispositivo ni conecta nada."));
+        AdmissionScreens.AdminActions ad = new AdmissionScreens.AdminActions() {
+            public void back() {} public void createRealm() {} public void exportRealm() {} public void reviewRequest() {} public void revokeCredential() {}
+        };
+        View admin = render("26a-admission-admin", ui -> AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(true, REALM, Fingerprints.lines(FP, 4), false), ad));
+        assertTrue(hasText(admin, "el motor lo comprueba en cada operación"));
+        assertNotNull(button(admin, "Revisar solicitud (archivo)"));
+        assertAccessible(admin);
+        View create = render("26b-admission-admin-create", ui -> AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(false, null, null, false), ad));
+        assertTrue(hasText(create, "No existe recuperación ni rotación de la autoridad"));
+        View review = render("26c-admission-review", ui -> Screen.of(null, AdmissionScreens.reviewSheet(ui, new AdmissionScreens.ReviewInfo(Fingerprints.lines(FP, 4),
+            Fingerprints.lines(ANA, 4), REALM, "27/09 10:40", false), new AdmissionScreens.ReviewActions() { public void approve(long t) {} public void reject() {} public void cancel() {} }), null));
+        assertTrue(hasText(review, Fingerprints.lines(FP, 4)));
+        assertTrue(hasText(review, REALM));
+        assertNotNull(button(review, "Aprobar · 24 horas"));
+        assertNotNull(button(review, "Aprobar · 7 días"));
+        assertNotNull(button(review, "Rechazar"));
+        assertAccessible(review);
+        View revoke = render("26d-admission-revoke", ui -> Screen.of(null, AdmissionScreens.revokeSheet(ui, new AdmissionScreens.RevokeInfo(Fingerprints.lines(ANA, 4), "03/10 10:30"),
+            new AdmissionScreens.RevokeActions() { public void revoke(String r) {} public void cancel() {} }), null));
+        assertTrue(hasText(revoke, "No borra datos que ya recibió"));
+        assertFalse(visibleText(revoke).toLowerCase(Locale.ROOT).contains("datos eliminados"));
+        assertAccessible(revoke);
+    }
+
+    @Test public void networkAndSecuritySettingsReflectOnlyDomainConsent() {
+        SettingsScreens.SettingsActions sa = new SettingsScreens.SettingsActions() {
+            public void back() {} public void createInvitation() {} public void importInvitation() {} public void revokeInvitations() {} public void lockNow() {}
+            public void destroyIdentity() {} public void expiry(int i) {} public void register(String a, String i) {} public void syncNow() {} public void unregister() {}
+            public void connect() {} public void disconnect() {} public void nearby() {} public void changePassword() {} public void enrollPassword() {}
+            public void admission() {} public void devices() {}
+        };
+        java.util.function.BiFunction<ConnectivityPresentation, Boolean, SettingsScreens.SettingsState> state = (c, admitted) -> new SettingsScreens.SettingsState(
+            SettingsSection.NETWORK, "Ana", ME, FEATURES, !BuildConfig.ALLOW_RELAY, c, true, BuildConfig.ALLOW_RELAY ? "https://relay.example.test" : "", "24 horas", 1,
+            BuildConfig.VERSION_NAME, true, "4 min", AdmissionPresentation.of(admitted ? "ADMITTED" : "NOT_ADMITTED", false, false));
+        ConnectivityPresentation.Service none = ConnectivityPresentation.Service.NOT_OBSERVED;
+        View offline = render("27a-network-unlocked-offline", ui -> SettingsScreens.section(ui, state.apply(OFFLINE_SESSION, true), sa));
+        assertAccessible(offline);
+        if (!BuildConfig.ALLOW_RELAY) {
+            assertNull("no network control without INTERNET", button(offline, "Conectar"));
+            assertTrue(hasText(offline, "Edición offline"));
+        } else {
+            assertTrue(button(offline, "Conectar").isEnabled());
+            assertTrue(hasText(offline, "Desbloquear no conecta"));
+            View notAdmitted = render("27b-network-not-admitted", ui -> SettingsScreens.section(ui,
+                state.apply(ConnectivityPresentation.of("UNLOCKED_OFFLINE", false, false, false, true, none), false), sa));
+            assertFalse(button(notAdmitted, "Conectar").isEnabled());
+            assertFalse(button(notAdmitted, "Conectar y registrar buzón").isEnabled());
+            View connected = render("27c-network-connected", ui -> SettingsScreens.section(ui,
+                state.apply(ConnectivityPresentation.of("CONNECTED", false, false, false, true, ConnectivityPresentation.Service.RESPONDED), true), sa));
+            assertNotNull(button(connected, "Desconectar"));
+            assertTrue(hasText(connected, "Red habilitada por ti"));
+            assertTrue(hasText(connected, "Desconectar no bloquea la bóveda"));
+            assertFalse(hasText(connected, "Conectado · servidor privado"));
+            View error = render("27d-network-error", ui -> SettingsScreens.section(ui,
+                state.apply(ConnectivityPresentation.of("OFFLINE_ERROR", false, true, false, true, ConnectivityPresentation.Service.UNREACHABLE), true), sa));
+            assertTrue(hasText(error, "no reconecta sola"));
+            assertNotNull(button(error, "Conectar"));
+        }
+        View security = render("27e-settings-security-password", ui -> SettingsScreens.section(ui, new SettingsScreens.SettingsState(SettingsSection.SECURITY, "Ana", ME, FEATURES,
+            !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, true, "", "24 horas", 1, BuildConfig.VERSION_NAME, true, "2 min", AdmissionPresentation.of("REQUEST_PENDING", true, false)), sa));
+        assertTrue(hasText(security, "Contraseña personal activa"));
+        assertNotNull(button(security, "Cambiar contraseña personal"));
+        assertTrue(hasText(security, "Autobloqueo de esta sesión: 2 min"));
+        assertTrue(hasText(security, "No es el bloqueo de emergencia."));
+        assertTrue(hasText(security, "Solicitud generada para compartir"));
+        assertAccessible(security);
+        View legacy = render("27f-settings-security-legacy", ui -> SettingsScreens.section(ui, new SettingsScreens.SettingsState(SettingsSection.SECURITY, "Ana", ME, FEATURES,
+            !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, true, "", "24 horas", 1, BuildConfig.VERSION_NAME, false, "4 min", AdmissionPresentation.of("UNCONFIGURED", false, false)), sa));
+        assertNotNull(button(legacy, "Añadir contraseña personal"));
+        assertNull(button(legacy, "Cambiar contraseña personal"));
+    }
+
     @Test public void errorsAreHumanWithOptionalTechnicalDetails() {
         View v = render("18-errors", ui -> {
             LinearLayout box = ui.column();

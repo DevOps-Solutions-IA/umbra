@@ -42,34 +42,34 @@ class AndroidExecutionTests(unittest.TestCase):
 
     def test_skip_cannot_be_hidden_by_summary(self):
         with self.assertRaises(SystemExit):
-            self.run_single('INSTRUMENTATION_STATUS_CODE: -3\nOK (56 tests)\nINSTRUMENTATION_CODE: -1\n')
+            self.run_single('INSTRUMENTATION_STATUS_CODE: -3\nOK (62 tests)\nINSTRUMENTATION_CODE: -1\n')
 
     def test_missing_completion_is_failure(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (56 tests)\n')
+            self.run_single('OK (62 tests)\n')
 
     def test_adb_failure_is_not_overridden_by_test_summary(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (56 tests)\nINSTRUMENTATION_CODE: -1\n', returncode=1)
+            self.run_single('OK (62 tests)\nINSTRUMENTATION_CODE: -1\n', returncode=1)
 
     def test_offline_requires_security_and_ui_render_checks(self):
-        for stale in (25, 40, 41):
+        for stale in (25, 40, 41, 56):
             with self.subTest(stale=stale), self.assertRaises(SystemExit):
                 self.run_single(f'OK ({stale} tests)\nINSTRUMENTATION_CODE: -1\n')
-        self.run_single('OK (56 tests)\nINSTRUMENTATION_CODE: -1\n')
+        self.run_single('OK (62 tests)\nINSTRUMENTATION_CODE: -1\n')
 
     def test_ui_evidence_must_be_present_when_requested(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (56 tests)\nINSTRUMENTATION_CODE: -1\n', evidence=0)
-        self.run_single('OK (56 tests)\nINSTRUMENTATION_CODE: -1\n', evidence=single.MIN_EVIDENCE)
+            self.run_single('OK (62 tests)\nINSTRUMENTATION_CODE: -1\n', evidence=0)
+        self.run_single('OK (62 tests)\nINSTRUMENTATION_CODE: -1\n', evidence=single.MIN_EVIDENCE)
 
     def test_connected_requires_new_surface_lifecycle_checks(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (56 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
-        for stale in (27, 42, 43):
+            self.run_single('OK (62 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
+        for stale in (27, 42, 43, 58):
             with self.subTest(stale=stale), self.assertRaises(SystemExit):
                 self.run_single(f'OK ({stale} tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
-        self.run_single('OK (58 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
+        self.run_single('OK (64 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
 
     def test_pre_admission_suite_counts_are_no_longer_complete(self):
         for flavor,count in [('connected',36),('offline',34)]:

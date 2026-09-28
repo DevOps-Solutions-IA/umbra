@@ -125,6 +125,14 @@ def main():
             for permission in permissions:run('shell','pm','grant',package,'android.permission.'+permission)
             reset();run('shell','am','start','-W','-n',package+'/app.umbra.ui.MainActivity')
             observe('cold-activity-permissions-granted',dns_log)
+            # Integrated Claude UI (locked, no device credential): a default-network return and a cold
+            # relaunch must not open connections, resolve names or start sensors/scans on their own.
+            run('shell','svc','wifi','disable');run('shell','svc','data','disable');time.sleep(2)
+            reset();run('shell','svc','wifi','enable');run('shell','svc','data','enable')
+            observe('cold-activity-network-return',dns_log)
+            run('shell','am','force-stop',package)
+            reset();run('shell','am','start','-W','-n',package+'/app.umbra.ui.MainActivity')
+            observe('cold-activity-relaunch',dns_log)
             run('shell','am','force-stop',package)
             # Independent real Vault/SQLite cases; not attributed as network acceptance.
             log=args.reports/'domain-tests.log'
