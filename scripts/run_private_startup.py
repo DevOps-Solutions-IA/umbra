@@ -43,6 +43,7 @@ def main():
     parser.add_argument('--serial',required=True)
     parser.add_argument('--flavor',choices=('connected','offline'),required=True)
     parser.add_argument('--optimized',action='store_true')
+    parser.add_argument('--emergency',action='store_true')
     parser.add_argument('--reports',type=Path,required=True)
     args=parser.parse_args();args.reports.mkdir(parents=True,exist_ok=True)
     build='vaultLab' if args.optimized else 'debug'
@@ -54,7 +55,7 @@ def main():
     if run('shell','getprop','ro.kernel.qemu').stdout.strip()!=b'1':raise RuntimeError('Disposable owned AVD required')
     output=ROOT/'android/app/build/outputs'
     apks=[output/f'apk/{args.flavor}/{build}/app-{args.flavor}-{build}.apk',output/f'apk/androidTest/{args.flavor}/{build}/app-{args.flavor}-{build}-androidTest.apk']
-    evidence={'synthetic':True,'optimized':args.optimized,'exactProductionApk':False,'flavor':args.flavor,
+    evidence={'synthetic':True,'emergency':args.emergency,'optimized':args.optimized,'exactProductionApk':False,'flavor':args.flavor,
               'artifacts':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in apks},'stages':{}}
     def save(): (args.reports/'receipt.json').write_text(json.dumps(evidence,indent=2)+'\n')
     if args.optimized:
@@ -103,7 +104,7 @@ def main():
         if quiet and (queries or any(v['packets'] for v in counts.values())):raise RuntimeError('Unexpected startup egress: '+stage)
         return counts
     runner=package+'.test/androidx.test.runner.AndroidJUnitRunner'
-    command=[*adb,'shell','am','instrument','-w','-r','-e','class','app.umbra.DeviceSignalTest','-e','listener','app.umbra.PrivateStartupFixtureListener','-e','startupPhase']
+    command=[*adb,'shell','am','instrument','-w','-r','-e','class','app.umbra.DeviceSignalTest','-e','listener','app.umbra.PrivateStartupFixtureListener','-e','emergency',str(args.emergency).lower(),'-e','startupPhase']
     with tempfile.TemporaryDirectory(prefix='umbra-startup-') as temporary:
         dns_log=Path(temporary)/'dns.log'
         try:
@@ -157,6 +158,14 @@ def main():
                     read('synthetic-startup-locked.json');time.sleep(1);reset();observe('vault-lock',dns_log);go('locked')
                 else:
                     read('synthetic-startup-offline.json');reset();observe('offline-flavor',dns_log);go('offline')
+                if args.emergency:
+                    read('synthetic-startup-emergency-closed.json')
+                    receipt=read('synthetic-startup-emergency-result.json')
+                    if (receipt.get('state')!='CLOSED' or not 0<receipt.get('requestedNanos',0)<=receipt.get('invalidatedNanos',0)<=receipt.get('confirmedNanos',0)
+                            or receipt['confirmedNanos']-receipt['requestedNanos']>5_000_000_000):
+                        raise RuntimeError('Emergency closure was not bounded and confirmed')
+                    evidence['emergency']=receipt;save()
+                    reset();observe('emergency-closed',dns_log);go('emergency-closed')
                 read('synthetic-startup-kill-ready.json')
                 pid=run('shell','pidof',package).stdout.decode().strip()
                 if not re.fullmatch(r'\d+',pid):raise RuntimeError('Missing live target before force-stop')

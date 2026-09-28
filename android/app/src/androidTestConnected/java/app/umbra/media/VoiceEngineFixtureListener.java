@@ -84,14 +84,14 @@ public final class VoiceEngineFixtureListener extends RunListener {
             relay.acknowledge(engine.profile(),envelope.getString("id"));
         }
     }
-    private void finishTransport(RelayClient relay,Engine engine,NativeVoiceSession voice,boolean localLockApplied) throws Exception {
+    private void finishTransport(RelayClient relay,Engine engine,NativeVoiceSession voice,boolean localLockApplied,JSONObject savedProfile) throws Exception {
         if(!localLockApplied) { pump(relay,engine); return; }
         if(engine.connectivity().getConnectivityState()!=app.umbra.connectivity.ConnectivityService.State.LOCKED_PRIVATE ||
                 voice.transmitVoiceAllowed() || (voice.state()!=NativeVoiceSession.State.FAILED && voice.state()!=NativeVoiceSession.State.ENDED))
             throw new AssertionError("Lock did not revoke connectivity and native media");
         // The synthetic gate was unlocked again above to prove old grants stay dead.
         // Evaluate local records separately: the required failure must be in RelayClient.
-        JSONObject profile=engine.profile();
+        JSONObject profile=savedProfile;
         try { relay.poll(profile,0);throw new AssertionError("Old relay resumed after lock/unlock"); }
         catch(SecurityException expected) { /* Exact negative transport assertion; no reauthorization or I/O. */ }
     }
@@ -197,6 +197,8 @@ public final class VoiceEngineFixtureListener extends RunListener {
             var processingObservation=new java.util.concurrent.atomic.AtomicReference<DecodedAudioWindow>();
             var muteObservation=new java.util.concurrent.atomic.AtomicReference<DecodedAudioWindow>();
             AtomicInteger videoCaptured=new AtomicInteger();
+            var lastAudioCaptureNanos=new java.util.concurrent.atomic.AtomicLong();
+            var lastVideoCaptureNanos=new java.util.concurrent.atomic.AtomicLong();
             SyntheticVideoCapturer.Decoded videoDecoded=new SyntheticVideoCapturer.Decoded(caller);
             long[] sample={0}; long[] nextFrame={0}; int inputTone=caller?1000:2000,expectedTone=caller?2000:1000;
             var adm=JavaAudioDeviceModule.builder(context).setSampleRate(48000)
@@ -205,7 +207,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     pace(nextFrame,buffer.capacity(),channels,rate);
                     buffer.clear(); buffer.order(ByteOrder.LITTLE_ENDIAN);
                     while(buffer.remaining()>=2*channels) { short value=(short)(12000*Math.sin(2*Math.PI*inputTone*sample[0]++/rate)); for(int c=0;c<channels;c++) buffer.putShort(value); }
-                    captured.incrementAndGet(); return System.nanoTime();
+                    captured.incrementAndGet();long timestamp=System.nanoTime();lastAudioCaptureNanos.set(timestamp);return timestamp;
                 }).setPlaybackSamplesReadyCallback(samples->{
                     playbackSamples.set(samples.getData().length/(2*samples.getChannelCount()));playbackRate.set(samples.getSampleRate());
                     byte[] data=samples.getData(); int channels=samples.getChannelCount(),count=data.length/(2*channels); double re=0,im=0,energy=0;
@@ -251,11 +253,12 @@ public final class VoiceEngineFixtureListener extends RunListener {
                 lease.description(generation,role,sdp,configuration.optBoolean("incorrectFingerprint")?Bytes.sha256(Bytes.utf8(fingerprint)):fingerprint);
             };
             voice=new NativeVoiceSession(context,lease,turn,adm,false,verifier,hostile,caller&&initialModulation);
-            if(withVideo) { voice.syntheticVideo(()->new SyntheticVideoCapturer(caller,videoCaptured));voice.setRemoteVideoSink(videoDecoded); }
+            if(withVideo) { voice.syntheticVideo(()->new SyntheticVideoCapturer(caller,videoCaptured,lastVideoCaptureNanos));voice.setRemoteVideoSink(videoDecoded); }
             int videoStage=0,videoAudioBaseline=0,videoFrameBaseline=0,videoCaptureBaseline=0;long videoOffAt=0,videoOffRequestedNanos=0;
             boolean videoRequested=false,videoAccepted=false;
             boolean evidence=false,muting=false,mutedEvidence=false,resuming=false,resumedEvidence=false,terminationApplied=false,localLockApplied=false;
             boolean initialProcessingEvidence=false,initialNatural=false;
+            boolean emergencyApplied=false;JSONObject savedProfile=engine.profile();
             boolean cameraDeniedChecked=false,cameraDeniedEvidence=false;int cameraDeniedBaseline=0;
             int processingStep=0;
             long processingAt=0;String processingExpected="",processingDiagnostic="";
@@ -304,6 +307,11 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     if(action.equals("trust-loss")) engine.block(peer,true);
                     if(action.equals("device-revoked")) devices.revoke(engine.id());
                     if(action.equals("storage-failure")) { db.failBucket="calls";voice.close(); }
+                    if(action.equals("emergency-lock")) {
+                        localLockApplied=true;emergencyApplied=true;engine.emergencyLock();
+                        try { lease.snapshot();throw new AssertionError("Old media authorization survived emergency"); }
+                        catch(SecurityException expected) { /* Coordinator denied before asynchronous native closure. */ }
+                    }
                     if(action.equals("lock")) {
                         localLockApplied=true;engine.calls().cancelLocal();db.gate.lock();db.gate.unlock();
                         try { lease.snapshot();throw new AssertionError("Old media authorization survived lock/unlock"); }
@@ -322,7 +330,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     // Measure both intervals and reject excessive scheduling delays. This is synthetic pipeline closure, not a
                     // hardware microphone cancellation-latency measurement.
                     long quietStart=SystemClock.elapsedRealtime();
-                    int capturedAtClosure=captured.get();
+                    int capturedAtClosure=captured.get();int videoAtClosure=videoCaptured.get();
                     Thread.sleep(500);
                     long quietAfter=quietStart-terminalObserved;
                     long observedFor=SystemClock.elapsedRealtime()-quietStart;
@@ -336,7 +344,17 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         for(JSONObject row:new Engine(db,SystemClock::elapsedRealtime).calls().sessions())
                             if(!app.umbra.calls.CallPayload.TERMINAL.contains(row.getString("state"))) throw new AssertionError("SQLite rollback revived voice");
                     }
-                    write("synthetic-voice-lost.json",new JSONObject().put("failedClosed",true).put("nativeCaptureQuietAfterMillis",quietAfter).put("nativeCaptureObservedMillis",observedFor).put("lateCaptureCallbacks",lateCaptureCallbacks).put("expiredDeliveriesRejected",expiredDeliveriesRejected));waitFor("synthetic-voice-stop.json",deadline);break;
+                    JSONObject stopped=new JSONObject().put("failedClosed",true).put("nativeCaptureQuietAfterMillis",quietAfter).put("nativeCaptureObservedMillis",observedFor).put("lateCaptureCallbacks",lateCaptureCallbacks).put("expiredDeliveriesRejected",expiredDeliveriesRejected);
+                    if(emergencyApplied) {
+                        if(videoCaptured.get()!=videoAtClosure)throw new AssertionError("Camera callbacks survived emergency");
+                        var closure=engine.emergency().status();
+                        if(closure.state()!=app.umbra.core.EmergencyLock.State.CLOSED)throw new AssertionError("Emergency closure unconfirmed: "+closure.state());
+                        stopped.put("emergencyState",closure.state().name()).put("requestedNanos",closure.requestedNanos())
+                            .put("invalidatedNanos",closure.invalidatedNanos()).put("confirmedNanos",closure.finishedNanos())
+                            .put("lateVideoCallbacks",videoCaptured.get()-videoAtClosure)
+                            .put("lastAudioCaptureNanos",lastAudioCaptureNanos.get()).put("lastVideoCaptureNanos",lastVideoCaptureNanos.get());
+                    }
+                    write("synthetic-voice-lost.json",stopped);waitFor("synthetic-voice-stop.json",deadline);break;
                 }
                 if(initialModulation && !initialProcessingEvidence && voice.state()==NativeVoiceSession.State.ACTIVE && (caller?decoded.get():modified.get())>=100) {
                     if(!caller && decoded.get()!=0)throw new AssertionError("Natural voice escaped initial MODULATED selection");
@@ -509,14 +527,14 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     }
                 }
                 if(Files.exists(files.resolve("synthetic-voice-stop.json"))) {
-                    voice.close(); finishTransport(relay,engine,voice,localLockApplied); break;
+                    voice.close(); finishTransport(relay,engine,voice,localLockApplied,savedProfile); break;
                 }
                 Thread.sleep(100);
             }
             if(withVideo && !expectedRejection && videoStage!=5)throw new AssertionError("Missing decoded bidirectional video/off/reactivation evidence; stage="+videoStage+", native="+voice.videoStatus()+", failure="+voice.failureStage()+", sourceFrames="+videoCaptured.get()+", sinkFrames="+voice.decodedVideoFrames()+", validPatterns="+videoDecoded.frames.get()+", phaseMask="+videoDecoded.phases.get()+", counters="+voice.videoStats());
             if(modulation && processingStep!=10)throw new AssertionError("Incomplete remote modulation sequence");
             if(!evidence || (!expectedRejection && !resumedEvidence)) throw new AssertionError("Missing native audio or mute/unmute evidence");
-            voice.close(); finishTransport(relay,engine,voice,localLockApplied);
+            voice.close(); finishTransport(relay,engine,voice,localLockApplied,savedProfile);
             if(configuration.optBoolean("admissionRevocationCheck")) {
                 // Media is already closed. Test actual AVD -> HTTPS authorization independently
                 // of local revocation knowledge; never confuse DevicePolicy revocation with this.

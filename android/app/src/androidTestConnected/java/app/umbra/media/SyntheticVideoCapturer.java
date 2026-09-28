@@ -10,10 +10,14 @@ import org.webrtc.*;
 final class SyntheticVideoCapturer implements VideoCapturer {
     private final boolean caller;
     private final AtomicInteger captured;
+    private final java.util.concurrent.atomic.AtomicLong lastCaptureNanos;
     private CapturerObserver observer;
     private ScheduledExecutorService worker;
     private int sequence;
-    SyntheticVideoCapturer(boolean caller,AtomicInteger captured) {this.caller=caller;this.captured=captured;}
+    SyntheticVideoCapturer(boolean caller,AtomicInteger captured) {this(caller,captured,new java.util.concurrent.atomic.AtomicLong());}
+    SyntheticVideoCapturer(boolean caller,AtomicInteger captured,java.util.concurrent.atomic.AtomicLong lastCaptureNanos) {
+        this.caller=caller;this.captured=captured;this.lastCaptureNanos=lastCaptureNanos;
+    }
     public void initialize(SurfaceTextureHelper ignored,Context context,CapturerObserver observer) {this.observer=observer;}
     public synchronized void startCapture(int width,int height,int fps) {
         if(worker!=null || width!=320 || height!=240 || fps!=15)throw new AssertionError("Unexpected synthetic capture configuration");
@@ -27,7 +31,7 @@ final class SyntheticVideoCapturer implements VideoCapturer {
             }
             fill(buffer.getDataU(),128);fill(buffer.getDataV(),128);
             VideoFrame frame=new VideoFrame(buffer,0,System.nanoTime());
-            try {captured.incrementAndGet();observer.onFrameCaptured(frame);} finally {frame.release();}
+            try {captured.incrementAndGet();lastCaptureNanos.set(System.nanoTime());observer.onFrameCaptured(frame);} finally {frame.release();}
         },0,1_000_000_000L/15,TimeUnit.NANOSECONDS);
     }
     private static void fill(ByteBuffer buffer,int value) {while(buffer.hasRemaining())buffer.put((byte)value);buffer.rewind();}

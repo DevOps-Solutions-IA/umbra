@@ -23,6 +23,7 @@ def both_drained(reports: list[str]) -> bool:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--unadmitted-dialer', action='store_true')
+    parser.add_argument('--emergency', action='store_true')
     parser.add_argument('--serial-a', required=True)
     parser.add_argument('--serial-b', required=True)
     parser.add_argument('--address-a', required=True)
@@ -33,6 +34,8 @@ def main() -> None:
     parser.add_argument('--log-dir', type=Path, required=True)
     parser.add_argument('--adb', default=shutil.which('adb') or str(Path(os.environ.get('ANDROID_HOME', '')) / 'platform-tools/adb'))
     args = parser.parse_args()
+    if args.emergency and args.unadmitted_dialer:
+        parser.error('Emergency acceptance requires positive authenticated delivery first')
     if args.serial_a == args.serial_b:
         raise SystemExit('Two independent devices are required')
     for address in (args.address_a, args.address_b):
@@ -83,7 +86,7 @@ def main() -> None:
         for serial, role, address, path in zip(devices, ('listener', 'dialer'), (args.address_b, args.address_a), paths):
             stream = path.open('w', encoding='utf-8'); streams.append(stream)
             processes.append(subprocess.Popen([args.adb, '-s', serial, 'shell', 'am', 'instrument', '-w', '-r',
-                '-e', 'unadmittedDialer', str(args.unadmitted_dialer).lower(), '-e', 'admissionRealm', admission.realm.encode(), '-e', 'listener', 'app.umbra.NearbyFixtureListener', '-e', 'class', 'app.umbra.DeviceSignalTest',
+                '-e', 'emergency', str(args.emergency).lower(), '-e', 'unadmittedDialer', str(args.unadmitted_dialer).lower(), '-e', 'admissionRealm', admission.realm.encode(), '-e', 'listener', 'app.umbra.NearbyFixtureListener', '-e', 'class', 'app.umbra.DeviceSignalTest',
                 '-e', 'role', role, '-e', 'address', address,
                 package + '.test/androidx.test.runner.AndroidJUnitRunner'], stdout=stream, stderr=subprocess.STDOUT))
             started_devices.append(serial)
@@ -125,6 +128,12 @@ def main() -> None:
             if process.wait(timeout=90) != 0:
                 raise RuntimeError('adb instrumentation failed')
         for text in texts():
+            if args.emergency:
+                receipt=re.search(r'nearbyEmergency=PASS active=(\d+),request=(\d+),invalidated=(\d+),confirmed=(\d+),observationMillis=(\d+)',text)
+                if not receipt:raise RuntimeError('Missing emergency closure after active authenticated RFCOMM')
+                active,requested,invalidated,confirmed,observed=map(int,receipt.groups())
+                if not 0<active<=requested<=invalidated<=confirmed or confirmed-requested>5_000_000_000 or not 500<=observed<=1500:
+                    raise RuntimeError('Emergency RFCOMM timing outside declared bounds')
             if args.unadmitted_dialer:
                 if ('nearbyResult=PASS: actual RFCOMM hello exchange rejected before admission authentication' not in text
                     or 'nearbyHandshakeStage=HELLO_RECEIVED' not in text or 'nearbyHandshakeStage=AUTHENTICATED' in text

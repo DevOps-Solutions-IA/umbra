@@ -33,10 +33,25 @@ public final class RelayIntegrationTest {
         }
         throw new AssertionError(label);
     }
+    /** Gate-aware synthetic memory adapter; emphatically not SQLite durability. */
+    private static final class EmergencyRecords implements app.umbra.data.Records {
+        private final MemoryRecords records=new MemoryRecords();private final AccessGate gate=new AccessGate();
+        EmergencyRecords(){gate.unlock();}
+        public EmergencyLock emergency(){return gate.emergency();}
+        public void onInvalidation(Runnable callback){gate.onInvalidation(callback);}
+        public Runnable authorization(){var lease=gate.enter();return ()->gate.check(lease);}
+        public synchronized byte[] get(String bucket,String key){gate.requireUnlocked();return records.get(bucket,key);}
+        public synchronized void put(String bucket,String key,byte[] value){gate.requireUnlocked();records.put(bucket,key,value);}
+        public synchronized void remove(String bucket,String key){gate.requireUnlocked();records.remove(bucket,key);}
+        public synchronized List<String> keys(String bucket){gate.requireUnlocked();return records.keys(bucket);}
+        public synchronized <T> T transaction(Work<T> work) throws Exception {
+            var lease=gate.enter();return records.transaction(()->{T result=work.run();return gate.commit(lease,()->result);});
+        }
+    }
     public static void main(String[] args) throws Exception {
         String base = args[0]; Path exchange = Path.of(args[1]);
         String[] invitations = Files.readString(exchange.resolve("invitations")).split("\n");
-        MemoryRecords aStore = new MemoryRecords(), bStore = new MemoryRecords();
+        MemoryRecords aStore = new MemoryRecords(); EmergencyRecords bStore = new EmergencyRecords();
         Engine alice = new Engine(aStore), bob = new Engine(bStore);
         alice.initialize("Synthetic Alice"); bob.initialize("Synthetic Bob");
         AdmissionLab.provision(alice,exchange,"admission-a",Files.readString(exchange.resolve("admission-realm")));
@@ -149,6 +164,41 @@ public final class RelayIntegrationTest {
                 require(System.nanoTime() - closing < 2_000_000_000L, "locking cancels a pending HTTPS read promptly");
                 require(failed.get(2, TimeUnit.SECONDS), "cancelled HTTPS read never reports success");
             } finally { pendingExecutor.shutdownNow(); }
+            // A cancellation wrapper must not bypass HTTPS endpoint identity. The lab
+            // certificate covers localhost, deliberately NOT the 127.0.0.1 IP literal.
+            bob.connectivity().disconnect();
+            String wrongName="https://127.0.0.1:"+java.net.URI.create(args[2]).getPort();
+            bob.connectivity().connect(wrongName,true);
+            try(RelayClient invalidCertificate=new RelayClient(wrongName,()->true,bob.admission())) {
+                try {invalidCertificate.publicRealm();throw new AssertionError("Mismatched TLS identity accepted");}
+                catch(javax.net.ssl.SSLHandshakeException expected) {require(true,"cancellable HTTPS still rejects a wrong certificate name");}
+            }
+            // Same verified TLS server, now exercise the domain emergency operation while
+            // its body is actually withheld. This is real HTTPS, not a mock connection.
+            Files.delete(exchange.resolve("pending-response"));
+            bob.connectivity().disconnect();
+            require(bob.connectivity().getConnectivityState()==app.umbra.connectivity.ConnectivityService.State.UNLOCKED_OFFLINE,
+                "explicit disconnect precedes a new synthetic network session");
+            bob.connectivity().connect(args[2],true); // New explicit synthetic owner action, never automatic retry.
+            ExecutorService emergencyWorker=Executors.newSingleThreadExecutor();
+            try(RelayClient pendingClient=new RelayClient(args[2],()->true,bob.admission())) {
+                Future<Boolean> rejected=emergencyWorker.submit(()->{
+                    try {pendingClient.publicRealm();return false;}catch(Exception expected){return true;}
+                });
+                long emergencyDeadline=System.nanoTime()+10_000_000_000L;
+                while(!Files.exists(exchange.resolve("pending-response"))) {
+                    if(System.nanoTime()>emergencyDeadline)throw new AssertionError("Emergency HTTPS request never reached server");
+                    Thread.sleep(10);
+                }
+                long requested=System.nanoTime();var result=bob.emergencyLock();
+                require(System.nanoTime()-requested<1_000_000_000L,"emergency request does not wait for the withheld HTTPS body");
+                require(result.invalidatedNanos()>=result.requestedNanos(),"emergency authorization barrier recorded");
+                require(rejected.get(2,TimeUnit.SECONDS),"emergency HTTPS response cannot become a success");
+                emergencyDeadline=System.nanoTime()+5_000_000_000L;
+                while(bob.emergency().status().state()==EmergencyLock.State.CLOSING && System.nanoTime()<emergencyDeadline)Thread.sleep(10);
+                require(bob.emergency().status().state()==EmergencyLock.State.CLOSED,"emergency confirms all HTTP resources closed without server response");
+                rejects(pendingClient::publicRealm,"old HTTPS client remains unusable after emergency");
+            } finally {emergencyWorker.shutdownNow();require(emergencyWorker.awaitTermination(2,TimeUnit.SECONDS),"emergency HTTPS worker terminated");}
             client.unregister(bProfile);
             rejectsHttp(() -> client.poll(bProfile, 0), 401, "revoked read capability rejected");
             rejectsHttp(() -> client.send(bobRoute, wire), 401, "revoked write capability rejected");

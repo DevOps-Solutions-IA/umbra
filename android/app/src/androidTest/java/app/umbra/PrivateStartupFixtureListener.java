@@ -105,6 +105,20 @@ public final class PrivateStartupFixtureListener extends RunListener {
                 records.gate.unlock();engine.connectivity().vaultUnlocked();AndroidConnectivity.connect(context,engine.connectivity(),base,true);
             } finally {HttpsURLConnection.setDefaultSSLSocketFactory(original);}
         }
+        if("true".equals(InstrumentationRegistry.getArguments().getString("emergency","false"))) {
+            var requested=engine.emergencyLock();
+            long until=SystemClock.elapsedRealtime()+6000;
+            while(engine.emergency().status().state()==app.umbra.core.EmergencyLock.State.CLOSING && SystemClock.elapsedRealtime()<until)Thread.sleep(10);
+            var result=engine.emergency().status();
+            require(result.state()==app.umbra.core.EmergencyLock.State.CLOSED,"Emergency did not confirm closure before force-stop");
+            denied(engine,trap);
+            try {records.gate.unlock();throw new AssertionError("Legacy unlock survived emergency");}
+            catch(SecurityException expected) { /* New authentication ticket is mandatory. */ }
+            Files.write(files.resolve("synthetic-startup-emergency-result.json"),Bytes.utf8(new JSONObject()
+                .put("requestedNanos",requested.requestedNanos()).put("invalidatedNanos",requested.invalidatedNanos())
+                .put("confirmedNanos",result.finishedNanos()).put("state",result.state().name()).toString()));
+            checkpoint("emergency-closed");
+        }
         // Deliberately left open until the host proves process death. No synthetic close/reopen claim.
         checkpoint("kill-ready");Thread.sleep(45_000);throw new AssertionError("Host failed to terminate fixture");
     }

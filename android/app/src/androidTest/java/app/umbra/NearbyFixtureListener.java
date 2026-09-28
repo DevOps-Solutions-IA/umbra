@@ -36,6 +36,7 @@ public final class NearbyFixtureListener extends RunListener {
     @Override public void testRunStarted(Description description) throws Exception {
         arguments = InstrumentationRegistry.getArguments();
         File approval = new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(), "nearby-synthetic-approval");
+        app.umbra.lab.SqliteDeviceRecords emergencyRecords=null;
         try {
             require(BuildConfig.DEBUG, "Only synthetic debug APKs may run this fixture");
             require(!InstrumentationRegistry.getInstrumentation().getTargetContext().getDatabasePath("umbra.db").exists(), "Refuse existing vault data");
@@ -49,7 +50,9 @@ public final class NearbyFixtureListener extends RunListener {
             require(!adapter.isDiscovering(), "Leave Settings discovery before RFCOMM enrollment");
             BluetoothDevice device = adapter.getRemoteDevice(arguments.getString("address", ""));
             require(device.getBondState() == BluetoothDevice.BOND_BONDED, "Pair the synthetic devices in Android first");
-            DeviceMemoryRecords records = new DeviceMemoryRecords();
+            boolean emergency="true".equals(arguments.getString("emergency","false"));
+            if(emergency)emergencyRecords=new app.umbra.lab.SqliteDeviceRecords();
+            app.umbra.data.Records records=emergency?emergencyRecords:new DeviceMemoryRecords();
             engine = new Engine(records); engine.initialize("Synthetic " + role);
             if(negative && dialer) engine.admission().installRealmConfig(arguments.getString("admissionRealm",""),true);
             else AdmissionLab.provision(engine,approval.getParentFile().toPath(),"synthetic-admission",arguments.getString("admissionRealm",""));
@@ -139,7 +142,7 @@ public final class NearbyFixtureListener extends RunListener {
                 engine.sendText(peer, "Synthetic " + role + " text", 3600);
                 engine.sendFile(peer, "synthetic.bin", Bytes.utf8("Synthetic " + role + " attachment"), 3600);
             }
-            Set<String> sent = new HashSet<>(); boolean locationSent=false, drainedAnnounced=false;
+            Set<String> sent = new HashSet<>(); boolean locationSent=false, drainedAnnounced=false;long emergencyActiveNanos=0;
             long deadline = SystemClock.elapsedRealtime() + 45000;
             while (SystemClock.elapsedRealtime() < deadline) {
                 if (receiveFailure != null) throw new AssertionError("Incoming processing failed", receiveFailure);
@@ -184,12 +187,28 @@ public final class NearbyFixtureListener extends RunListener {
                     }
                 }
                 if (complete && !drainedAnnounced) {
+                    if(emergency) {
+                        require(link.connectedPeer()!=null,"Missing active authenticated RFCOMM before emergency barrier");
+                        emergencyActiveNanos=System.nanoTime();
+                    }
                     status("nearbyStage", "drained"); drainedAnnounced=true;
                 }
                 // Continue pumping receipts until BOTH endpoints report a drained queue.
                 // A fixed sleep cannot flush a receipt queued after the previous snapshot.
                 if (complete && approval.exists() && "finish".equals(new String(Files.readAllBytes(approval.toPath()),java.nio.charset.StandardCharsets.UTF_8))) {
                     Files.delete(approval.toPath());
+                    if(emergency) {
+                        require(emergencyActiveNanos>0,"Missing positive RFCOMM evidence");
+                        var requested=engine.emergencyLock();
+                        await(()->engine.emergency().status().state()!=app.umbra.core.EmergencyLock.State.CLOSING,6000,"Emergency closure deadline");
+                        var result=engine.emergency().status();
+                        require(result.state()==app.umbra.core.EmergencyLock.State.CLOSED,"Nearby emergency closure incomplete");
+                        require(link.connectedPeer()==null,"Nearby socket remained connected");
+                        long observation=SystemClock.elapsedRealtime();Thread.sleep(500);
+                        require(link.connectedPeer()==null && !engine.connectivity().isNearbySessionAllowed(),"Nearby resumed after emergency");
+                        status("nearbyEmergency","PASS active="+emergencyActiveNanos+",request="+requested.requestedNanos()+",invalidated="+requested.invalidatedNanos()+
+                            ",confirmed="+result.finishedNanos()+",observationMillis="+(SystemClock.elapsedRealtime()-observation));
+                    }
                     status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, encrypted location, duplicate, receipts");
                     return;
                 }
@@ -201,6 +220,7 @@ public final class NearbyFixtureListener extends RunListener {
             throw failure;
         } finally {
             if (link != null) link.close();
+            if (emergencyRecords!=null) emergencyRecords.close();
             approval.delete();
         }
     }

@@ -31,6 +31,10 @@ public final class SqliteDeviceRecords implements Records, AutoCloseable {
         if(existing && !path.isFile()) throw new IllegalStateException("Synthetic restart database missing");
         if(!existing && path.exists()) throw new IllegalStateException("Refuse overwriting synthetic fixture");
         gate.unlock(); reopen();
+        gate.emergency().register(app.umbra.core.EmergencyLock.Subsystem.VAULT,()->{
+            synchronized(this) {database.close();}
+            return java.util.concurrent.CompletableFuture.completedFuture(null);
+        });
         if(!existing) database.execSQL("CREATE TABLE records(bucket TEXT NOT NULL,k TEXT NOT NULL,value BLOB NOT NULL,PRIMARY KEY(bucket,k))");
     }
     public synchronized void reopen() {
@@ -59,6 +63,7 @@ public final class SqliteDeviceRecords implements Records, AutoCloseable {
         try(Cursor rows=database.rawQuery("SELECT k FROM records WHERE bucket=?",new String[]{bucket})) { while(rows.moveToNext()) keys.add(rows.getString(0)); }
         return keys;
     }
+    public app.umbra.core.EmergencyLock emergency() { return gate.emergency(); }
     public void onInvalidation(Runnable callback) { gate.onInvalidation(callback); }
     public Runnable authorization() { var lease=gate.enter(); return () -> gate.check(lease); }
     public <T> T transaction(Work<T> work) throws Exception {

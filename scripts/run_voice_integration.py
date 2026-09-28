@@ -115,7 +115,7 @@ def main():
     parser.add_argument("--modulation",action="store_true",help="Prove remote local-voice modulation with real native capture/Opus, never a preview")
     parser.add_argument("--video",action="store_true",help="Require decoded remote synthetic images, video off with audio, and freshly consented reactivation")
     parser.add_argument("--optimized",action="store_true",help="Run the isolated non-debuggable R8 mediaLab APK on rooted AOSP AVDs")
-    parser.add_argument("--scenario",choices=("audio","expired-auth","allocation-expiry","invalid-auth","unreachable","turn-loss","trust-loss","lock","credential-expiry","direct-blocked","force-stop","permission-revoked","device-revoked","storage-failure","unauthorized-redirect","wrong-fingerprint","receive-only","degraded-network","camera-denied","camera-permission-revoked","video-stop-race"),default="audio")
+    parser.add_argument("--scenario",choices=("audio","expired-auth","allocation-expiry","invalid-auth","unreachable","turn-loss","trust-loss","lock","emergency-lock","credential-expiry","direct-blocked","force-stop","permission-revoked","device-revoked","storage-failure","unauthorized-redirect","wrong-fingerprint","receive-only","degraded-network","camera-denied","camera-permission-revoked","video-stop-race"),default="audio")
     args=parser.parse_args()
     if args.turn_ipv6 and args.scenario in ("unauthorized-redirect","unreachable"):
         parser.error("IPv6 redirect/unreachable packet evidence is not implemented")
@@ -331,7 +331,7 @@ def main():
                     if results[1].get("effective")!="OFF":raise RuntimeError("Remote control changed independent peer processing")
                     processing.append({"action":action,"expectedRemote":expected,"applied":applied,"results":results})
                 (args.reports/"voice-processing.json").write_text(json.dumps({"apkSha256":apk_hashes,"synthetic":True,"optimized":args.optimized,"video":args.video,"initialProcessing":initial_processing,"stages":processing},indent=2)+"\n")
-            if args.scenario in ("turn-loss","trust-loss","lock","credential-expiry","device-revoked","storage-failure"):
+            if args.scenario in ("turn-loss","trust-loss","lock","emergency-lock","credential-expiry","device-revoked","storage-failure"):
                 for serial in (args.a,args.b): write(serial,"synthetic-voice-loss.json",{"action":args.scenario})
                 if args.scenario=="turn-loss":
                     docker("stop","--time","0",turn.name)
@@ -341,6 +341,13 @@ def main():
                     (args.reports/f"closure-observation-{serial}.json").write_text(json.dumps({key:stopped.get(key) for key in closure_keys},indent=2)+"\n")
                     if not valid_stop(stopped,expected_expiry=args.scenario=="credential-expiry"):
                         raise RuntimeError("Native media did not stop for scenario: "+args.scenario)
+                    if args.scenario=="emergency-lock":
+                        if (stopped.get("emergencyState")!="CLOSED" or stopped.get("lateVideoCallbacks")!=0
+                                or not 0<stopped.get("requestedNanos",0)<=stopped.get("invalidatedNanos",0)<=stopped.get("confirmedNanos",0)
+                                or stopped["confirmedNanos"]-stopped["requestedNanos"]>5_000_000_000
+                                or not 0<stopped.get("lastAudioCaptureNanos",0)<=stopped["confirmedNanos"]
+                                or args.video and not 0<stopped.get("lastVideoCaptureNanos",0)<=stopped["confirmedNanos"]):
+                            raise RuntimeError("Emergency authorization/closure receipt missing or outside budget")
                     stop_evidence.append(stopped)
             if args.scenario in ("allocation-expiry","force-stop","permission-revoked","camera-permission-revoked"):
                 if args.scenario=="allocation-expiry":
@@ -393,7 +400,7 @@ def main():
                 for stream in streams: stream.flush()
                 for name in ("engine-voice-a.log","engine-voice-b.log"):
                     report=(args.reports/name).read_text()
-                    if not valid_report(report,private_lock=args.scenario=="lock"):
+                    if not valid_report(report,private_lock=args.scenario in ("lock","emergency-lock")):
                         raise RuntimeError("Missing/failed authenticated voice evidence: "+name)
             if admission_revocation_check:
                 admission_results=[json.loads(run(serial,"shell","run-as",PACKAGE,"cat","files/synthetic-voice-admission-result.json").stdout) for serial in (args.a,args.b)]
