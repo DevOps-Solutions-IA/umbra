@@ -24,6 +24,16 @@ ROOT=Path(__file__).resolve().parents[1]
 PACKAGE="app.umbra.privatechat.dev"
 
 
+def await_expired_turn_timestamp(expires, *, clock=time.time, monotonic=time.monotonic, sleep=time.sleep):
+    """Lab-only wait for an already issued REST credential; never renew it."""
+    deadline = monotonic() + 3
+    # coturn REST auth uses time(NULL): equality is still valid for that whole second.
+    while int(clock()) <= expires:
+        if monotonic() >= deadline:
+            raise RuntimeError("TURN expiry clock did not advance")
+        sleep(0.1)
+
+
 def issue_turn_after_selection(serials, processes, deadline, write, read, issue):
     """Issue once, after both real Engines authorize their selected media device.
 
@@ -280,7 +290,7 @@ def main():
                 credentials=turn.credentials((60 if args.video else 30) if args.scenario=="credential-expiry" else 180)
                 if args.scenario=="expired-auth":
                     credentials=turn.credentials(1)
-                    while time.time()<=credentials["expires"]: time.sleep(0.1)
+                    await_expired_turn_timestamp(credentials["expires"])
                     # Deliberately inconsistent local metadata tests SERVER rejection,
                     # not a bypass in the productive credential/configuration provider.
                     credentials["expires"]=int(time.time())+180

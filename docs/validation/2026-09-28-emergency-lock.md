@@ -302,3 +302,53 @@ boolean, credenciales, archivo ausente o recibo incompleto hace fallar el proces
 No se reutiliza un directorio con recibo de éxito previo. Se añade regresión de
 salidas vacías/anticipadas y se conserva cleanup de los nuevos archivos TURN.
 178 herramientas PASS. Falta CI multimedia realmente ejecutada del nuevo HEAD.
+
+
+### TLS cancellation regression on 544c422 (preserved RED → local GREEN)
+
+Verify run 36374495122 failed the unchanged two-second cancellation assertion
+in the real HTTPS fixture. The previous ordinary blocked-read sample did not
+reliably cover cancellation **between** TLS reads. OpenJDK 21 JSSE can drain
+pending input during `SSLSocket.close()` when its read lock is available, using
+the normal read timeout. Source: [SSLSocketImpl](https://github.com/openjdk/jdk21u/blob/master/src/java.base/share/classes/sun/security/ssl/SSLSocketImpl.java)
+and [SSLSocketInputRecord](https://github.com/openjdk/jdk21u/blob/master/src/java.base/share/classes/sun/security/ssl/SSLSocketInputRecord.java).
+
+The isolated HTTPS fixture now sends one byte and withholds the remainder.
+Four of eight bounded samples pause the application at its existing permission
+boundary between reads; four retain concurrent read cancellation. Before the
+fix, sample zero reproducibly failed the two-second assertion (exit 1,
+`https-between-read-before.log`). Cancellation now sets a one-millisecond
+**close-only** TLS drain timeout before attempting closure. Ordinary request
+timeouts, certificate/hostname validation and cipher selection are unchanged.
+Failure to configure cancellation remains an exceptional closure result, and
+socket closure is still attempted. No retry converts a failed sample to success.
+
+After the fix, the full real HTTPS integration exits 0, including all eight
+samples, wrong-host certificate rejection and emergency closure without a
+server response (`https-between-read-after.log`, 50 main relay checks plus the
+existing pairing/device/location/call integration suites). Tools: 178 PASS.
+These local results do not validate Android's TLS implementation; new CI is
+required for the new commit.
+
+Focused run 36374495161 also preserves a separate R8 `video-stop-race-2` failure:
+`unexpected end of stream` while sending an authenticated envelope through the
+relay (`VoiceEngineFixtureListener.pump`). Adjacent repetitions passed, which
+is **not** proof of a fix. Its cause remains uncertain; no catch/retry or
+assertion relaxation was introduced. The actual artifact and both endpoint
+logs are retained in the exportable evidence directory.
+
+
+The same HEAD's video run 36374495215, R8 shard 0, additionally rejected the
+`expired-auth` test expectation: native media connected. The fixture waited
+until floating-point wall time exceeded the credential's integer timestamp,
+which can release during that still-valid integer second. Coturn's
+[`get_user_key`](https://github.com/coturn/coturn/blob/4.6.3/src/apps/relay/userdb.c#L504)
+uses `time(NULL)` and accepts equality. A deterministic boundary test fails
+before the correction (2 clock calls instead of 4), and passes after waiting
+until the **integer** wall-clock second is strictly greater. A three-second
+monotonic deadline bounds this one-second test credential's wait, including
+wall-clock rollback/stall rejection. No productive TTL, credential or TURN
+policy changes. Actual Android/server rejection remains subject to new CI.
+Local tools after both corrections: 180 PASS. Connected/offline JVM and lint
+exit 0 after the RelayClient change (217/160 tests); production media was not
+changed to compensate for a test expectation.

@@ -4,10 +4,21 @@ import sys
 import unittest
 from unittest.mock import patch, Mock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing, coordinate_mute, processing_barrier, issue_turn_after_selection, require_completed_run
+from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing, coordinate_mute, processing_barrier, issue_turn_after_selection, require_completed_run, await_expired_turn_timestamp
 import voice_network_evidence as network
 
 class VoiceEvidenceTest(unittest.TestCase):
+    def test_expired_turn_waits_past_the_entire_integer_expiry_second(self):
+        clock=Mock(side_effect=[101.0,101.1,101.9,102.0])
+        sleep=Mock()
+        await_expired_turn_timestamp(101,clock=clock,monotonic=lambda:0,sleep=sleep)
+        self.assertEqual(4,clock.call_count)
+        self.assertEqual(3,sleep.call_count)
+
+    def test_expired_turn_wait_is_bounded_when_wall_clock_stalls(self):
+        with self.assertRaises(RuntimeError):
+            await_expired_turn_timestamp(101,clock=lambda:100,monotonic=Mock(side_effect=[0,0,4]),sleep=Mock())
+
     def test_early_success_return_or_empty_receipt_cannot_approve_media(self):
         import tempfile,json
         for result in (None,True,{}, {'syntheticCredential':True}):
