@@ -148,3 +148,30 @@ these aggregate metrics. No threshold, fail-closed behavior or native binary was
 changed; future passes do not prove this intermittent failure corrected.
 Artifact 10983685512 SHA-256
 `35f5846a87d5541b1ffc9fcf226eacc9f581655eb0f67238358669fd94407067`.
+
+## d875eb7: two new acceptance failures, not suppressed
+
+Privacy 36452724276 debug artifact 10983279814:
+SHA-256 `1364ab07c8dd3b52c60766d192e296e5e5ed9a48127bfd10b11e1fa506111124`.
+Ten connected cases, two failures; offline not reached in this matrix.
+
+1. RestrictedPlayback called setPreferredDevice before setDataSource. It returned
+false at line 42, before playback. AOSP native MediaPlayer reports NO_INIT without
+its underlying player. Move selection after prepare, still volume zero and before
+start/focus; retain the return-value and actual-route checks. Native regression
+must prove route-confirmed PLAYING before lock and confirmed closure after it.
+Source: https://android.googlesource.com/platform/frameworks/av/+/e1368e4257fa747e78eee204f136e67e176fbef9/media/libmedia/mediaplayer.cpp
+
+2. AVD AudioRecord capture completed, was encoded/Signal-transferred/decoded, but
+its output was not exact zero PCM as the new fixture assumed for -no-audio. This
+is not evidence of a physical microphone and also not yet an accepted capture
+fixture. Preserve the rejection, add synthetic peak/RMS/sample-count diagnostics
+(no PCM saved), and determine whether emulator HAL output or lossy-codec behavior
+invalidates that test assumption. Do not silently lower the assertion or claim
+speech/intelligibility tested.
+
+HTTPS note harness is implemented next with two independent Engines in one AVD,
+local HTTPS relay, explicit admission/verification/network consent, native AAC,
+duplicate transport and persistent consumption. Test CA is local to instrumentation
+and hostname verification is unchanged. It is not two Android processes, and its
+new CI must execute before acceptance. No production UI or offline networking.

@@ -39,9 +39,11 @@ public final class RestrictedPlayback implements AutoCloseable {
                     AudioAttributes attributes=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
                             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_NONE).build();
                     player.setAudioAttributes(attributes);player.setLooping(false);player.setVolume(0f,0f);
-                    if(!player.setPreferredDevice(selected))throw RestrictedPayload.invalid();
                     source=new MemoryMediaSource(bytes,()->{try{session.check();}catch(Exception failure){throw new ContentException(ContentException.Code.EXPIRED);}});
                     player.setDataSource(source);player.prepare();
+                    // Native MediaPlayer has no underlying player/output before setDataSource.
+                    // Select only after preparation, still muted and before start/focus.
+                    if(!player.setPreferredDevice(selected))throw RestrictedPayload.invalid();
                     if(player.getDuration()<1 || player.getDuration()>10000)throw RestrictedPayload.invalid();
                     player.setOnCompletionListener(ignored->{state=State.COMPLETED;session.close();});
                     player.setOnErrorListener((ignored,what,extra)->{state=State.FAILED;session.close();return true;});

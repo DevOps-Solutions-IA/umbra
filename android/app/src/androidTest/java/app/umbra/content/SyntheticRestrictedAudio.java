@@ -16,6 +16,9 @@ public final class SyntheticRestrictedAudio {
         return session.decode(bytes->{
             short[] pcm=RestrictedAudio.decode(bytes,()->{try{session.check();}catch(Exception denied){throw new SecurityException("Synthetic capture cancelled");}});
             try {
+                double energy=0;int peak=0;for(short sample:pcm){energy+=(double)sample*sample;peak=Math.max(peak,Math.abs((int)sample));}
+                var status=new android.os.Bundle();status.putString("syntheticCaptureStatistics","samples="+pcm.length+",peak="+peak+",rms="+Math.sqrt(energy/pcm.length));
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
                 for(short sample:pcm)if(sample!=0)throw new AssertionError("Expected disabled emulator host input, not real microphone data");
                 if(pcm.length<1024)throw new AssertionError("No native captured samples");
                 return pcm.length;
