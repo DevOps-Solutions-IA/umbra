@@ -32,7 +32,15 @@ public final class Engine {
         locations = new app.umbra.location.LocationService(records, this, elapsed);
         calls = new app.umbra.calls.CallService(records, this, elapsed);
         connectivity().onOnlineStopped(calls::cancelLocal);
+        if(records.emergency()!=null) {
+            records.emergency().registerOwner(app.umbra.core.EmergencyLock.Subsystem.CALLS,calls,owner->{owner.cancelLocal();return java.util.concurrent.CompletableFuture.completedFuture(null);});
+            records.emergency().registerOwner(app.umbra.core.EmergencyLock.Subsystem.LOCATION,locations,owner->{owner.cancelLocal();return java.util.concurrent.CompletableFuture.completedFuture(null);});
+        }
     }
+    public app.umbra.core.EmergencyLock emergency() {
+        var service=db.emergency(); if(service==null)throw new SecurityException("Coordinated lock unavailable"); return service;
+    }
+    public app.umbra.core.EmergencyLock.Status emergencyLock() { return emergency().request(); }
     public app.umbra.connectivity.ConnectivityService connectivity() { return admission.connectivity(); }
     public app.umbra.admission.AdmissionService admission() { return admission; }
     public app.umbra.calls.CallService calls() { return calls; }

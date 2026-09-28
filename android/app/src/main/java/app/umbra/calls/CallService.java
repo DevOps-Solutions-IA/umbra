@@ -523,6 +523,7 @@ public final class CallService {
         private volatile boolean cancellationFailed;
         public boolean cancellationFailed() { return cancellationFailed; }
         private MediaLease(MediaConsent consent) { id=consent.id; revision=consent.revision; authorization=consent.authorization; }
+        public app.umbra.core.EmergencyLock emergency() { return db.emergency(); }
         public String callId() { return id; }
         public String localDevice() throws Exception { snapshot(); return engine.id(); }
         public void end() throws Exception { CallService.this.end(id); }

@@ -21,10 +21,27 @@ public final class ConnectivityService {
     private final CopyOnWriteArrayList<Runnable> onlineStopped = new CopyOnWriteArrayList<>();
     private final Runnable locked = this::vaultLocked;
     private volatile boolean cleanupFailed;
+    private final Object closureMonitor=new Object();
 
     public ConnectivityService(Records records, AdmissionService admission, boolean onlineEdition) {
         this.records=java.util.Objects.requireNonNull(records); this.admission=java.util.Objects.requireNonNull(admission);
         this.onlineEdition=onlineEdition; records.onInvalidation(locked);
+        if(records.emergency()!=null)records.emergency().registerOwner(app.umbra.core.EmergencyLock.Subsystem.CONNECTIVITY,
+            this,ConnectivityService::emergencyClose);
+    }
+    private java.util.concurrent.CompletionStage<Void> emergencyClose() {
+        vaultLocked();
+        synchronized(closureMonitor) {
+            long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(4);
+            while(online.get().state==State.DISCONNECTING) {
+                long remaining=deadline-System.nanoTime();
+                if(remaining<=0)throw new IllegalStateException("Connectivity closure incomplete");
+                try { java.util.concurrent.TimeUnit.NANOSECONDS.timedWait(closureMonitor,remaining); }
+                catch(InterruptedException interrupted) { Thread.currentThread().interrupt();throw new IllegalStateException("Connectivity closure interrupted"); }
+            }
+            if(cleanupFailed || online.get().state!=State.LOCKED_PRIVATE)throw new IllegalStateException("Connectivity closure incomplete");
+        }
+        return java.util.concurrent.CompletableFuture.completedFuture(null);
     }
     public Policy getPolicy() { return Policy.PRIVATE_STARTUP_STRICT; }
     public boolean cleanupFailed() { return cleanupFailed; }
@@ -103,7 +120,10 @@ public final class ConnectivityService {
             Frame current=online.get();
             if(current.generation!=closing.generation || current.state!=State.DISCONNECTING) return;
             State next=current.vault==null?State.LOCKED_PRIVATE:cleanupFailed?State.OFFLINE_ERROR:result;
-            if(online.compareAndSet(current,new Frame(next,new Object(),current.vault,null,null))) return;
+            if(online.compareAndSet(current,new Frame(next,new Object(),current.vault,null,null))) {
+                synchronized(closureMonitor) { closureMonitor.notifyAll(); }
+                return;
+            }
         }
     }
     private void stop(Frame expected, State result) {
@@ -164,6 +184,7 @@ public final class ConnectivityService {
         private final AtomicReference<Runnable> cleanup=new AtomicReference<>();
         private volatile boolean closed;
         private final java.util.concurrent.atomic.AtomicBoolean bound=new java.util.concurrent.atomic.AtomicBoolean();
+        public app.umbra.core.EmergencyLock emergency() { return records.emergency(); }
         private Lease(Frame granted,boolean nearby) { this.granted=granted; this.nearby=nearby; }
         public void checkNearby() { if(!nearby) throw denied(); check(); }
         /** Full membership validation at operation boundaries, in addition to epoch checks. */

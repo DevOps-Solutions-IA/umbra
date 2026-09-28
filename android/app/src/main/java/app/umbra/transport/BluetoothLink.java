@@ -43,11 +43,15 @@ public final class BluetoothLink implements AutoCloseable {
     private volatile long started, lastFrame;
     private long epoch;
     private final AtomicBoolean closed = new AtomicBoolean();
+    private volatile boolean cleanupFailed;
+    private final CompletableFuture<Void> closure=new CompletableFuture<>();
+    private app.umbra.core.EmergencyLock.Registration emergencyRegistration;
     public BluetoothLink(Context context, Listener listener, app.umbra.connectivity.ConnectivityService.Lease consent) {
         this.consent=java.util.Objects.requireNonNull(consent); consent.checkNearby();
         BluetoothManager manager = context.getSystemService(BluetoothManager.class);
         adapter = manager == null ? null : manager.getAdapter(); this.listener = listener;
-        consent.attach(this::close);
+        if(consent.emergency()!=null)emergencyRegistration=consent.emergency().register(EmergencyLock.Subsystem.NEARBY,()->{close();return closure.thenApply(value->value);});
+        try {consent.attach(this::close);}catch(RuntimeException failure){close();throw failure;}
         watchdog.scheduleWithFixedDelay(() -> {
             BluetoothSocket active = socket; if (active == null) return;
             long now = System.nanoTime();
@@ -205,16 +209,29 @@ public final class BluetoothLink implements AutoCloseable {
     }
     private synchronized void stopListening() {
         BluetoothServerSocket old = server; server = null;
-        if (old != null) try { old.close(); } catch (IOException ignored) {}
+        if (old != null) try { old.close(); } catch (IOException failed) { cleanupFailed=true; }
     }
     private synchronized void disconnectExpected(BluetoothSocket expected) { if (socket == expected) disconnect(); }
     public synchronized void disconnect() {
         epoch++; BluetoothSocket old = socket; socket = null; peer = null;
-        if (old != null) try { old.close(); } catch (IOException ignored) {}
+        if (old != null) try { old.close(); } catch (IOException failed) { cleanupFailed=true; }
         inFlight.forEach((id, future) -> future.completeExceptionally(new IOException("Link closed"))); inFlight.clear();
     }
     @Override public void close() {
         if(!closed.compareAndSet(false,true)) return;
-        consent.close(); disconnect(); stopListening(); watchdog.shutdownNow(); writes.shutdownNow(); io.shutdownNow();
+        for(Runnable action:new Runnable[]{consent::close,this::disconnect,this::stopListening,
+                watchdog::shutdownNow,writes::shutdownNow,io::shutdownNow}) {
+            try {action.run();}catch(RuntimeException failure){cleanupFailed=true;}
+        }
+        Thread observer=new Thread(()->{
+            try {
+                long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(4);
+                for(ExecutorService executor:new ExecutorService[]{watchdog,writes,io})
+                    if(!executor.awaitTermination(Math.max(0,deadline-System.nanoTime()),TimeUnit.NANOSECONDS))throw new IOException("Nearby workers did not terminate");
+                if(cleanupFailed)throw new IOException("Nearby socket closure failed");
+                closure.complete(null);
+            } catch(Exception failure) {closure.completeExceptionally(new IOException("Nearby closure incomplete"));}
+            finally {if(!closure.isCompletedExceptionally() && emergencyRegistration!=null)emergencyRegistration.close();}
+        },"umbra-nearby-closure");observer.setDaemon(true);observer.start();
     }
 }

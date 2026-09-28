@@ -16,6 +16,7 @@ public final class AndroidLocationCapture implements AutoCloseable {
     private final Consumer<String> status;
     private volatile String session; private volatile LocationListener listener;
     private long lastSample; private String provider;
+    private app.umbra.core.EmergencyLock.Registration emergencyRegistration;
     public AndroidLocationCapture(Context context,Executor worker,BooleanSupplier foreground,LocationService service,Consumer<String> status) {
         this.context=context; this.worker=worker; this.foreground=foreground; this.service=service; this.status=status;
         manager=context.getSystemService(LocationManager.class);
@@ -39,8 +40,12 @@ public final class AndroidLocationCapture implements AutoCloseable {
         if(manager==null || !manager.isProviderEnabled(provider)) throw new SecurityException("Location provider unavailable");
     }
     /** Invoke only after explicit local service.start confirmation, on the serial worker. */
-    public void start(String id,LocationPayload.Mode mode,boolean live) throws Exception {
-        close(); session=id; lastSample=Long.MIN_VALUE/2;
+    public synchronized void start(String id,LocationPayload.Mode mode,boolean live) throws Exception {
+        close();
+        if(service.emergency()!=null)emergencyRegistration=service.emergency().register(app.umbra.core.EmergencyLock.Subsystem.LOCATION,()->{
+            close();return java.util.concurrent.CompletableFuture.completedFuture(null);
+        });
+        session=id; lastSample=Long.MIN_VALUE/2;
         provider=permitted(Manifest.permission.ACCESS_FINE_LOCATION)?LocationManager.GPS_PROVIDER:LocationManager.NETWORK_PROVIDER;
         try {
             if(mode==LocationPayload.Mode.MANUAL) throw new SecurityException("Manual point does not use provider");
@@ -52,8 +57,9 @@ public final class AndroidLocationCapture implements AutoCloseable {
                         check(id,mode); long now=SystemClock.elapsedRealtime();
                         if(now-lastSample<LocationPayload.INTERVAL_MS) return;
                         long measuredElapsed=location.getElapsedRealtimeNanos()/1_000_000L;
-                        if(measuredElapsed<0 || measuredElapsed>now || now-measuredElapsed>LocationPayload.MAX_AGE*1000 || !location.hasAccuracy())
+                        if(measuredElapsed<0 || measuredElapsed>now || now-measuredElapsed>LocationPayload.MAX_AGE*1000 || !location.hasAccuracy()) {
                             throw new SecurityException("Location estimate stale or incomplete");
+                        }
                         service.publish(id,location.getLatitude(),location.getLongitude(),location.getAccuracy(),location.getTime()/1000,
                             permitted(Manifest.permission.ACCESS_FINE_LOCATION)?"ANDROID_FINE":"ANDROID_COARSE");
                         lastSample=now; status.accept(live?"Ubicación activa; entrega sujeta a conexión":"Punto cifrado en cola");
@@ -68,7 +74,7 @@ public final class AndroidLocationCapture implements AutoCloseable {
                 .setMinUpdateIntervalMillis(LocationPayload.INTERVAL_MS).build(),worker,callback);
             timer.postDelayed(new Runnable() {
                 @Override public void run() {
-                    if(!id.equals(session)) return;
+                    if(!id.equals(session)) { return; }
                     worker.execute(() -> { try { check(id,mode); } catch(Exception failure) { fail(id); } });
                     timer.postDelayed(this,1000);
                 }
@@ -78,15 +84,17 @@ public final class AndroidLocationCapture implements AutoCloseable {
         catch(Exception failure) { fail(id); throw failure; }
     }
     private void fail(String id) {
-        if(!id.equals(session)) return;
+        if(!id.equals(session)) { return; }
         close();
         try { service.interrupt(id); } catch(Exception failure) { /* No grant remains; reopen cleans storage when available. */ }
         status.accept("Ubicación interrumpida; requiere nuevo consentimiento");
     }
     public String activeSession() { return session; }
-    @Override public void close() {
+    @Override public synchronized void close() {
         session=null; timer.removeCallbacksAndMessages(null);
-        LocationListener previous=listener; listener=null;
+        LocationListener previous=listener;
         if(manager!=null && previous!=null) manager.removeUpdates(previous);
+        listener=null;
+        if(emergencyRegistration!=null){emergencyRegistration.close();emergencyRegistration=null;}
     }
 }

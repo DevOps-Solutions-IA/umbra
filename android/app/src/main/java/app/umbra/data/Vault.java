@@ -25,6 +25,8 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         throw new android.database.sqlite.SQLiteDatabaseCorruptException("Vault database damaged; automatic deletion refused");
     };
     private final AccessGate gate;
+    private EmergencyLock.Registration emergencyRegistration;
+    private VaultSessionRegistry.Claim sessionClaim;
     private boolean initialCreationAllowed;
     private int transactionDepth;
     private boolean rollbackOnly;
@@ -47,7 +49,21 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         byte[] old = passwordDataKey; passwordDataKey = null; passwordLease = null;
         PasswordEnvelope.erase(old); passwordState = State.LOCKED;
     }
-    public Vault(Context context, AccessGate gate) { super(context, "umbra.db", null, 2, PRESERVE_CORRUPT); this.gate = gate; this.databaseFile = context.getDatabasePath("umbra.db"); initialCreationAllowed = !databaseFile.exists(); gate.onInvalidation(passwordInvalidation); }
+    public Vault(Context context, AccessGate gate) { super(context, "umbra.db", null, 2, PRESERVE_CORRUPT); this.gate = gate; this.databaseFile = context.getDatabasePath("umbra.db"); initialCreationAllowed = !databaseFile.exists(); gate.onInvalidation(passwordInvalidation);
+        ensureEmergencyRegistration();
+    }
+    private synchronized void ensureEmergencyRegistration() {
+        if(emergencyRegistration==null) {
+            VaultSessionRegistry.Claim claimed=VaultSessionRegistry.claim(databaseFile.getAbsolutePath(),gate);
+            try {
+                emergencyRegistration=gate.emergency().register(EmergencyLock.Subsystem.VAULT,()->{
+                    close();return java.util.concurrent.CompletableFuture.completedFuture(null);
+                });
+                sessionClaim=claimed;
+            } catch(RuntimeException failure) {claimed.close();throw failure;}
+        }
+    }
+    @Override public EmergencyLock emergency() { return gate.emergency(); }
     private static void createTable(SQLiteDatabase db, String table) {
         // Table identifiers are internal constants, never user input.
         db.execSQL("CREATE TABLE " + table + "(bucket TEXT NOT NULL,k TEXT NOT NULL,nonce BLOB NOT NULL,value BLOB NOT NULL,PRIMARY KEY(bucket,k))");
@@ -235,6 +251,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
     }
     /** No UI gate can recreate this key for an enrolled vault. */
     private synchronized void requirePasswordAccess() {
+        ensureEmergencyRegistration();
         if (isPasswordConfigured()) {
             AccessGate.Lease lease = passwordLease;
             if (passwordDataKey == null || lease == null) throw new AccessGate.LockedException();
@@ -282,6 +299,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
     }
     public synchronized void createPassword(byte[] password, PasswordEnvelope.Parameters parameters) throws Exception {
         AccessGate.Lease lease = gate.enter();
+        ensureEmergencyRegistration();
         if (isPasswordConfigured()) throw new IllegalStateException("Password already configured");
         SQLiteDatabase db = getWritableDatabase();
         if (db.inTransaction()) throw new IllegalStateException("Enrollment requires its own transaction");
@@ -321,6 +339,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
     }
     public synchronized void unlock(byte[] password) throws Exception {
         AccessGate.Lease lease = gate.invalidateAuthorizations(); // system authentication still mandatory
+        ensureEmergencyRegistration();
         forgetPasswordKey(); passwordState = State.UNLOCKING;
         byte[] clear = null;
         try {
@@ -381,10 +400,18 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         }, Math.max(0, remaining), java.util.concurrent.TimeUnit.NANOSECONDS);
     }
 
-    @Override public synchronized void close() {
-        lock();
+    @Override public void close() {
+        RuntimeException failure=null;
+        // Invalidation can close transports. Never do that while owning the SQLite monitor.
+        try { lock(); } catch(RuntimeException rejected) { failure=rejected; }
+        synchronized(this) {
+        forgetPasswordKey();
         if (autoLockTimer != null) { autoLockTimer.cancel(false); autoLockTimer = null; }
-        super.close();
+        try { super.close(); } catch(RuntimeException rejected) { if(failure==null)failure=rejected; }
+        if(failure!=null)throw failure;
+        if(emergencyRegistration!=null) {emergencyRegistration.close();emergencyRegistration=null;}
+        if(sessionClaim!=null) {sessionClaim.close();sessionClaim=null;}
+        }
     }
     public static synchronized void destroyKey() throws Exception {
         KeyStore store = KeyStore.getInstance("AndroidKeyStore"); store.load(null);

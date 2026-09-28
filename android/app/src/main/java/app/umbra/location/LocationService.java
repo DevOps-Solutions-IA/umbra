@@ -11,6 +11,7 @@ import java.util.function.LongSupplier;
 
 /** Local consent and persistent terminal states. Incoming messages can never create a capture grant. */
 public final class LocationService {
+    public app.umbra.core.EmergencyLock emergency() { return db.emergency(); }
     private final Records db;
     private final Engine engine;
     private final LongSupplier elapsed;

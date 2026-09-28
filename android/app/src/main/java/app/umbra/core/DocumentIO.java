@@ -12,7 +12,8 @@ public final class DocumentIO {
     public static void write(AccessGate gate, AccessGate.Lease lease, byte[] content,
                              Open<OutputStream> provider) throws Exception {
         gate.check(lease);
-        try (OutputStream output = provider.open()) {
+        try (Transfer transfer=new Transfer(gate)) {
+            OutputStream output=transfer.attach(provider.open());
             if (output == null) throw new IOException("No output");
             gate.check(lease);
             for (int offset = 0; offset < content.length; offset += CHUNK) {
@@ -27,7 +28,8 @@ public final class DocumentIO {
     public static byte[] read(AccessGate gate, int maximum, Open<InputStream> provider) throws Exception {
         if (maximum < 1) throw new IllegalArgumentException("Invalid document bound");
         AccessGate.Lease lease = gate.enter();
-        try (InputStream input = provider.open(); ClearableBuffer output = new ClearableBuffer()) {
+        try (Transfer transfer=new Transfer(gate); ClearableBuffer output = new ClearableBuffer()) {
+            InputStream input=transfer.attach(provider.open());
             if (input == null) throw new IOException("No input");
             byte[] buffer = new byte[CHUNK];
             try {
@@ -42,6 +44,40 @@ public final class DocumentIO {
                     output.write(buffer, 0, count);
                 }
             } finally { Arrays.fill(buffer, (byte) 0); }
+        }
+    }
+
+    /** Covers provider.open too: an uninterruptible provider remains INCOMPLETE, not falsely closed. */
+    private static final class Transfer implements AutoCloseable {
+        private final java.util.concurrent.atomic.AtomicReference<Closeable> stream=new java.util.concurrent.atomic.AtomicReference<>();
+        private final java.util.concurrent.atomic.AtomicBoolean cancelled=new java.util.concurrent.atomic.AtomicBoolean();
+        private final java.util.concurrent.CompletableFuture<Void> finished=new java.util.concurrent.CompletableFuture<>();
+        private final EmergencyLock.Registration registration;
+        Transfer(AccessGate gate) {
+            registration=gate.emergency().register(EmergencyLock.Subsystem.DOCUMENTS,()->{
+                cancelled.set(true);
+                try { closeStream(); } catch(Exception failure) { finished.completeExceptionally(new IOException("Document closure failed")); }
+                return finished;
+            });
+        }
+        <T extends Closeable> T attach(T value) throws IOException {
+            stream.set(value); if(cancelled.get()) { closeStream();throw new IOException("Document cancelled"); } return value;
+        }
+        private IOException closeFailure;
+        private synchronized void closeStream() throws IOException {
+            // Serialize normal completion with the cancellation close. Taking the reference
+            // alone does not prove the provider has closed, and must not hide its late failure.
+            if(closeFailure!=null)throw closeFailure;
+            Closeable value=stream.getAndSet(null);
+            try {if(value!=null)value.close();}
+            catch(IOException | RuntimeException failure) {
+                closeFailure=new IOException("Document closure failed");throw closeFailure;
+            }
+        }
+        @Override public void close() throws IOException {
+            try { closeStream();finished.complete(null); }
+            catch(IOException failure) {finished.completeExceptionally(new IOException("Document closure failed"));throw failure;}
+            finally {if(!finished.isCompletedExceptionally())registration.close();}
         }
     }
 

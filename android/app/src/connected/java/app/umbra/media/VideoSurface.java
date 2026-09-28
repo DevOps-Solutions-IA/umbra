@@ -20,10 +20,16 @@ final class VideoSurface {
         layout.setOrientation(LinearLayout.VERTICAL);layout.addView(status);
         layout.addView(view,new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,480));
         Runnable[] refreshHolder=new Runnable[1];
+        var released=new java.util.concurrent.CompletableFuture<Void>();
+        app.umbra.core.EmergencyLock.Registration[] registration=new app.umbra.core.EmergencyLock.Registration[1];
         MediaDialog dialog=new MediaDialog(activity,()->{
             session.setRemoteVideoSink(null);
             if(refreshHolder[0]!=null)status.removeCallbacks(refreshHolder[0]);
-            try {view.clearImage();} finally {try {view.release();} finally {egl.release();}}
+            try {
+                try {view.clearImage();} finally {try {view.release();} finally {egl.release();}}
+                released.complete(null);
+            } catch(RuntimeException failure) {released.completeExceptionally(new IllegalStateException("Video surface closure failed"));}
+            finally {if(!released.isCompletedExceptionally() && registration[0]!=null)registration[0].close();}
         });
         dialog.setTitle("Video del interlocutor");
         dialog.setMessage("Esta vista no autoriza tu cámara. Una imagen anterior no demuestra conexión actual.");
@@ -36,7 +42,13 @@ final class VideoSurface {
             }
         };
         refreshHolder[0]=refresh;
-        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);track.accept(dialog);dialog.show();
+        dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+        if(session.emergency()!=null) {
+            try {registration[0]=session.emergency().register(app.umbra.core.EmergencyLock.Subsystem.MEDIA,()->{
+                activity.runOnUiThread(dialog::dismiss);return released.thenApply(value->value);
+            });} catch(RuntimeException denied) {view.release();egl.release();throw denied;}
+        }
+        track.accept(dialog);dialog.show();
         session.setRemoteVideoSink(view);refresh.run();
     }
 }

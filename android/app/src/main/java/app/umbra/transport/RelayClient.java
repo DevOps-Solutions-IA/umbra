@@ -18,13 +18,24 @@ public final class RelayClient implements AutoCloseable {
     private final ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor();
     private final java.util.concurrent.atomic.AtomicReference<HttpsURLConnection> active=new java.util.concurrent.atomic.AtomicReference<>();
     private final java.util.concurrent.atomic.AtomicBoolean closed=new java.util.concurrent.atomic.AtomicBoolean();
+    private final java.util.concurrent.atomic.AtomicInteger pending=new java.util.concurrent.atomic.AtomicInteger();
+    private final CompletableFuture<Void> closure=new CompletableFuture<>();
+    private volatile boolean transportClosed;
+    private final java.util.Set<java.net.Socket> plainSockets=ConcurrentHashMap.newKeySet();
+    private final java.util.Set<java.net.Socket> tlsSockets=ConcurrentHashMap.newKeySet();
+    private app.umbra.core.EmergencyLock.Registration emergencyRegistration;
     private final java.util.ArrayDeque<app.umbra.admission.AdmissionChallenge> challenges=new java.util.ArrayDeque<>();
     public RelayClient(String address) throws Exception { this(address, () -> true); }
     public RelayClient(String address, BooleanSupplier permitted) throws Exception { this(address,permitted,null); }
     public RelayClient(String address, BooleanSupplier permitted, app.umbra.admission.AdmissionService admission) throws Exception {
         base=validate(address); this.permitted=permitted; this.admission=admission;
         network=admission==null?null:admission.connectivity().networkLease(base);
-        if(network!=null) network.attach(this::close);
+        if(network!=null) {
+            try {
+                if(network.emergency()!=null)emergencyRegistration=network.emergency().register(app.umbra.core.EmergencyLock.Subsystem.CONNECTIVITY,()->{close();return closure.thenApply(value->value);});
+                network.attach(this::close);
+            } catch(RuntimeException failure) {close();throw failure;}
+        }
     }
     public static String validate(String address) throws Exception {
         URI uri = new URI(address.trim());
@@ -37,7 +48,7 @@ public final class RelayClient implements AutoCloseable {
     private void allowed() throws IOException {
         if(network==null) throw new IOException("Explicit connectivity consent required");
         network.checkEpoch();
-        if (closed.get() || !permitted.getAsBoolean()) throw new IOException("Conexión cancelada por la política local");
+        if (closed.get() || closure.isCompletedExceptionally() || !permitted.getAsBoolean()) throw new IOException("Conexión cancelada por la política local");
     }
     private static final class HttpFailure extends IOException {
         private static final long serialVersionUID=1L;
@@ -157,13 +168,22 @@ public final class RelayClient implements AutoCloseable {
     }
     private JSONObject requestRaw(String method,String path,String token,JSONObject body,Authorization authorization,
                                   java.util.Map<String,String> admissionHeaders) throws Exception {
+        pending.incrementAndGet();
+        try { return requestRawChecked(method,path,token,body,authorization,admissionHeaders); }
+        finally { pending.decrementAndGet();confirmClosure(); }
+    }
+    private JSONObject requestRawChecked(String method,String path,String token,JSONObject body,Authorization authorization,
+                                  java.util.Map<String,String> admissionHeaders) throws Exception {
         allowed(); network.check(); authorization.check();
         HttpsURLConnection connection = (HttpsURLConnection) new URI(base + path).toURL().openConnection();
         if(!active.compareAndSet(null,connection)) { connection.disconnect(); throw new IOException("Relay client already in use"); }
         ScheduledFuture<?> deadline = null;
         try {
             allowed();
-            deadline = timer.schedule(connection::disconnect, 20, TimeUnit.SECONDS);
+            // Delegate trust, cipher suites and endpoint verification unchanged. Retain the
+            // actual socket so close cannot wait behind HttpURLConnection's body-read lock.
+            connection.setSSLSocketFactory(new CancellableTls(connection.getSSLSocketFactory()));
+            deadline = timer.schedule(()->{closeSockets();connection.disconnect();}, 20, TimeUnit.SECONDS);
             for(var header:admissionHeaders.entrySet()) connection.setRequestProperty(header.getKey(),header.getValue());
             connection.setRequestMethod(method); connection.setInstanceFollowRedirects(false);
             connection.setConnectTimeout(10_000); connection.setReadTimeout(10_000);
@@ -202,7 +222,7 @@ public final class RelayClient implements AutoCloseable {
             throw failure;
         } finally {
             if (deadline != null) deadline.cancel(false);
-            connection.disconnect(); active.compareAndSet(connection,null);
+            closeSockets();connection.disconnect(); active.compareAndSet(connection,null);
         }
     }
     public void register(JSONObject profile, String invitation) throws Exception {
@@ -259,10 +279,53 @@ public final class RelayClient implements AutoCloseable {
     public void unregister(JSONObject profile) throws Exception {
         request("DELETE", "/v1/boxes/" + Wire.uuid(profile.getString("box")), profile.getString("read"), null);
     }
+    private java.net.Socket trackSocket(java.net.Socket socket,java.util.Set<java.net.Socket> group) throws IOException {
+        group.add(socket);
+        if(closed.get()) {socket.close();group.remove(socket);throw new java.net.SocketException("Relay cancelled");}
+        return socket;
+    }
+    private void closeSockets() {
+        // Closing the underlying stream first also unblocks TLS reads, without waiting
+        // for the server, HTTP body drain, close_notify, or application acknowledgements.
+        for(var group:java.util.List.of(plainSockets,tlsSockets))for(var socket:group) {
+            try {socket.close();group.remove(socket);}
+            catch(IOException | RuntimeException failure) {closure.completeExceptionally(new IOException("Relay socket closure failed"));}
+        }
+    }
+    private final class CancellableTls extends javax.net.ssl.SSLSocketFactory {
+        private final javax.net.ssl.SSLSocketFactory delegate;
+        CancellableTls(javax.net.ssl.SSLSocketFactory delegate){this.delegate=delegate;}
+        public String[] getDefaultCipherSuites(){return delegate.getDefaultCipherSuites();}
+        public String[] getSupportedCipherSuites(){return delegate.getSupportedCipherSuites();}
+        public java.net.Socket createSocket() throws IOException {allowed();return trackSocket(delegate.createSocket(),tlsSockets);}
+        public java.net.Socket createSocket(java.net.Socket plain,String host,int port,boolean autoClose) throws IOException {
+            trackSocket(plain,plainSockets);allowed();return trackSocket(delegate.createSocket(plain,host,port,autoClose),tlsSockets);
+        }
+        public java.net.Socket createSocket(String host,int port) throws IOException {allowed();return trackSocket(delegate.createSocket(host,port),tlsSockets);}
+        public java.net.Socket createSocket(String host,int port,java.net.InetAddress local,int localPort) throws IOException {
+            allowed();return trackSocket(delegate.createSocket(host,port,local,localPort),tlsSockets);
+        }
+        public java.net.Socket createSocket(java.net.InetAddress host,int port) throws IOException {allowed();return trackSocket(delegate.createSocket(host,port),tlsSockets);}
+        public java.net.Socket createSocket(java.net.InetAddress host,int port,java.net.InetAddress local,int localPort) throws IOException {
+            allowed();return trackSocket(delegate.createSocket(host,port,local,localPort),tlsSockets);
+        }
+    }
+    private void confirmClosure() {
+        if(transportClosed && pending.get()==0) {
+            closure.complete(null);if(!closure.isCompletedExceptionally() && emergencyRegistration!=null)emergencyRegistration.close();
+        }
+    }
     @Override public void close() {
         if(!closed.compareAndSet(false,true)) return;
         HttpsURLConnection c = active.getAndSet(null);
-        if (c != null) c.disconnect(); timer.shutdownNow();
-        if(network!=null) network.close();
+        try { closeSockets();if(c!=null)c.disconnect(); }
+        catch(RuntimeException failure) {closure.completeExceptionally(new IOException("Relay closure failed"));}
+        finally {
+            try {timer.shutdownNow();}
+            catch(RuntimeException failure) {closure.completeExceptionally(new IOException("Relay timer closure failed"));}
+            try {if(network!=null)network.close();}
+            catch(RuntimeException failure) {closure.completeExceptionally(new IOException("Relay consent closure failed"));}
+            transportClosed=true;confirmClosure();
+        }
     }
 }
