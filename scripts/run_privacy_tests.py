@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def valid_report(text, code):
-    return (code == 0 and re.search(r'^OK \(6 tests\)$', text, re.M)
+    return (code == 0 and re.search(r'^OK \(8 tests\)$', text, re.M)
             and 'INSTRUMENTATION_CODE: -1' in text
             and not re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)
             and not any(x in text for x in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'Process crashed')))
@@ -26,7 +26,8 @@ def optimized_classes(mapping, configuration):
     result = {}
     for name in ('app.umbra.privacy.ImagePreparation',
                  'app.umbra.content.RestrictedContentService',
-                 'app.umbra.content.RestrictedImages$Decoder'):
+                 'app.umbra.content.RestrictedImages$Decoder',
+                 'app.umbra.content.RestrictedAudio'):
         match = re.search(r'^' + re.escape(name) + r' -> ([^:]+):$', mapping, re.M)
         if not match or match[1] == name:
             raise RuntimeError('Optimized privacy entry point missing or not obfuscated')
@@ -66,7 +67,7 @@ def main():
             'app.umbra.PrivacyAdaptersAndroidTest,app.umbra.RestrictedContentAndroidTest', package + '.test/androidx.test.runner.AndroidJUnitRunner'],
             stdout=stream, stderr=subprocess.STDOUT, timeout=180)
     if not valid_report(log.read_text(), result.returncode):
-        raise RuntimeError(f'Privacy instrumentation did not pass all six cases: {log}')
+        raise RuntimeError(f'Privacy instrumentation did not pass all eight cases: {log}')
     evidence['result'] = 'PASS'
     (args.reports / 'receipt.json').write_text(json.dumps(evidence, indent=2) + '\n')
 

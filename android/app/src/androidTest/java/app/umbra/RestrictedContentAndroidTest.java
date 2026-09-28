@@ -70,4 +70,36 @@ public class RestrictedContentAndroidTest {
             } finally {output.recycle();}
         }
     }
+    @Test public void syntheticNoteEncodedSanitizedSignalDecodedAndConsumed() throws Exception {
+        try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
+            Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
+            String id=a.restricted().send(a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),
+                SyntheticRestrictedAudio.tone(ar.authorization()),true);
+            for(var row:a.outbox()){b.receive(row.getJSONObject("envelope"));b.receive(row.getJSONObject("envelope"));}
+            assertTrue(b.messages(a.id()).isEmpty());assertEquals(1,b.restricted().received(a.id()).size());
+            var session=b.restricted().open(b.restricted().reviewOpen(id),true);
+            try {
+                var observed=SyntheticRestrictedAudio.observe(session);
+                assertTrue(observed.samples()>=16000);assertTrue(observed.samples()<24000);
+                assertTrue(observed.rms()>1000 && observed.rms()<10000);
+                assertTrue(observed.targetEnergy()>100*observed.otherEnergy());
+                var receipt=new android.os.Bundle();receipt.putString("restrictedAac", "decodedSamples="+observed.samples()+",rms="+observed.rms());
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendStatus(0,receipt);
+            }finally{session.close();}
+            session.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);br.reopen();
+            var restarted=new Engine(br);
+            assertEquals(ContentException.Code.CONSUMED,assertThrows(ContentException.class,
+                ()->restarted.restricted().open(restarted.restricted().reviewOpen(id),true)).code());
+        }
+    }
+    @Test public void notePreparationRejectsMalformedAndExpiredAuthorizationWithoutRecording() throws Exception {
+        assertThrows(Exception.class,()->RestrictedAudio.prepare(new byte[]{1,2,3,4},()->{}));
+        var allowed=new java.util.concurrent.atomic.AtomicBoolean(false);
+        assertThrows(SecurityException.class,()->SyntheticRestrictedAudio.tone(()->{if(!allowed.get())throw new SecurityException("Synthetic locked");}));
+        allowed.set(true);
+        try(var encoded=SyntheticRestrictedAudio.tone(()->{if(!allowed.get())throw new SecurityException("Synthetic locked");})) {
+            assertNotNull(encoded);allowed.set(false);
+            assertThrows(SecurityException.class,()->RestrictedAudio.prepare(new byte[]{1,2},()->{if(!allowed.get())throw new SecurityException("Synthetic locked");}));
+        }
+    }
 }

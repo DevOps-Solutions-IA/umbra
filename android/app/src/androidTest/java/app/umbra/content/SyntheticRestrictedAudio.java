@@ -1,0 +1,38 @@
+package app.umbra.content;
+
+import java.util.Arrays;
+
+/** Synthetic source/PCM observations only in androidTest, never production or physical microphones. */
+public final class SyntheticRestrictedAudio {
+    private SyntheticRestrictedAudio() {}
+    public static RestrictedContentService.Prepared tone(Runnable authorization)throws Exception {
+        short[] pcm=new short[RestrictedAudio.SAMPLE_RATE];
+        for(int i=0;i<pcm.length;i++)pcm[i]=(short)(8000*Math.sin(2*Math.PI*440*i/RestrictedAudio.SAMPLE_RATE));
+        try{return RestrictedAudio.encode(pcm,authorization);}finally{Arrays.fill(pcm,(short)0);}
+    }
+    public record Observation(int samples,double rms,double targetEnergy,double otherEnergy) {}
+    public static Observation observe(RestrictedContentService.Session session)throws Exception {
+        return session.decode(bytes->{
+            byte[] original=bytes.clone();
+            try(var prepared=RestrictedAudio.prepare(bytes,()->{try{session.check();}catch(Exception denied){throw new SecurityException("Synthetic preparation cancelled");}})) {
+                org.junit.Assert.assertNotNull(prepared);org.junit.Assert.assertArrayEquals(original,bytes);
+            } finally {Arrays.fill(original,(byte)0);}
+            short[] pcm=RestrictedAudio.decode(bytes,()->{try{session.check();}catch(Exception denied){throw new SecurityException("Synthetic decode cancelled");}});
+            try {
+                double energy=0,target=0,other=0;int count=0;
+                // Lossy AAC priming is excluded by a fixed interior window, not by searching for success.
+                for(int start=4096;start+1600<=pcm.length-2048;start+=1600) {
+                    double tr=0,ti=0,or=0,oi=0;
+                    for(int i=0;i<1600;i++) {
+                        double sample=pcm[start+i];energy+=sample*sample;count++;
+                        tr+=sample*Math.cos(2*Math.PI*440*i/16000);ti+=sample*Math.sin(2*Math.PI*440*i/16000);
+                        or+=sample*Math.cos(2*Math.PI*1000*i/16000);oi+=sample*Math.sin(2*Math.PI*1000*i/16000);
+                    }
+                    target+=tr*tr+ti*ti;other+=or*or+oi*oi;
+                }
+                if(count==0)throw new AssertionError("No decoded observation window");
+                return new Observation(pcm.length,Math.sqrt(energy/count),target,other);
+            }finally{Arrays.fill(pcm,(short)0);}
+        },ignored->{});
+    }
+}

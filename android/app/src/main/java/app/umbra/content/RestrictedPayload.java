@@ -9,7 +9,7 @@ public final class RestrictedPayload {
     public static final int MAX_BYTES=262144;
     public static final long MAX_TTL=86400,MAX_SESSION=60;
     public enum Mode { ONCE, UMBRA_ONLY }
-    public enum Format { PNG }
+    public enum Format { PNG, AAC_ADTS }
     private RestrictedPayload() {}
     public static JSONObject descriptor(JSONObject p,long now) throws Exception {
         Wire.fields(p,"v","id","from","to","format","mode","created","expires","sessionSeconds","key","nonce","ciphertext");
