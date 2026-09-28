@@ -61,7 +61,10 @@ public final class RestrictedPlayback implements AutoCloseable {
                             .setAudioAttributes(attributes).setAcceptsDelayedFocusGain(false)
                             .setOnAudioFocusChangeListener(change->{if(change!=AudioManager.AUDIOFOCUS_GAIN)interrupt();},callbacks).build();
                     audio.registerAudioDeviceCallback(routes,callbacks);routesRegistered=true;return this;
-                } catch(Exception | Error failure) {release();throw failure;}
+                } catch(Exception | Error failure) {
+                    try {release();}catch(RuntimeException cleanupFailure){session.cleanupFailed();}
+                    throw failure;
+                }
             },RestrictedPlayback::release);
         } catch(Exception | Error failure) {terminal(State.FAILED);session.close();throw failure;}
     }
@@ -79,13 +82,14 @@ public final class RestrictedPlayback implements AutoCloseable {
     private void interrupt(){terminal(State.INTERRUPTED);session.close();}
     private synchronized void release() {
         if(released)return;released=true;
-        try {if(player!=null)player.release();}
-        finally {
-            callbacks.removeCallbacks(routingTimeout);
-            if(source!=null)source.close();if(routesRegistered)audio.unregisterAudioDeviceCallback(routes);
-            if(focus!=null)audio.abandonAudioFocusRequest(focus);
-            terminal(State.CLOSED);
-        }
+        boolean failed=false;
+        try {if(player!=null)player.release();}catch(RuntimeException failure){failed=true;}
+        try {callbacks.removeCallbacks(routingTimeout);}catch(RuntimeException failure){failed=true;}
+        try {if(source!=null)source.close();}catch(RuntimeException failure){failed=true;}
+        try {if(routesRegistered)audio.unregisterAudioDeviceCallback(routes);}catch(RuntimeException failure){failed=true;}
+        try {if(focus!=null)audio.abandonAudioFocusRequest(focus);}catch(RuntimeException failure){failed=true;}
+        terminal(failed?State.FAILED:State.CLOSED);
+        if(failed)throw new IllegalStateException("Restricted playback closure failed");
     }
     @Override public void close(){session.close();}
 }

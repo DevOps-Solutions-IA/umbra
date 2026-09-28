@@ -110,4 +110,36 @@ public class RestrictedContentTest {
         var old=other.preparationAuthorization(other.reviewSend(q.b.e.id(),RestrictedPayload.Mode.UMBRA_ONLY,600,30),true);
         q.a.db.gate.lock();q.a.db.gate.unlock();assertThrows(SecurityException.class,old::run);
     }
+    @Test public void decoderInitializationFailureImmediatelyClosesConsumedSession() throws Exception {
+        Pair p=new Pair();String id=p.send(RestrictedPayload.Mode.ONCE);
+        var session=p.b.e.restricted().open(p.b.e.restricted().reviewOpen(id),true);
+        Class<?> decoder=Class.forName("app.umbra.content.RestrictedContentService$Decoder");
+        Object failing=java.lang.reflect.Proxy.newProxyInstance(decoder.getClassLoader(),new Class<?>[]{decoder},
+                (proxy,method,args)->{throw new IllegalArgumentException("Synthetic invalid decoder input");});
+        var decode=session.getClass().getDeclaredMethod("decode",decoder,java.util.function.Consumer.class);
+        decode.setAccessible(true);
+        var failure=assertThrows(java.lang.reflect.InvocationTargetException.class,
+                ()->decode.invoke(session,failing,(java.util.function.Consumer<Object>)value->fail("No resource initialized")));
+        assertTrue(failure.getCause() instanceof IllegalArgumentException);
+        session.closure().toCompletableFuture().get(1,TimeUnit.SECONDS);
+        assertThrows(ContentException.class,session::check);
+        assertTrue(p.b.e.restricted().status(id).consumed());
+        assertThrows(ContentException.class,()->p.b.e.restricted().open(p.b.e.restricted().reviewOpen(id),true));
+    }
+
+    @Test public void failedInitializationCleanupCannotReportSuccessfulClosure() throws Exception {
+        Pair p=new Pair();String id=p.send(RestrictedPayload.Mode.ONCE);
+        var session=p.b.e.restricted().open(p.b.e.restricted().reviewOpen(id),true);
+        Class<?> decoder=Class.forName("app.umbra.content.RestrictedContentService$Decoder");
+        var cleanupFailed=session.getClass().getDeclaredMethod("cleanupFailed");cleanupFailed.setAccessible(true);
+        Object failing=java.lang.reflect.Proxy.newProxyInstance(decoder.getClassLoader(),new Class<?>[]{decoder},
+                (proxy,method,args)->{cleanupFailed.invoke(session);throw new IllegalArgumentException("Synthetic initialization cleanup failure");});
+        var decode=session.getClass().getDeclaredMethod("decode",decoder,java.util.function.Consumer.class);decode.setAccessible(true);
+        assertThrows(java.lang.reflect.InvocationTargetException.class,
+                ()->decode.invoke(session,failing,(java.util.function.Consumer<Object>)value->fail("No resource initialized")));
+        assertThrows(ExecutionException.class,()->session.closure().toCompletableFuture().get(1,TimeUnit.SECONDS));
+        session.close();assertThrows(ContentException.class,session::check);
+        assertTrue(p.b.e.restricted().status(id).consumed());
+    }
+
 }

@@ -172,6 +172,7 @@ public final class RestrictedContentService {
         final long deadline,startedWall,startedNanos=System.nanoTime();
         private final java.util.concurrent.atomic.AtomicBoolean denied=new java.util.concurrent.atomic.AtomicBoolean();
         private final java.util.List<AutoCloseable> resources=new java.util.ArrayList<>();
+        private final java.util.concurrent.atomic.AtomicBoolean unconfirmedCleanup=new java.util.concurrent.atomic.AtomicBoolean();
         private final java.util.concurrent.CompletableFuture<Void> closed=new java.util.concurrent.CompletableFuture<>();
         private volatile java.util.concurrent.ScheduledFuture<?> expiry;
         private EmergencyLock.Registration registration;
@@ -192,8 +193,14 @@ public final class RestrictedContentService {
                 // A session owns one bounded native decoder; repeated construction must not
                 // accumulate bitmaps or codec resources until expiry.
                 if(!resources.isEmpty())throw new ContentException(ContentException.Code.CAPACITY);
-                value=decoder.decode(bytes);
-                resources.add(()->dispose.accept(value));
+                try {
+                    value=decoder.decode(bytes);
+                    resources.add(()->dispose.accept(value));
+                } catch(Exception | Error failure) {
+                    // A failed initialization is terminal too. Never leave plaintext/access
+                    // alive until the timer merely because no decoder was registered.
+                    close();throw failure;
+                }
             }
             check();return value;
         }
@@ -201,6 +208,8 @@ public final class RestrictedContentService {
             check();synchronized(this){timeCheck();action.run();}check();
         }
         public RestrictedPayload.Format format() throws org.json.JSONException {return RestrictedPayload.Format.valueOf(descriptor.getString("format"));}
+        /** Internal adapters report failed cleanup even if initialization never registered a resource. */
+        void cleanupFailed() {unconfirmedCleanup.set(true);close();}
         public java.util.concurrent.CompletionStage<Void> closure() {return closed.minimalCompletionStage();}
         /** Invalidation never waits for a decoder or a Records lock. Closure is confirmed separately. */
         @Override public void close() {
@@ -213,7 +222,7 @@ public final class RestrictedContentService {
                     resources.clear();if(bytes!=null)Arrays.fill(bytes,(byte)0);bytes=null;
                 }
                 active.remove(this);
-                if(failed)closed.completeExceptionally(new IllegalStateException("Restricted resource closure failed"));
+                if(failed || unconfirmedCleanup.get())closed.completeExceptionally(new IllegalStateException("Restricted resource closure failed"));
                 else {if(registration!=null)registration.close();closed.complete(null);}
             });
         }

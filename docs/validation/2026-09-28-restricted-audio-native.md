@@ -219,3 +219,55 @@ Exported full-history backup `umbra-security-content-e855363.tar.gz` SHA-256
 Downloads/UMBRA_RESPALDOS_CODEX. It includes master text, recoverable bundle,
 validation, exact HEAD/tree and CI/APK hash snapshot. Isolated restore matched
 HEAD and fsck passed. Later working changes require their next backup.
+
+## Decoder initialization closure and 13c89ad capture control
+
+Checkpoint `13c89adf55e4f22ef1e3b00de7a20f5e322bbdb8`, privacy run
+36454508257, tested checkout `5140dbf7b5fc9dc8a39b806d2eeaf335f24f0ada`:
+**FAILURE in both debug and R8**, exactly one of ten connected cases.
+Playback now reached its positive routed state and confirmed closure; both
+force-stop receipts and connected real-HTTPS note fixtures completed. Offline
+was not reached in this run and is not counted as passed.
+
+The zero-input native codec reference returned peak 0 / RMS 0 in both matrices.
+Captured/decoded AVD input instead measured debug peak 11 / RMS 3.701848597081502
+(21504 samples), R8 peak 10 / RMS 1.5402281738044374 (21504 samples).
+This **disproves the proposed codec-only silence-floor explanation**. The exact
+capture/HAL cause remains unresolved. The original zero assertion remains;
+no tolerance was loosened. The next fixture adds a bounded, separate raw
+AudioRecord observation before the product recording, using the same route
+and source, guarded by owned AVD and `-no-audio`. It exports statistics only,
+wipes PCM, and is absent from production. This is diagnostic, not a fix or
+physical microphone validation.
+
+Artifacts downloaded through authorized GitHub access:
+- debug 10984903033: SHA-256 `4155dd27fcad43f4aec974a2fe5d4c4c001f3f69060c163cf4f0f76c95ecb2a4`.
+- R8 10985412631: SHA-256 `2c0a597c8f9369fc0c72489e800a6479385849e504407f1278fdc6ba6f6ba0fe`.
+
+Independent common-engine regression: a decoder initialization exception left
+an already consumed session authorized until its deadline. The new JVM test
+failed before the fix with TimeoutException waiting for closure (Gradle exit 1,
+`decoder-init-before.log`). The engine now invalidates and closes on initialization
+failure without undoing consumption. Playback additionally attempts every owned
+cleanup independently; a cleanup failure before resource registration is reported
+to the session so its closure cannot falsely succeed. A synthetic failing-cleanup
+regression checks exceptional closure and persistent consumption; it is not a
+claim of reproducing a native MediaPlayer release failure.
+
+Local validation of this patch, Python 3.13.12 / JDK 21 / pinned Gradle 8.13:
+- `:app:testConnectedDebugUnitTest :app:testOfflineDebugUnitTest --tests app.umbra.RestrictedContentTest`: exit 0; 12 tests per flavor, zero failures/errors/skips.
+- `:app:assembleConnectedDebugAndroidTest :app:assembleOfflineDebugAndroidTest :app:lintConnectedDebug :app:lintOfflineDebug`: exit 0.
+- `python scripts/repository_guard.py`: exit 0, 444 source files, not a security audit.
+- `git diff --check`: exit 0. No production UI file changed.
+
+Preservation: previous e855363 archive hash rechecked. Full-history 13c89ad
+bundle cloned in an isolated repository; explicit branch checkout and
+`git fsck --full` succeeded. A bundle without symbolic HEAD requires
+`git clone -b codex/security-content-completion history.bundle NEW_DIRECTORY`;
+the initial unqualified clone could not select HEAD and was not counted as a
+successful recovery. Export verified byte-for-byte at
+`C:\Users\Usuario\Downloads\UMBRA_RESPALDOS_CODEX\umbra-security-content-13c89ad.tar.gz`,
+SHA-256 `13f53d1d2cc8dc61c569f7fa4997e0d45cc1e2e5373e8606a83317da1de10860`.
+Its adjacent RESTORE file documents explicit branch selection. The archive
+contains the initial uncommitted decoder regression, not the subsequent fix;
+original backups remain untouched. A/B remain partial and C remains pending.
