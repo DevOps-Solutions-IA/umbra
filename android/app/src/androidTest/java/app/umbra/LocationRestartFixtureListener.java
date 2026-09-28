@@ -20,7 +20,10 @@ public final class LocationRestartFixtureListener extends RunListener {
                 Engine a=new Engine(ar),b=new Engine(br); LocationAndroidTest.pair(a,b,ar,br);
                 String session=a.locations().start(a.locations().review(b.id(),LocationPayload.Mode.ZONE,900,true),true);
                 a.locations().publish(session,12.345678,45.678912,5,Bytes.now(),"ANDROID_FINE");
-                if(app.umbra.calls.CallPlatform.ENABLED) a.calls().invite(a.calls().reviewInvite(b.id(),app.umbra.calls.CallPayload.NetworkPolicy.RELAY_ONLY),true);
+                if(app.umbra.calls.CallPlatform.ENABLED) {
+                    a.connectivity().vaultUnlocked(); a.connectivity().connect("https://relay.example.invalid",true);
+                    a.calls().invite(a.calls().reviewInvite(b.id(),app.umbra.calls.CallPayload.NetworkPolicy.RELAY_ONLY),true);
+                }
                 if(a.outbox().size()!=(app.umbra.calls.CallPlatform.ENABLED?3:2)) throw new AssertionError("Pending location missing");
                 Bundle status=new Bundle(); status.putString("locationRestart","READY committed synthetic session; awaiting actual force-stop");
                 InstrumentationRegistry.getInstrumentation().sendStatus(0,status);

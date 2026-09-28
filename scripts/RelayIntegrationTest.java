@@ -41,6 +41,8 @@ public final class RelayIntegrationTest {
         alice.initialize("Synthetic Alice"); bob.initialize("Synthetic Bob");
         AdmissionLab.provision(alice,exchange,"admission-a",Files.readString(exchange.resolve("admission-realm")));
         AdmissionLab.provision(bob,exchange,"admission-b",Files.readString(exchange.resolve("admission-realm")));
+        alice.connectivity().vaultUnlocked(); alice.connectivity().connect(base,true);
+        bob.connectivity().vaultUnlocked(); bob.connectivity().connect(args[2],true);
         JSONObject aProfile = alice.profile(), bProfile = bob.profile();
         PairingService inviter = new PairingService(aStore), joiner = new PairingService(bStore);
         try (RelayClient client = new RelayClient(base, () -> true, alice.admission())) {
@@ -132,7 +134,7 @@ public final class RelayIntegrationTest {
             // A separate hostile TLS fixture withholds a PUBLIC realm response body.
             // No unadmitted private API is opened to exercise cancellation.
             ExecutorService pendingExecutor = Executors.newSingleThreadExecutor();
-            try (RelayClient pendingClient = new RelayClient(args[2])) {
+            try (RelayClient pendingClient = new RelayClient(args[2],()->true,bob.admission())) {
                 Future<Boolean> failed = pendingExecutor.submit(() -> {
                     try { pendingClient.publicRealm(); return false; }
                     catch (Exception expected) { return true; }

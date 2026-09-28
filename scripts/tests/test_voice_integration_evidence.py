@@ -2,9 +2,9 @@
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing
+from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing, coordinate_mute, processing_barrier
 import voice_network_evidence as network
 
 class VoiceEvidenceTest(unittest.TestCase):
@@ -60,9 +60,42 @@ class VoiceEvidenceTest(unittest.TestCase):
         for field in ("decodedBuffers","capturedBuffers","receivedAudioPackets"):
             bad=good.copy();bad[field]=0;self.assertFalse(valid_audio(bad))
 
+    def test_processing_waits_for_both_actions_and_rejects_old_step(self):
+        writes=[]
+        def read(serial,*unused):
+            self.assertEqual([],writes)
+            return {"step":1,"applied":True,"elapsedMillis":100 if serial=="a" else 9000}
+        result=processing_barrier(("a","b"),{"a":1,"b":2},10,1,lambda *args:writes.append(args),read)
+        self.assertEqual(2,len(writes));self.assertEqual(9000,result[1]["elapsedMillis"])
+        write=Mock()
+        with self.assertRaises(RuntimeError):
+            processing_barrier(("a","b"),{"a":1,"b":2},10,2,write,lambda *args:{"step":1,"applied":True,"elapsedMillis":100})
+        write.assert_not_called()
+
+    def test_mute_waits_for_both_native_confirmations_before_observing(self):
+        events=[]
+        def read(serial,name,*unused):
+            events.append(("read",serial,name))
+            if name.endswith("applied.json"):
+                self.assertFalse(any(e[0]=="write" and e[2].endswith("observe.json") for e in events))
+                return {"applied":True,"elapsedMillis":100 if serial=="a" else 9000}
+            return {"quiet":True,"observedMillis":1200,"decodedTones":0}
+        result=coordinate_mute(("a","b"),{"a":1,"b":2},10,lambda serial,name,value:events.append(("write",serial,name)),read)
+        self.assertEqual(2,len(result["observed"]))
+        self.assertEqual(9000,result["applied"][1]["elapsedMillis"])
+
+    def test_mute_missing_confirmation_or_empty_window_fails(self):
+        applied={"applied":True,"elapsedMillis":100}
+        for responses in ([applied,{"applied":False,"elapsedMillis":100}],
+                          [applied,applied,{"quiet":True,"observedMillis":0,"decodedTones":0}],
+                          [applied,applied,{"quiet":True,"observedMillis":1200,"decodedTones":4}]):
+            with self.assertRaises(RuntimeError):coordinate_mute(("a","b"),{"a":1,"b":2},10,Mock(),Mock(side_effect=responses))
+
     def test_empty_crashed_or_failed_instrumentation_never_passes(self):
         good="engineVoice=PASS\nOK (3 tests)\nINSTRUMENTATION_CODE: -1\n"
         self.assertTrue(valid_report(good))
+        self.assertFalse(valid_report(good,private_lock=True))
+        self.assertTrue(valid_report(good+"\nprivateStartupLock=PASS old relay rejected; no reconnect",private_lock=True))
         for text in ("",good.replace("3 tests","0 tests"),good.replace("engineVoice=PASS",""),good+"INSTRUMENTATION_STATUS_CODE: -2",good+"Process crashed"):
             self.assertFalse(valid_report(text))
 

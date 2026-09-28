@@ -1,5 +1,18 @@
 # Transferencia técnica a Codex
 
+## Private startup strict — 2026-09-27, implementación bajo validación
+
+Rama `codex/private-startup-no-network`, base exacta
+`a78a3ffd6962d15acf38efc070ca8f88385fc1fa` de PR #13. Desbloquear no conecta:
+gate de dominio por generación, HTTPS y Nearby separados, cancelación al bloquear.
+No se modifica la rama de UI de Claude. La Activity heredada necesita el ajuste
+mínimo documentado para dejar de restaurar el antiguo flag online.
+Ver [contrato](PRIVATE_STARTUP.md), [ADR](adr/ADR-private-startup.md) y
+[evidencia](validation/2026-09-27-private-startup.md). AVD y CI del nuevo HEAD
+siguen pendientes hasta registrarlos allí. No hay disponibilidad instantánea
+mientras está desconectada. Emergency Lock y demás ampliaciones quedan fuera.
+
+
 ## Private device admission — 2026-09-27, bajo validación
 
 Rama dependiente `codex/private-device-admission`, base exacta

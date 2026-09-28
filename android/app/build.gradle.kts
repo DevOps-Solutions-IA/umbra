@@ -116,7 +116,7 @@ if (providers.gradleProperty("umbraMediaLab").orNull == "true") {
         archiveFileName.set("media-fixture-references.jar")
         destinationDirectory.set(layout.buildDirectory.dir("generated/mediaLab"))
         from(layout.buildDirectory.dir("intermediates/javac/connectedMediaLabAndroidTest/compileConnectedMediaLabAndroidTestJavaWithJavac/classes")) {
-            include("app/umbra/AdmissionFixture*.class", "app/umbra/AdmissionLab*.class", "app/umbra/media/ExpiredDeliveryAssertion.class", "app/umbra/media/VideoSurfaceLifecycleTest*.class", "app/umbra/media/CameraProviderFixtureListener*.class", "app/umbra/media/SyntheticVideoCapturer*.class", "app/umbra/media/VoiceEngineFixtureListener*.class", "app/umbra/media/VoiceRestartFixtureListener*.class",
+            include("app/umbra/AdmissionFixture*.class", "app/umbra/AdmissionLab*.class", "app/umbra/media/ExpiredDeliveryAssertion.class", "app/umbra/media/VideoSurfaceLifecycleTest*.class", "app/umbra/media/CameraProviderFixtureListener*.class", "app/umbra/media/SyntheticVideoCapturer*.class", "app/umbra/media/VoiceEngineFixtureListener*.class", "app/umbra/media/DecodedAudioWindow*.class", "app/umbra/media/VoiceRestartFixtureListener*.class",
                 "app/umbra/lab/SqliteDeviceRecords*.class", "app/umbra/DeviceSignalTest*.class", "app/umbra/DeviceMemoryRecords*.class")
         }
     }
@@ -164,7 +164,7 @@ if (vaultLab) {
             archiveFileName.set("$variant-fixture.jar")
             destinationDirectory.set(layout.buildDirectory.dir("generated/vaultLab"))
             from(layout.buildDirectory.dir("intermediates/javac/${variant}AndroidTest/compile${capital}AndroidTestJavaWithJavac/classes")) {
-                include("app/umbra/DeviceSignalTest*.class", "app/umbra/AdmissionRestartFixtureListener*.class", "app/umbra/DeviceAdmissionTest*.class", "app/umbra/lab/SqliteDeviceRecords*.class", "app/umbra/AdmissionFixture*.class", "app/umbra/DeviceVaultPasswordTest*.class", "app/umbra/PasswordRestartFixtureListener*.class",
+                include("app/umbra/PrivateStartupTest*.class", "app/umbra/PrivateStartupFixtureListener*.class", "app/umbra/AdmissionLab*.class", "app/umbra/DeviceSignalTest*.class", "app/umbra/AdmissionRestartFixtureListener*.class", "app/umbra/DeviceAdmissionTest*.class", "app/umbra/lab/SqliteDeviceRecords*.class", "app/umbra/AdmissionFixture*.class", "app/umbra/DeviceVaultPasswordTest*.class", "app/umbra/PasswordRestartFixtureListener*.class",
                     "app/umbra/DeviceSignalTest*.class", "app/umbra/DeviceMemoryRecords*.class")
             }
         }

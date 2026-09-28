@@ -30,6 +30,7 @@ public final class BluetoothLink implements AutoCloseable {
     private static final UUID SERVICE = UUID.fromString("b171f40c-36ac-42a1-b128-3a4343d14002");
     private final BluetoothAdapter adapter;
     private final Listener listener;
+    private final app.umbra.connectivity.ConnectivityService.Lease consent;
     private final ThreadPoolExecutor io = new ThreadPoolExecutor(2, 2, 0L, TimeUnit.MILLISECONDS,
         new ArrayBlockingQueue<>(2), new ThreadPoolExecutor.AbortPolicy());
     private final ThreadPoolExecutor writes = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
@@ -42,9 +43,11 @@ public final class BluetoothLink implements AutoCloseable {
     private volatile long started, lastFrame;
     private long epoch;
     private final AtomicBoolean closed = new AtomicBoolean();
-    public BluetoothLink(Context context, Listener listener) {
+    public BluetoothLink(Context context, Listener listener, app.umbra.connectivity.ConnectivityService.Lease consent) {
+        this.consent=java.util.Objects.requireNonNull(consent); consent.checkNearby();
         BluetoothManager manager = context.getSystemService(BluetoothManager.class);
         adapter = manager == null ? null : manager.getAdapter(); this.listener = listener;
+        consent.attach(this::close);
         watchdog.scheduleWithFixedDelay(() -> {
             BluetoothSocket active = socket; if (active == null) return;
             long now = System.nanoTime();
@@ -63,18 +66,23 @@ public final class BluetoothLink implements AutoCloseable {
     public BluetoothAdapter adapter() { return adapter; }
     public String connectedPeer() { return peer; }
     private void available() {
+        consent.checkNearby();
         if (closed.get()) throw new IllegalStateException("Enlace cerrado");
         if (adapter == null || !adapter.isEnabled()) throw new IllegalStateException("Activa Bluetooth en este teléfono");
     }
     public void listen() throws IOException { listen(false); }
-    public synchronized void listen(boolean enroll) throws IOException {
-        available(); disconnect(); stopListening(); long expectedEpoch = epoch;
+    public void listen(boolean enroll) throws IOException {
+        available();
+        synchronized(this) {
+        if(closed.get()) throw new IOException("Link closed");
+        disconnect(); stopListening(); long expectedEpoch = epoch;
         server = adapter.listenUsingRfcommWithServiceRecord("UMBRA", SERVICE);
         BluetoothServerSocket accepting = server;
         listener.status(enroll ? "Bluetooth: esperando vinculación explícita" : "Bluetooth: esperando contacto verificado");
         try {
             io.execute(() -> {
                 try {
+                    consent.checkNearby();
                     BluetoothSocket accepted = accepting.accept(120_000);
                     synchronized (this) {
                         if (closed.get() || server != accepting || epoch != expectedEpoch) { accepted.close(); return; }
@@ -85,22 +93,27 @@ public final class BluetoothLink implements AutoCloseable {
                 finally { try { accepting.close(); } catch (IOException ignored) {} }
             });
         } catch (RejectedExecutionException e) { stopListening(); throw new IOException("Bluetooth ocupado", e); }
+        }
     }
     public void connect(BluetoothDevice device) { connect(device, false); }
-    public synchronized void connect(BluetoothDevice device, boolean enroll) {
+    public void connect(BluetoothDevice device, boolean enroll) {
         available();
+        synchronized(this) {
+        if(closed.get()) throw new IllegalStateException("Link closed");
         if (device == null || device.getBondState() != BluetoothDevice.BOND_BONDED)
             throw new SecurityException("Vincula primero ambos teléfonos mediante Android");
         disconnect(); stopListening(); long expectedEpoch = epoch;
         try {
             io.execute(() -> {
-                try { runSocket(device.createRfcommSocketToServiceRecord(SERVICE), true, enroll, expectedEpoch); }
+                try { consent.checkNearby(); runSocket(device.createRfcommSocketToServiceRecord(SERVICE), true, enroll, expectedEpoch); }
                 catch (Exception e) { if (!closed.get()) listener.status("Bluetooth: conexión fallida"); }
             });
         } catch (RejectedExecutionException e) { throw new IllegalStateException("Bluetooth ocupado", e); }
+        }
     }
     private void runSocket(BluetoothSocket active, boolean dialer, boolean enroll, long expectedEpoch) {
         try {
+            consent.checkNearby();
             synchronized (this) {
                 if (closed.get() || epoch != expectedEpoch || socket != null) { active.close(); return; }
                 socket = active; started = lastFrame = System.nanoTime();
@@ -146,7 +159,9 @@ public final class BluetoothLink implements AutoCloseable {
             listener.status(enroll ? "Clave del dispositivo comprobada · verifica el código del contacto" : "Bluetooth: contacto verificado conectado");
             long window = System.nanoTime(); int frames = 0;
             while (!closed.get() && socket == active) {
+                consent.checkNearby();
                 JSONObject frame = Wire.parse(Framing.read(active.getInputStream()), Framing.MAX_FRAME);
+                consent.checkNearby();
                 long now = System.nanoTime();
                 if (now - window >= TimeUnit.MINUTES.toNanos(1)) { window = now; frames = 0; }
                 if (++frames > 120) throw new IOException("Frame rate exceeded");
@@ -164,6 +179,7 @@ public final class BluetoothLink implements AutoCloseable {
         } finally { disconnectExpected(active); try { active.close(); } catch (IOException ignored) {} }
     }
     private void write(BluetoothSocket active, JSONObject frame) throws Exception {
+        consent.checkNearby();
         if (closed.get() || active == null || socket != active) throw new IOException("Link changed");
         ScheduledFuture<?> deadline = watchdog.schedule(() -> disconnectExpected(active), 15, TimeUnit.SECONDS);
         try { Framing.write(active.getOutputStream(), Bytes.utf8(frame.toString())); }
@@ -198,6 +214,7 @@ public final class BluetoothLink implements AutoCloseable {
         inFlight.forEach((id, future) -> future.completeExceptionally(new IOException("Link closed"))); inFlight.clear();
     }
     @Override public void close() {
-        closed.set(true); disconnect(); stopListening(); watchdog.shutdownNow(); writes.shutdownNow(); io.shutdownNow();
+        if(!closed.compareAndSet(false,true)) return;
+        consent.close(); disconnect(); stopListening(); watchdog.shutdownNow(); writes.shutdownNow(); io.shutdownNow();
     }
 }

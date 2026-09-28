@@ -32,6 +32,7 @@ public class DeviceLinkingTest {
         }
         public synchronized void remove(String b, String k) { gate.requireUnlocked(); memory.remove(b,k); }
         public synchronized List<String> keys(String b) { gate.requireUnlocked(); return memory.keys(b); }
+        public void onInvalidation(Runnable callback) { gate.onInvalidation(callback); }
         public Runnable authorization() { var lease = gate.enter(); return () -> gate.check(lease); }
         public synchronized <T> T transaction(Work<T> work) throws Exception {
             var lease = gate.enter(); Work<Void> delayed = before; before = null; if (delayed != null) delayed.run();

@@ -24,14 +24,14 @@ final class AdmissionRelayIntegration {
         a2.complete(a1.approve(a1.reviewResponse(a2.respond(a2.reviewChallenge(challenge),true)),true));
         check(e[1].admission().getAdmissionState()==AdmissionService.State.NOT_ADMITTED,"A2 linked without inheriting admission");
         try(RelayClient notAdmitted=new RelayClient(base,()->true,e[1].admission())) {
-            try { notAdmitted.register(e[1].profile(),invitations[6]); throw new AssertionError("Unadmitted relay accepted"); }
-            catch(SecurityException expected) { check(true,"A2 private API denied before independent approval"); }
-        }
+            notAdmitted.register(e[1].profile(),invitations[6]); throw new AssertionError("Unadmitted relay accepted");
+        } catch(SecurityException expected) { check(true,"A2 private API denied before independent approval"); }
         AdmissionLab.provision(e[1],exchange,"admission-acceptance-1",realm);
         // Public authority evidence is explicitly delivered, separately from roster linking.
         e[0].admission().installPeerCredential(e[1].admission().requireAdmission().wire(),e[1].id());
         e[1].importCard(e[2].createCard());e[2].importCard(e[1].createCard());
         String safety=Bytes.safetyCode(e[1].id(),e[2].id()); e[1].verify(e[2].id(),safety);e[2].verify(e[1].id(),safety);
+        for(Engine engine:e) { engine.connectivity().vaultUnlocked(); engine.connectivity().connect(base,true); }
         try(RelayClient c1=new RelayClient(base,()->true,e[0].admission());
             RelayClient c2=new RelayClient(base,()->true,e[1].admission());
             RelayClient cb=new RelayClient(base,()->true,e[2].admission())) {

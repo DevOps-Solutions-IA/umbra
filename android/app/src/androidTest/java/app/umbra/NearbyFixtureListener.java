@@ -54,6 +54,7 @@ public final class NearbyFixtureListener extends RunListener {
             if(negative && dialer) engine.admission().installRealmConfig(arguments.getString("admissionRealm",""),true);
             else AdmissionLab.provision(engine,approval.getParentFile().toPath(),"synthetic-admission",arguments.getString("admissionRealm",""));
             new app.umbra.devices.DeviceService(records).migrate();
+            engine.connectivity().vaultUnlocked();
             link = new BluetoothLink(InstrumentationRegistry.getInstrumentation().getTargetContext(), new BluetoothLink.Listener() {
                 public String ownId() throws Exception { synchronized (recordsLock) { return engine.id(); } }
                 public JSONObject ownCard() throws Exception { synchronized (recordsLock) { return engine.createCard(); } }
@@ -109,7 +110,7 @@ public final class NearbyFixtureListener extends RunListener {
                     if(stage.equals("CLOSED_OR_REJECTED")) closedOrRejected=true;
                     NearbyFixtureListener.this.status("nearbyTransportStage",stage);
                 }
-            });
+            }, engine.connectivity().startNearby(true));
             if (dialer) link.connect(device, true); else link.listen(true);
             status("nearbyStage", "listening-or-connecting");
             if(negative) {

@@ -34,6 +34,40 @@ def valid_audio(value):
             and value.get("codec")=="audio/opus" and value.get("sdpAddressAudit") is True)
 
 
+def processing_barrier(serials, processes, deadline, index, write, read):
+    applied=[]
+    for serial in serials:
+        value=read(serial,f"synthetic-voice-processing-applied-{index}.json",processes[serial],deadline)
+        if (set(value)!={"step","applied","elapsedMillis"} or type(value["step"]) is not int
+                or value["step"]!=index or value["applied"] is not True
+                or type(value["elapsedMillis"]) is not int or value["elapsedMillis"]<=0):
+            raise RuntimeError("Missing or replayed processing action confirmation")
+        applied.append(value)
+    for serial in serials:write(serial,f"synthetic-voice-processing-observe-{index}.json",{"bothApplied":True,"step":index})
+    return applied
+
+
+def coordinate_mute(serials, processes, deadline, write, read):
+    for serial in serials: write(serial,"synthetic-voice-mute.json",{"mute":True})
+    applied=[]
+    for serial in serials:
+        value=read(serial,"synthetic-voice-mute-applied.json",processes[serial],deadline)
+        if set(value)!={"applied","elapsedMillis"} or value["applied"] is not True or type(value["elapsedMillis"]) is not int or value["elapsedMillis"]<=0:
+            raise RuntimeError("Missing native mute application confirmation")
+        applied.append(value)
+    # No receive window starts while the other endpoint has yet to apply mute.
+    for serial in serials:write(serial,"synthetic-voice-mute-observe.json",{"bothApplied":True})
+    observed=[]
+    for serial in serials:
+        value=read(serial,"synthetic-voice-muted.json",processes[serial],deadline)
+        if (set(value)!={"quiet","observedMillis","decodedTones"} or value["quiet"] is not True
+                or type(value["observedMillis"]) is not int or not 1200<=value["observedMillis"]<=2500
+                or type(value["decodedTones"]) is not int or not 0<=value["decodedTones"]<=3):
+            raise RuntimeError("Muted endpoints continued delivering decoded tones or lacked a positive observation window")
+        observed.append(value)
+    return {"applied":applied,"observed":observed}
+
+
 def valid_stop(report, *, expected_expiry=False):
     return (set(report)=={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"}
             and report["failedClosed"] is True
@@ -63,8 +97,9 @@ def valid_processing(value, expected, *, video=False):
     return False
 
 
-def valid_report(report):
-    return ("engineVoice=PASS" in report and re.search(r"^OK \(3 tests\)$",report,re.M)
+def valid_report(report, *, private_lock=False):
+    return ((not private_lock or "privateStartupLock=PASS old relay rejected; no reconnect" in report)
+            and "engineVoice=PASS" in report and re.search(r"^OK \(3 tests\)$",report,re.M)
             and "INSTRUMENTATION_CODE: -1" in report
             and not re.search(r"INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b",report)
             and not any(x in report for x in ("FAILURES!!!","INSTRUMENTATION_FAILED","Process crashed")))
@@ -147,8 +182,8 @@ def main():
             run(serial,"shell","pm","grant",PACKAGE,"android.permission.CAMERA" if args.scenario=="camera-permission-revoked" else "android.permission.RECORD_AUDIO")
         if args.scenario=="camera-denied":run(serial,"shell","pm","revoke",PACKAGE,"android.permission.CAMERA")
         # Explicit names only, confined to this disposable debug UID.
-        run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-")])
-        for suffix in ("admission-ready","admission-change","admission-result","public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
+        run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-","processing-applied-","processing-observe-")])
+        for suffix in ("admission-ready","admission-change","admission-result","public","peer","ready","start","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
             run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
     args.reports.mkdir(parents=True,exist_ok=True)
     if optimized_evidence:
@@ -210,7 +245,7 @@ def main():
                 processes[serial]=subprocess.Popen([adb,"-s",serial,"shell","am","instrument","-w","-r",
                     "-e","class","app.umbra.DeviceSignalTest","-e","listener","app.umbra.media.VoiceEngineFixtureListener",
                     PACKAGE+".test/androidx.test.runner.AndroidJUnitRunner"],stdout=stream,stderr=subprocess.STDOUT)
-            deadline=time.monotonic()+(160 if args.modulation else 90)
+            deadline=time.monotonic()+(160 if args.modulation else 140 if args.video else 90)
             approvals={}
             for serial in (args.a,args.b):
                 request=read(serial,"synthetic-admission-request.json",processes[serial],deadline)
@@ -229,6 +264,7 @@ def main():
                 for serial in (args.a,args.b):write(serial,"synthetic-voice-initial-natural.json",{"naturalVoiceExplicitlyConfirmed":True})
             evidence=[]
             stop_evidence=[]
+            mute_evidence=None
             for serial in (args.a,args.b):
                 value=read(serial,"synthetic-voice-audio.json",processes[serial],deadline)
                 expected_rejection={"rejectedBeforeCapture":True}
@@ -248,10 +284,7 @@ def main():
                     if denial.get("deniedWithoutVideoState") is not True or denial.get("decodedAudioAfterDenial",0)<50:
                         raise RuntimeError("Camera denial did not preserve authorized audio")
             if not rejection:
-                for serial in (args.a,args.b): write(serial,"synthetic-voice-mute.json",{"mute":True})
-                for serial in (args.a,args.b):
-                    if read(serial,"synthetic-voice-muted.json",processes[serial],deadline)!={"quiet":True}:
-                        raise RuntimeError("Muted endpoints continued delivering decoded tones")
+                mute_evidence=coordinate_mute((args.a,args.b),processes,deadline,write,read)
                 for serial in (args.a,args.b): write(serial,"synthetic-voice-resume.json",{"resume":True})
                 for serial in (args.a,args.b):
                     if read(serial,"synthetic-voice-resumed.json",processes[serial],deadline).get("decodedAfterUnmute",0)<50:
@@ -290,12 +323,13 @@ def main():
                        ("off","natural","OFF"),("on","modified","ON"),("fault","quiet","ERROR_MUTED"),("retry","modified","ON"))
                 for index,(action,expected,effective) in enumerate(steps):
                     for serial in (args.a,args.b):write(serial,f"synthetic-voice-processing-{index}.json",{"action":action,"expected":expected})
+                    applied=processing_barrier((args.a,args.b),processes,deadline,index,write,read)
                     results=[read(serial,f"synthetic-voice-processing-result-{index}.json",processes[serial],deadline) for serial in (args.a,args.b)]
                     if not valid_processing(results[0],"natural",video=args.video) or not valid_processing(results[1],expected,video=args.video):raise RuntimeError("Missing bounded decoded modulation evidence")
                     if any(value.get("step")!=index for value in results):raise RuntimeError("Replayed processing evidence")
                     if effective is not None and results[0].get("effective")!=effective:raise RuntimeError("Native processor did not confirm expected effective mode")
                     if results[1].get("effective")!="OFF":raise RuntimeError("Remote control changed independent peer processing")
-                    processing.append({"action":action,"expectedRemote":expected,"results":results})
+                    processing.append({"action":action,"expectedRemote":expected,"applied":applied,"results":results})
                 (args.reports/"voice-processing.json").write_text(json.dumps({"apkSha256":apk_hashes,"synthetic":True,"optimized":args.optimized,"video":args.video,"initialProcessing":initial_processing,"stages":processing},indent=2)+"\n")
             if args.scenario in ("turn-loss","trust-loss","lock","credential-expiry","device-revoked","storage-failure"):
                 for serial in (args.a,args.b): write(serial,"synthetic-voice-loss.json",{"action":args.scenario})
@@ -359,7 +393,7 @@ def main():
                 for stream in streams: stream.flush()
                 for name in ("engine-voice-a.log","engine-voice-b.log"):
                     report=(args.reports/name).read_text()
-                    if not valid_report(report):
+                    if not valid_report(report,private_lock=args.scenario=="lock"):
                         raise RuntimeError("Missing/failed authenticated voice evidence: "+name)
             if admission_revocation_check:
                 admission_results=[json.loads(run(serial,"shell","run-as",PACKAGE,"cat","files/synthetic-voice-admission-result.json").stdout) for serial in (args.a,args.b)]
@@ -415,7 +449,7 @@ def main():
                             continue
                         network.append(summarize(snapshot,turn.address,turn_port=3479 if args.scenario=="unreachable" else 3478,
                                                  since=capture_since,until=capture_until,require_turn=(index==0 or args.scenario not in ("expired-auth","invalid-auth","unreachable"))))
-            (args.reports/"voice-evidence.json").write_text(json.dumps({"apkSha256":apk_hashes,"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn TLS" if args.turn_tls else "native WebRTC through coturn UDP","turnTlsCase":args.turn_tls,"scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":not rejection,"network":network,"audio":evidence,"allocationExpiry":allocation_evidence,"nativeCaptureClosure":stop_evidence,"networkImpairment":shape_evidence},indent=2)+"\n")
+            (args.reports/"voice-evidence.json").write_text(json.dumps({"apkSha256":apk_hashes,"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn TLS" if args.turn_tls else "native WebRTC through coturn UDP","turnTlsCase":args.turn_tls,"scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":not rejection,"muteBarrier":mute_evidence,"network":network,"audio":evidence,"allocationExpiry":allocation_evidence,"nativeCaptureClosure":stop_evidence,"networkImpairment":shape_evidence},indent=2)+"\n")
             print("PASS two AVD native voice scenario: "+args.scenario)
         finally:
             errors=[]
@@ -440,9 +474,9 @@ def main():
                     if process.poll() is None: process.terminate()
                     process.wait(timeout=15)
                 except Exception as failure: errors.append(failure)
-                try: run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-")])
+                try: run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-","processing-applied-","processing-observe-")])
                 except Exception as failure: errors.append(failure)
-                for suffix in ("engine","admission-ready","admission-change","admission-result","public","peer","ready","start","audio","mute","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
+                for suffix in ("engine","admission-ready","admission-change","admission-result","public","peer","ready","start","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
                     try: run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
                     except Exception as failure: errors.append(failure)
                 # These exact files belong solely to this named synthetic fixture, including failed runs.

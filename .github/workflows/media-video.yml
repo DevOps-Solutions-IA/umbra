@@ -14,6 +14,7 @@ jobs:
       fail-fast: false
       matrix:
         optimized: [false, true]
+        shard: [0, 1]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -72,11 +73,11 @@ jobs:
           umbra_start_avd umbra-video-b 5556
           options=()
           if [ "${{ matrix.optimized }}" = true ]; then options+=(--optimized); fi
-          python scripts/run_video_matrix.py --a emulator-5554 --b emulator-5556 "${options[@]}" --reports "$UMBRA_DEVICE_REPORTS"
+          python scripts/run_video_matrix.py --a emulator-5554 --b emulator-5556 "${options[@]}" --reports "$UMBRA_DEVICE_REPORTS" --shards 2 --shard "${{ matrix.shard }}"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
-          name: video-media-evidence-r8-${{ matrix.optimized }}-${{ github.sha }}
+          name: video-media-evidence-r8-${{ matrix.optimized }}-shard-${{ matrix.shard }}-${{ github.sha }}
           path: |
             android/app/build/reports/video-media/
             android/app/build/outputs/mapping/connectedMediaLab/
