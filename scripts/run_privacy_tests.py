@@ -114,6 +114,13 @@ def main():
         evidence['optimizedClasses'] = optimized_classes(mapping.read_text(), configuration.read_text())
         evidence['mappingSha256'] = hashlib.sha256(mapping.read_bytes()).hexdigest()
     consumption_restart(adb, package, args.reports)
+    if args.flavor == 'connected':
+        import sys
+        command = [sys.executable, str(ROOT/'scripts/run_restricted_https.py'),
+                   '--serial', args.serial, '--reports', str(args.reports)]
+        if args.optimized:
+            command.append('--optimized')
+        subprocess.run(command, check=True, timeout=180)
     classes = 'app.umbra.PrivacyAdaptersAndroidTest,app.umbra.RestrictedContentAndroidTest'
     expected = 10 if args.flavor == 'connected' else 9
     if args.flavor == 'connected':
