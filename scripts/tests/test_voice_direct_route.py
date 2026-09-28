@@ -56,7 +56,10 @@ class DirectRouteProbeTest(unittest.TestCase):
         import tempfile,json
         addr=subprocess.CompletedProcess([],0,'inet 10.0.2.16/24','')
         absent=subprocess.CompletedProcess([],2,'','Network is unreachable')
-        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',side_effect=[addr,absent]):
+        diagnostics=[subprocess.CompletedProcess([],0,'synthetic control-plane state','') for _ in range(5)]
+        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',side_effect=[addr,absent,*diagnostics]):
             report=Path(d)/'readiness.json'
             with self.assertRaises(RuntimeError):wait_wifi_ipv4('adb','emulator-5554',report,timeout=0)
-            self.assertEqual(2,json.loads(report.read_text())['attempts'][0]['routeExit'])
+            receipt=json.loads(report.read_text())
+            self.assertEqual(2,receipt['attempts'][0]['routeExit'])
+            self.assertEqual({'addresses','rules','routes','connectivity','network_stack'},set(receipt['failureState']))

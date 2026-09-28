@@ -22,7 +22,7 @@ def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20):
     if not serial.startswith('emulator-') or not serial[9:].isdigit():
         raise ValueError('Owned emulator required')
     import json
-    start=time.monotonic();attempts=[]
+    start=time.monotonic();attempts=[];failure_state={}
     try:
         while True:
             address=subprocess.run([adb,'-s',serial,'shell','ip','-4','addr','show','wlan0'],capture_output=True,text=True,timeout=3)
@@ -35,8 +35,23 @@ def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20):
             if ready:return found[1]
             if time.monotonic()-start>=timeout:raise RuntimeError('Owned AVD Wi-Fi IPv4 policy route unavailable within readiness budget')
             time.sleep(.2)
+    except (RuntimeError, subprocess.TimeoutExpired):
+        # Owned synthetic AVD only. Capture control-plane state before cleanup;
+        # never app logcat, packet payloads, SDP or TURN credentials.
+        for label,command in (
+                ('addresses',('ip','-4','addr','show')),
+                ('rules',('ip','-4','rule','show')),
+                ('routes',('ip','-4','route','show','table','all')),
+                ('connectivity',('dumpsys','connectivity')),
+                ('network_stack',('dumpsys','network_stack'))):
+            try:
+                captured=subprocess.run([adb,'-s',serial,'shell',*command],capture_output=True,text=True,timeout=5)
+                failure_state[label]={'exit':captured.returncode,'stdout':captured.stdout[:65536],'stderr':captured.stderr[:1024]}
+            except subprocess.TimeoutExpired:
+                failure_state[label]={'error':'diagnostic_timeout'}
+        raise
     finally:
-        reports.write_text(json.dumps({'serial':serial,'attempts':attempts},indent=2)+'\n')
+        reports.write_text(json.dumps({'serial':serial,'attempts':attempts,'failureState':failure_state},indent=2)+'\n')
 
 
 def probe_udp(adb: str, sender: str, receiver: str, address: str, evidence: dict | None = None) -> bool:

@@ -223,3 +223,13 @@ wlan0. Se limita esa preparación exclusivamente al recorrido HTTPS connected;
 offline debe funcionar sin una ruta de Internet y conserva todas sus pruebas
 UID/DNS/sensores, rechazo de connect y reinicio. No se omite ninguna suite ni
 se modifica el preflight UDP de los laboratorios multimedia connected.
+
+02c95cb, Emergency lock 36371440917: dominio debug/R8, RFCOMM y media debug
+SUCCESS. Media R8 falló antes de iniciar voz: 20 s completos con IPv4 asignada
+pero `RTNETLINK: Network is unreachable`. No es prueba de fallo de cierre ni
+éxito multimedia R8. Artefacto 10949282817, SHA-256 ZIP reportado por Actions
+b7d466d0d5913747e36f59dd8bb9f6a24a22a1482e5564ea65cf50d44cbec1d5.
+Se añaden diagnósticos acotados del plano de control del AVD propio (rutas,
+ConnectivityService y NetworkStack) antes del cleanup. Esta ampliación es
+instrumentación diagnóstica, no una corrección demostrada de la red. No aumenta
+el plazo ni convierte un fallo de preparación/UDP en aprobación.
