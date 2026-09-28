@@ -40,6 +40,12 @@ public final class RestrictedContentService {
             return new Review(recipient,mode,ttl,sessionSeconds);
         });
     }
+    /** Local preparation/capture consent for one originally reviewed recipient; never enables a transport. */
+    public Records.Work<Void> preparationAuthorization(Review review,boolean confirmed) throws Exception {
+        if(review==null || review.owner!=this || !confirmed)throw new ContentException(ContentException.Code.CONSENT_REQUIRED);
+        Records.Work<Void> check=()->db.transaction(()->{review.check(true);engine.authorizeTransport(review.target);review.check(true);return null;});
+        check.run();return check;
+    }
     public Review reviewOpen(String id) throws Exception {
         return db.transaction(()->{status(id);return new Review(id,null,0,0);});
     }

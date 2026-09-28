@@ -7,6 +7,7 @@ import android.bluetooth.*;
 import android.os.Bundle;
 import android.os.SystemClock;
 import app.umbra.core.Bytes;
+import app.umbra.content.*;
 import app.umbra.crypto.Engine;
 import app.umbra.transport.BluetoothLink;
 import org.json.JSONObject;
@@ -142,7 +143,7 @@ public final class NearbyFixtureListener extends RunListener {
                 engine.sendText(peer, "Synthetic " + role + " text", 3600);
                 engine.sendFile(peer, "synthetic.bin", Bytes.utf8("Synthetic " + role + " attachment"), 3600);
             }
-            Set<String> sent = new HashSet<>(); boolean locationSent=false, drainedAnnounced=false;long emergencyActiveNanos=0;
+            Set<String> sent = new HashSet<>(); boolean locationSent=false, imageSent=false, imageConsumed=false, drainedAnnounced=false;long emergencyActiveNanos=0;
             long deadline = SystemClock.elapsedRealtime() + 45000;
             while (SystemClock.elapsedRealtime() < deadline) {
                 if (receiveFailure != null) throw new AssertionError("Incoming processing failed", receiveFailure);
@@ -151,6 +152,17 @@ public final class NearbyFixtureListener extends RunListener {
                     if(!locationSent && engine.get("device-roster",peer)!=null) {
                         var consent=engine.locations().review(peer,app.umbra.location.LocationPayload.Mode.MANUAL,120,false);
                         engine.locations().manual(consent,true,12.345678,45.678912); locationSent=true;
+                    }
+                    if(locationSent && !imageSent) {
+                        android.graphics.Bitmap pixels=android.graphics.Bitmap.createBitmap(16,16,android.graphics.Bitmap.Config.ARGB_8888);
+                        pixels.eraseColor(dialer?0xff336699:0xff993366);
+                        byte[] original;
+                        try {var output=new java.io.ByteArrayOutputStream();require(pixels.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output),"Synthetic PNG encoding failed");original=output.toByteArray();}
+                        finally{pixels.recycle();}
+                        try {
+                            var consent=engine.restricted().reviewSend(peer,RestrictedPayload.Mode.ONCE,600,30);
+                            engine.restricted().send(consent,RestrictedImages.prepare(original,records.authorization()),true);imageSent=true;
+                        }finally{Arrays.fill(original,(byte)0);}
                     }
                     queue = engine.outbox();
                 }
@@ -173,7 +185,23 @@ public final class NearbyFixtureListener extends RunListener {
                     long incoming = messages.stream().filter(m -> !m.optBoolean("outgoing")).count();
                     long delivered = messages.stream().filter(m -> m.optBoolean("outgoing") && "Entregado".equals(m.optString("status"))).count();
                     require(incoming <= 2, "Duplicate displayed more than once");
-                    complete = incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null && locationSent &&
+                    var restricted=engine.restricted().received(peer);
+                    require(restricted.size()<=1,"Restricted RFCOMM duplicate created another object");
+                    if(!restricted.isEmpty() && !imageConsumed) {
+                        var object=restricted.get(0);require(object.format()==RestrictedPayload.Format.PNG,"Wrong restricted RFCOMM format");
+                        var session=engine.restricted().open(engine.restricted().reviewOpen(object.id()),true);
+                        android.graphics.Bitmap output=android.graphics.Bitmap.createBitmap(16,16,android.graphics.Bitmap.Config.ARGB_8888);
+                        try(var decoder=new RestrictedImages.Decoder(session)) {
+                            decoder.render(new android.graphics.Canvas(output),new android.graphics.Rect(0,0,16,16));
+                            require(output.getPixel(8,8)==(dialer?0xff993366:0xff336699),"Restricted RFCOMM peer image mismatch");
+                        }finally{output.recycle();}
+                        session.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);
+                        try{engine.restricted().open(engine.restricted().reviewOpen(object.id()),true);throw new AssertionError("Consumed RFCOMM image reopened");}
+                        catch(ContentException expected){require(expected.code()==ContentException.Code.CONSUMED,"Unexpected restricted rejection");}
+                        imageConsumed=true;
+                    }
+                    if(imageConsumed)require(engine.restricted().status(restricted.get(0).id()).consumed(),"Duplicate reset restricted consumption");
+                    complete = imageSent && imageConsumed && incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null && locationSent &&
                         engine.locations().received(peer).size()==1 && engine.outbox().isEmpty();
                     if(complete) require(engine.locations().received(peer).get(0).getJSONObject("lastPoint").getLong("latE7")==123456780,"Location content mismatch");
                     if (complete) {
@@ -209,7 +237,7 @@ public final class NearbyFixtureListener extends RunListener {
                         status("nearbyEmergency","PASS active="+emergencyActiveNanos+",request="+requested.requestedNanos()+",invalidated="+requested.invalidatedNanos()+
                             ",confirmed="+result.finishedNanos()+",observationMillis="+(SystemClock.elapsedRealtime()-observation));
                     }
-                    status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, encrypted location, duplicate, receipts");
+                    status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, encrypted location, restricted PNG decoded/consumed, duplicate, receipts");
                     return;
                 }
                 Thread.sleep(100);

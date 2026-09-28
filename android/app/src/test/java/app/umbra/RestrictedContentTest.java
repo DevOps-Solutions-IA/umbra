@@ -98,4 +98,16 @@ public class RestrictedContentTest {
         session.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);
         assertThrows(ContentException.class,session::check);
     }
+    @Test public void preparationConsentBindsOwnerRecipientAndOriginalUnlockWithoutConnecting() throws Exception {
+        Pair p=new Pair();var service=p.a.e.restricted();
+        var review=service.reviewSend(p.b.e.id(),RestrictedPayload.Mode.ONCE,600,30);
+        assertThrows(ContentException.class,()->service.preparationAuthorization(review,false));
+        assertThrows(ContentException.class,()->p.b.e.restricted().preparationAuthorization(review,true));
+        var lease=service.preparationAuthorization(review,true);lease.run();
+        assertTrue(p.a.e.outbox().isEmpty());assertFalse(p.a.e.connectivity().isNetworkSessionAllowed());
+        p.a.e.block(p.b.e.id(),true);assertThrows(SecurityException.class,lease::run);
+        Pair q=new Pair();var other=q.a.e.restricted();
+        var old=other.preparationAuthorization(other.reviewSend(q.b.e.id(),RestrictedPayload.Mode.UMBRA_ONLY,600,30),true);
+        q.a.db.gate.lock();q.a.db.gate.unlock();assertThrows(SecurityException.class,old::run);
+    }
 }

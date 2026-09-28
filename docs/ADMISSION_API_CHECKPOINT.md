@@ -3,7 +3,8 @@
 This supplements existing admission APIs; it is not the master's final UI handoff.
 All calls run off the UI thread with the current opened encrypted Records owner.
 No snapshot grants authorization. Locked/invalid data fails closed. Exceptions
-must not be printed with payloads; typed UI-safe error mapping remains pending.
+must not be printed with payloads. Typed AdmissionException/ConnectivityException
+codes and OperationFailure.classify are now available; see UI_API_CONTRACT.
 
 - `isAdmissionAuthority()`: validates local authority key against pinned realm;
   returns false if absent, throws on lock/mismatch. Never generates an authority.

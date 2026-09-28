@@ -1,5 +1,15 @@
 # Transferencia técnica a Codex
 
+## Master v3 — continuación técnica, 2026-09-28
+
+PR #16 permanece parcial, sin UI de Claude. Consultar
+[revisión del checkpoint](validation/2026-09-28-checkpoint-13a5da6-review.md) y
+[AAC nativo y pendientes](validation/2026-09-28-restricted-audio-native.md).
+Contratos provisionales en UI_API_CONTRACT y API_GAPS_UI_SECURITY; no congelados.
+13a5da6 aprobó nueve workflows y falló video. bde7abb falló duración AAC en
+privacidad debug/R8; no contar builds como reproducción aceptada. A/B/C no cerrados.
+
+
 ## Bloqueo de emergencia — 2026-09-28, implementación bajo validación
 
 Rama `codex/emergency-lock`, base exacta `52cd1e531b9de41ecd398ba53309b630ce1074f5`

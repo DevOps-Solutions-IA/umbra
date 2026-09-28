@@ -19,4 +19,5 @@ def summarize(text, package):
                        'nativeModules': sorted(set(modules)),
                        'jniCheckFailure': 'JNI DETECTED ERROR' in block,
                        'nativeCheckFailure': 'Check failed:' in block})
-    return {'ownedCrashRecords': result[:4], 'rawLogPersisted': False}
+    return {'ownedCrashRecords': result[:4], 'rawLogPersisted': False,
+            'scope': 'recent crash buffer for owned package; may include earlier scenarios'}
