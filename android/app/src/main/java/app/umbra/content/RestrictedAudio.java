@@ -80,6 +80,9 @@ public final class RestrictedAudio {
         authorization.run();
         android.media.MediaCodec codec=android.media.MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);
         byte[] encoded=new byte[RestrictedPayload.MAX_BYTES];int written=0,queued=0,frames=0;
+        // AAC-LC encodes 1024-sample access units. Do not rely on an encoder
+        // emitting an incomplete PCM frame at EOS; append only zero alignment samples.
+        int alignedSamples=((pcm.length+1023)/1024)*1024;
         long started=System.nanoTime();boolean inputEnded=false,outputEnded=false;
         try {
             MediaFormat format=MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC,SAMPLE_RATE,1);
@@ -93,9 +96,9 @@ public final class RestrictedAudio {
                     int index=codec.dequeueInputBuffer(1000);
                     if(index>=0) {
                         ByteBuffer input=java.util.Objects.requireNonNull(codec.getInputBuffer(index)).order(java.nio.ByteOrder.LITTLE_ENDIAN);
-                        input.clear();int count=Math.min(Math.min(1024,input.remaining()/2),pcm.length-queued);
-                        if(count==0 && queued<pcm.length)throw RestrictedPayload.invalid();
-                        for(int i=0;i<count;i++)input.putShort(pcm[queued+i]);
+                        input.clear();int count=Math.min(Math.min(1024,input.remaining()/2),alignedSamples-queued);
+                        if(count==0 && queued<alignedSamples)throw RestrictedPayload.invalid();
+                        for(int i=0;i<count;i++)input.putShort(queued+i<pcm.length?pcm[queued+i]:(short)0);
                         long timestamp=queued*1_000_000L/SAMPLE_RATE;queued+=count;inputEnded=count==0;
                         codec.queueInputBuffer(index,0,count*2,timestamp,inputEnded?android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM:0);
                     }

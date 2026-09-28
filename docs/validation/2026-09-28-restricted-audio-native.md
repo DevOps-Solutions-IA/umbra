@@ -57,3 +57,18 @@ archive covers bde7abb, not later recording/RFCOMM/contract changes.
 
 A remains under cumulative validation; B is partial; C video-file/PDF remains
 unimplemented. No production, final UI, real-radio, acoustic or hardware claim.
+
+## Second native attempt — aa37375
+
+Privacy 36449076033 failed debug/R8 on checkout
+c0dcddc2d3dbf5bfe548ad213db53a2459f06c68. Both decoded 15360 samples from 16000,
+RMS 5645.93. Separate EOS alone was not a correction. Artifacts:
+10982002865 debug (`b3c7da214260c2fb38cd777f20c03364c0ee5147e1d2cef65d6e203074fc3c37`),
+10982386800 R8 (`18a9ef0faae331bd3fb6e15fd06b21bb6730c1f7b191fa74e04ab6f63babc51a`).
+The next test retains the original assertions, records extracted AAC frame count,
+and adds a distinct final 40ms synthetic marker to detect actual tail loss, not
+just total duration. Input alignment zero-fills the last 1024-sample access unit;
+this is a candidate fix until native execution, not an accepted codec workaround.
+Android C2 AAC source reviewed for EOS handling:
+https://android.googlesource.com/platform/frameworks/av/+/dbda76adf06a0df34edd68fab017031e95ddb40c/media/codec2/components/aac/C2SoftAacEnc.cpp
+No encoder, dependency or test threshold was replaced to hide the failure.
