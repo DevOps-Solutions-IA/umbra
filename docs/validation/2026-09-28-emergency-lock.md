@@ -273,3 +273,11 @@ No se reintenta una prueba Bluetooth fallida. Regresión específica RED (exit 1
 antes y GREEN después; errores desconocidos/XML inválido continúan fallando.
 177 pruebas de herramientas PASS. La causa de que Android no ofreciera raíz
 activa en ese instante no se atribuye al producto sin evidencia adicional.
+
+Corrección de registro local: la primera ejecución posterior al cambio anterior
+NO pasó: el XML sintético del test omitía `package=com.android.settings`, y el
+filtro correcto del arnés devolvía una lista vacía. El comando siguiente había
+ocultado el exit 1 de unittest en el estado global del shell. Se conserva
+null-window-after.log FAILED y se corrige solo el fixture. Ejecución independiente
+null-window-corrected.log: exit 0, 177 PASS. Este resultado sustituye la afirmación
+prematura de PASS anterior; no se relajó el filtro de paquetes ni el test.

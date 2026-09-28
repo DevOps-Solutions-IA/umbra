@@ -110,7 +110,7 @@ class PairingTests(unittest.TestCase):
         missing='ERROR: null root node returned by UiTestAutomationBridge.'
         with tempfile.TemporaryDirectory() as folder:
             flow=pairing.Pairing('adb',('a','b'),Path(folder),60)
-            with patch.object(flow,'command',side_effect=['',missing,'','UI hierchary dumped to: /sdcard/umbra-pairing.xml','<hierarchy><node text="fresh"/></hierarchy>']),patch.object(pairing.time,'sleep'):
+            with patch.object(flow,'command',side_effect=['',missing,'','UI hierchary dumped to: /sdcard/umbra-pairing.xml','<hierarchy><node package="com.android.settings" text="fresh"/></hierarchy>']),patch.object(pairing.time,'sleep'):
                 self.assertEqual('fresh',flow.ui('a')[0].get('text'))
             with patch.object(flow,'command',return_value=missing) as call,patch.object(pairing.time,'sleep'):
                 with self.assertRaises(RuntimeError):flow.ui('a')
