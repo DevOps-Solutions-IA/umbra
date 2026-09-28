@@ -141,7 +141,7 @@ def main() -> None:
                     or re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b',text) or 'nearbyResult=FAIL:' in text):
                     raise RuntimeError('Unadmitted RFCOMM rejection or JNI tests not proven')
                 continue
-            if ('nearbyResult=PASS:' not in text or 'authenticated device roster' not in text or 'encrypted location' not in text or not re.search(r'^OK \(3 tests\)$', text, re.MULTILINE)
+            if ('nearbyResult=PASS:' not in text or 'authenticated device roster' not in text or 'encrypted location' not in text or 'restricted PNG, native AAC and isolated PDF decoded/consumed' not in text or not re.search(r'^OK \(3 tests\)$', text, re.MULTILINE)
                 or 'INSTRUMENTATION_CODE: -1' not in text or 'nearbyResult=FAIL:' in text
                 or re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)):
                 raise RuntimeError('Bluetooth fixture or subsequent JNI tests failed; inspect device logs')

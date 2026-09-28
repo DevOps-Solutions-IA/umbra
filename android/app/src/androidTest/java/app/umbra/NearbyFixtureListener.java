@@ -143,7 +143,7 @@ public final class NearbyFixtureListener extends RunListener {
                 engine.sendText(peer, "Synthetic " + role + " text", 3600);
                 engine.sendFile(peer, "synthetic.bin", Bytes.utf8("Synthetic " + role + " attachment"), 3600);
             }
-            Set<String> sent = new HashSet<>(); boolean locationSent=false, imageSent=false, imageConsumed=false, noteSent=false, noteConsumed=false, drainedAnnounced=false;long emergencyActiveNanos=0;
+            Set<String> sent = new HashSet<>(); boolean locationSent=false, imageSent=false, imageConsumed=false, noteSent=false, noteConsumed=false, documentSent=false, documentConsumed=false, drainedAnnounced=false;long emergencyActiveNanos=0;
             long deadline = SystemClock.elapsedRealtime() + 45000;
             while (SystemClock.elapsedRealtime() < deadline) {
                 if (receiveFailure != null) throw new AssertionError("Incoming processing failed", receiveFailure);
@@ -169,6 +169,15 @@ public final class NearbyFixtureListener extends RunListener {
                         engine.restricted().send(consent,SyntheticRestrictedAudio.sanitizedTone(engine,consent),true);noteSent=true;
                     }
                     queue = engine.outbox();
+                }
+                if(noteSent && !documentSent) {
+                    RestrictedContentService.Review consent;
+                    synchronized(recordsLock){consent=engine.restricted().reviewSend(peer,RestrictedPayload.Mode.ONCE,600,30);}
+                    // No Records/SQLite/coordination monitor across isolated parser IPC.
+                    try(var prepared=SyntheticDocuments.prepare(InstrumentationRegistry.getInstrumentation().getTargetContext(),
+                            engine,consent,dialer?android.graphics.Color.RED:android.graphics.Color.BLUE)) {
+                        synchronized(recordsLock){engine.restricted().send(consent,prepared,true);documentSent=true;}
+                    }
                 }
                 for (JSONObject queued : queue) {
                     JSONObject envelope = queued.getJSONObject("envelope");
@@ -217,10 +226,18 @@ public final class NearbyFixtureListener extends RunListener {
                         catch(ContentException expected){require(expected.code()==ContentException.Code.CONSUMED,"Unexpected restricted rejection");}
                         noteConsumed=true;
                     }
-                    if((object.format()==RestrictedPayload.Format.PNG && imageConsumed) || (object.format()==RestrictedPayload.Format.AAC_ADTS && noteConsumed))
+                    if(object.format()==RestrictedPayload.Format.PDF_PAGES && !documentConsumed) {
+                        var session=engine.restricted().open(engine.restricted().reviewOpen(object.id()),true);
+                        SyntheticDocuments.observe(session,dialer?android.graphics.Color.BLUE:android.graphics.Color.RED);
+                        try{engine.restricted().open(engine.restricted().reviewOpen(object.id()),true);throw new AssertionError("Consumed RFCOMM document reopened");}
+                        catch(ContentException expected){require(expected.code()==ContentException.Code.CONSUMED,"Unexpected restricted rejection");}
+                        documentConsumed=true;
+                    }
+                    if((object.format()==RestrictedPayload.Format.PNG && imageConsumed) || (object.format()==RestrictedPayload.Format.AAC_ADTS && noteConsumed)
+                            || (object.format()==RestrictedPayload.Format.PDF_PAGES && documentConsumed))
                         require(engine.restricted().status(object.id()).consumed(),"Duplicate reset restricted consumption");
                     }
-                    complete = imageSent && imageConsumed && noteSent && noteConsumed && incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null && locationSent &&
+                    complete = imageSent && imageConsumed && noteSent && noteConsumed && documentSent && documentConsumed && incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null && locationSent &&
                         engine.locations().received(peer).size()==1 && engine.outbox().isEmpty();
                     if(complete) require(engine.locations().received(peer).get(0).getJSONObject("lastPoint").getLong("latE7")==123456780,"Location content mismatch");
                     if (complete) {
@@ -256,7 +273,7 @@ public final class NearbyFixtureListener extends RunListener {
                         status("nearbyEmergency","PASS active="+emergencyActiveNanos+",request="+requested.requestedNanos()+",invalidated="+requested.invalidatedNanos()+
                             ",confirmed="+result.finishedNanos()+",observationMillis="+(SystemClock.elapsedRealtime()-observation));
                     }
-                    status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, encrypted location, restricted PNG and native AAC decoded/consumed, duplicate, receipts");
+                    status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, encrypted location, restricted PNG, native AAC and isolated PDF decoded/consumed, duplicate, receipts");
                     return;
                 }
                 Thread.sleep(100);

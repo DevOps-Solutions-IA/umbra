@@ -41,6 +41,13 @@ public final class RestrictedHttpsFixtureListener extends RunListener {
         try {receiver.restricted().open(receiver.restricted().reviewOpen(id),true);throw new AssertionError("Consumed HTTPS note reopened");}
         catch(ContentException denied){if(denied.code()!=ContentException.Code.CONSUMED)throw denied;}
     }
+    private static void consumeDocument(Engine receiver,String peer,String id,int color)throws Exception {
+        if(receiver.restricted().received(peer).size()!=2 || !receiver.messages(peer).isEmpty())throw new AssertionError("Document visibility/duplicate violation");
+        var session=receiver.restricted().open(receiver.restricted().reviewOpen(id),true);
+        SyntheticDocuments.observe(session,color);
+        try{receiver.restricted().open(receiver.restricted().reviewOpen(id),true);throw new AssertionError("Consumed HTTPS document reopened");}
+        catch(ContentException denied){if(denied.code()!=ContentException.Code.CONSUMED)throw denied;}
+    }
     @Override public void testRunStarted(Description description)throws Exception {
         var files=InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir().toPath();
         var path=files.resolve("synthetic-restricted-https.json");
@@ -73,10 +80,18 @@ public final class RestrictedHttpsFixtureListener extends RunListener {
                 String bi=b.restricted().send(bConsent,SyntheticRestrictedAudio.sanitizedTone(b,bConsent),true);
                 send(ra,a);fetch(rb,b);send(rb,b);fetch(ra,a);send(ra,a);fetch(rb,b);
                 consume(b,a.id(),ai);consume(a,b.id(),bi);
+                var context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+                var ap=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
+                var bp=b.restricted().reviewSend(a.id(),RestrictedPayload.Mode.ONCE,600,30);
+                String aDocument=a.restricted().send(ap,SyntheticDocuments.prepare(context,a,ap,android.graphics.Color.RED),true);
+                String bDocument=b.restricted().send(bp,SyntheticDocuments.prepare(context,b,bp,android.graphics.Color.BLUE),true);
+                send(ra,a);fetch(rb,b);send(rb,b);fetch(ra,a);send(ra,a);fetch(rb,b);
+                consumeDocument(b,a.id(),aDocument,android.graphics.Color.RED);
+                consumeDocument(a,b.id(),bDocument,android.graphics.Color.BLUE);
                 a.connectivity().disconnect();
                 try {ra.poll(a.profile(),0);throw new AssertionError("Disconnected note transport reopened");}
                 catch(java.io.IOException|SecurityException denied){ /* Explicit gate rejection, never a success substitute. */ }
-                var receipt=new android.os.Bundle();receipt.putString("restrictedHttps","PASS real HTTPS admission Signal AAC both directions and consumption");
+                var receipt=new android.os.Bundle();receipt.putString("restrictedHttps","PASS real HTTPS admission Signal AAC and isolated PDF both directions and consumption");
                 InstrumentationRegistry.getInstrumentation().sendStatus(0,receipt);
             }
         }finally{HttpsURLConnection.setDefaultSSLSocketFactory(original);}

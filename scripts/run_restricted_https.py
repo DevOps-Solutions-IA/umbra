@@ -11,7 +11,7 @@ import time
 
 
 def valid_report(text, code):
-    return (code == 0 and 'restrictedHttps=PASS' in text
+    return (code == 0 and 'restrictedHttps=PASS real HTTPS admission Signal AAC and isolated PDF both directions and consumption' in text
             and re.search(r'^OK \(3 tests\)$', text, re.M)
             and 'INSTRUMENTATION_CODE: -1' in text
             and not re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)
@@ -78,7 +78,7 @@ def main():
             raise RuntimeError('Restricted HTTPS/codec acceptance failed; inspect '+str(log))
         (args.reports/'restricted-https.json').write_text(json.dumps({
             'result': 'PASS', 'engines': 2, 'androidProcesses': 1, 'transport': 'real isolated HTTPS',
-            'admissionProof': True, 'signal': True, 'nativeAac': True, 'directions': 2,
+            'admissionProof': True, 'signal': True, 'nativeAac': True, 'isolatedPdfPages': True, 'directions': 2,
             'physicalAudio': False, 'storage': 'synthetic-plaintext-SQLite-test-adapter'}, indent=2)+'\n')
     finally:
         try:
