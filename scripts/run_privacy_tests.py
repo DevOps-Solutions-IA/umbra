@@ -83,7 +83,7 @@ def optimized_classes(mapping, configuration):
                  'app.umbra.content.RestrictedDocuments$Decoder'):
         match = re.search(r'^' + re.escape(name) + r' -> ([^:]+):$', mapping, re.M)
         if not match or match[1] == name:
-            raise RuntimeError('Optimized privacy entry point missing or not obfuscated')
+            raise RuntimeError('Optimized privacy entry point missing or not obfuscated: ' + name)
         result[name] = match[1]
     return result
 

@@ -40,6 +40,9 @@ class PrivacyReportsTest(unittest.TestCase):
                     mapping.replace('synthetic.c0', names[0])):
             with self.assertRaises(RuntimeError):
                 runner.optimized_classes(bad, '')
+        for name in names:
+            with self.assertRaises(RuntimeError):
+                runner.optimized_classes(mapping.replace(name, "synthetic.Missing"), "")
         for disabled in ('-dontoptimize', '-dontobfuscate', '-dontshrink'):
             with self.assertRaises(RuntimeError):
                 runner.optimized_classes(mapping, disabled)
