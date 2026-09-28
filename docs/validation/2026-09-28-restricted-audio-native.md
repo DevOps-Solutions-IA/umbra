@@ -175,3 +175,10 @@ local HTTPS relay, explicit admission/verification/network consent, native AAC,
 duplicate transport and persistent consumption. Test CA is local to instrumentation
 and hostname verification is unchanged. It is not two Android processes, and its
 new CI must execute before acceptance. No production UI or offline networking.
+
+Tool-suite correction: adding playback/capture changed exact instrumentation
+counts to connected 58 / offline 55. The runner was updated but its synthetic
+report regression still expected 56/54; the first cumulative run failed two of
+187 tool tests. Update those fixtures to the actual new totals and explicitly
+reject the historical 56/54 summaries. No minimum was reduced or test skipped.
+The corrected complete 187-test tool suite passed (exit 0).
