@@ -523,6 +523,13 @@ def main():
                 try: run(serial,"shell","su","0","iptables","-D","OUTPUT","-d",peer,"-m","comment","--comment","umbra-private-voice-test","-j","REJECT")
                 except Exception as failure: errors.append(failure)
             for serial,process in processes.items():
+                # Observe crash metadata before fixture cleanup. Never persist raw logcat,
+                # SDP, abort messages, memory dumps or events belonging to another package.
+                try:
+                    from media_crash_diagnostic import summarize as summarize_crash
+                    crash=run(serial,"logcat","-b","crash","-d","-t","128").stdout.decode("utf-8",errors="replace")
+                    (args.reports/("crash-metadata-"+serial+".json")).write_text(json.dumps(summarize_crash(crash,PACKAGE),indent=2)+"\n")
+                except Exception as failure: errors.append(failure)
                 try: run(serial,"shell","am","force-stop",PACKAGE)
                 except Exception as failure: errors.append(failure)
                 if args.modulation:

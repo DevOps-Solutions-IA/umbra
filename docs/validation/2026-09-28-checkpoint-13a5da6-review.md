@@ -60,3 +60,34 @@ Local JDK 21.0.11 / Gradle 8.13 / AGP 8.13.2 / SDK 36, pinned dependencies:
 Log `.run/security-content/audio-initial-build.log`. This does not validate native
 AAC playback/capture or the uncommitted later codec changes. Android and new CI
 for this delta must be recorded separately. Master A/B/C remain incomplete.
+
+## Corrections after diagnosis
+
+The synthetic trust-loss fixture now checks the persisted block and an explicit
+Engine transport rejection on each subsequent tick, without continuing normal
+send/fetch/apply for that peer. Finish requires native FAILED/ENDED and no voice
+transmission. No production authorization exception was ignored or relaxed.
+A new real-libsignal JVM regression checks previously authorized delivery and
+late ciphertext are rejected after block without an inbox/history write.
+The R8 crash is NOT corrected: add whitelist-only crash metadata from the owned
+synthetic package before cleanup, with three parser/privacy regression tests.
+No raw crash buffer, SDP, abort message or memory dump is saved.
+
+Local cumulative checks: connected/offline JVM, both instrumentation APK builds,
+connected/offline lint passed (exit 0, 1m17s); log
+`.run/security-content/audio-trust-regressions.log`. These builds include the
+initial native AAC adapter and two new Android test methods, not yet executed
+on a device. Tool suite before crash-diagnostic addition: 182 tests passed;
+three added diagnostic tests passed separately. One orchestration test initially
+failed due to replacing both positive and negative expected totals; repaired the
+negative fixture and all ten focused runner tests passed. No product threshold
+changed. Android totals become 56 connected / 54 offline by adding exactly two
+AAC methods to the shared instrumentation class; dedicated privacy suite becomes
+8 per flavor. R8 traces the new synthetic helper and requires RestrictedAudio's
+optimized entry point. Synthetic PCM exists only transiently in androidTest;
+no microphone, speaker or physical acoustic claim.
+
+AAC note implementation is PARTIAL: native decode/re-encode, RAM source and
+restricted playback adapter written; capture, route/playback acceptance,
+HTTPS/RFCOMM audio and process-death acceptance remain pending. PNG RFCOMM and
+block C video/PDF also remain pending. No final Claude API freeze yet.
