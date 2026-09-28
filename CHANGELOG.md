@@ -1,3 +1,14 @@
+# Sin publicar — integración UI + seguridad (rama `claude/ui-security-integration`)
+
+- Merge de `claude/android-ui-foundation` (c394ea7) sobre `codex/private-startup-no-network` (52cd1e5).
+- Contraseña personal de la bóveda: creación, inscripción de bóveda anterior, desbloqueo, cambio,
+  bloqueo y autobloqueo por sesión, con las API reales de `Vault`.
+- Admisión privada por dispositivo: realm, solicitud, credencial, rechazo, revocación, renovación y
+  herramientas de autoridad sobre `AdmissionService`; provisioning por archivos, sin red previa.
+- Inicio privado: conexión y Nearby solo por acción explícita; sin reconexión automática.
+- Huecos de API documentados en `docs/API_GAPS_UI_SECURITY.md`. Validación:
+  `docs/validation/2026-09-27-ui-security-integration.md` (CI pendiente de publicación de la rama).
+
 # Sin publicar — interfaz Android (rama `claude/android-ui-foundation`)
 
 - Sistema de diseño propio (tokens semánticos, tipografía en sp, iconos, componentes) y

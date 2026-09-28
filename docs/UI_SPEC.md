@@ -55,8 +55,34 @@ Bloquear vacía la pila de navegación.
 Bloqueo, onboarding de 3 pasos, lista de chats, chat 1:1, chat grupal (vista previa),
 nuevo mensaje, nuevo grupo, contacto, verificación (código, QR, comparación), dispositivos,
 hoja de ubicación, llamada de voz, panel VOZ (modulador), videollamada con consentimiento por
-dirección, llamada entrante, ajustes (Perfil, Privacidad, Seguridad, Dispositivos,
-Notificaciones, Red, Almacenamiento, Acerca de) y estados de error.
+dirección, llamada entrante, ajustes (Perfil, Privacidad, Seguridad, Dispositivos, Admisión,
+Notificaciones, Red y Nearby, Almacenamiento, Acerca de) y estados de error.
+
+## Seguridad integrada (rama `claude/ui-security-integration`, 2026-09-27)
+
+La UI consume las API reales de `docs/VAULT_PASSWORD.md`, `docs/ADMISSION.md` y
+`docs/PRIVATE_STARTUP.md` mediante `ui/flow` (`VaultFlow`, `AdmissionFlow`), que solo orquesta
+llamadas de dominio en el hilo de trabajo. La presentación (`ui/model`: `AccessStep`,
+`PasswordPolicy`, `AdmissionPresentation`, `AdmissionImport`, `ConnectivityPresentation`) no
+contiene tipos de Android ni del motor y se prueba en la JVM.
+
+Flujo de entrada: autenticación de Android → paso decidido por el dominio:
+crear contraseña (instalación nueva), inscribir bóveda anterior («Ahora no» la deja como está),
+contraseña personal, o CORRUPT / KEY_UNAVAILABLE (solo explicación, sin reinicio). Crear y cambiar
+la contraseña terminan con la bóveda bloqueada y vuelven a pedir ambos factores. El autobloqueo
+(1/2/4 min, máximo 240000 ms) se elige antes de desbloquear y vale solo para el proceso.
+
+Admisión: pantalla propia con los ocho estados de `AdmissionService.State`. Configurar el entorno
+no admite. «Solicitud generada para compartir» no es «recibida». La credencial, el rechazo, la
+revocación y la renovación se importan como archivos y los valida el dominio. Otra autoridad se
+rechaza y se conserva la anterior. Las herramientas de administración viven en una pantalla aparte
+que no deduce autoridad (ver `docs/API_GAPS_UI_SECURITY.md`, G1).
+
+Conexión: se eliminó el interruptor «Solo Bluetooth». «Conectar» es la única acción que solicita la
+sesión online (`AndroidConnectivity.connect`, `confirmed=true` desde el clic); «Desconectar» la
+revoca sin bloquear la bóveda. Nearby tiene su propio inicio/parada y ninguna acción de radio lo
+activa implícitamente. `CONNECTED` se muestra como «Red habilitada», nunca como servidor
+disponible; la respuesta del servidor se informa aparte y solo tras una sincronización real.
 
 ---
 

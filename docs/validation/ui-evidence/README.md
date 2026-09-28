@@ -29,6 +29,13 @@ Required set and file names (connected variant; offline omits calls/modulator/vi
 | 14 | Identity changed | `15-chat-identity-changed.png`, `15b/15c` unverified/blocked |
 | — | Branding (launcher masks, splash composition, icon set) | `21-launcher-icon-masks.png`, `22-splash-theme-composition.png`, `23-icon-set.png` |
 | — | Onboarding, empty, errors, large font | `02*`, `17-empty-state.png`, `18-errors.png`, `20*` |
+| 15 | Personal password (create, legacy enrollment, unlock, busy, change, corrupt, key unavailable) | `24a`–`24f*` |
+| 16 | Private admission: every domain state, pending detail, admin, review and revoke sheets | `25-admission-*`, `26a`–`26d*` |
+| 17 | Network and Nearby consent, security section with password/legacy | `27a`–`27f*` |
+
+Rows 15–17 were added on branch `claude/ui-security-integration` (2026-09-27). They are renders of the
+screen builders with synthetic data: they do not prove authentication, cancellation or network behavior,
+which are covered by `UiSecurityFlowTest`, the JVM flow tests and the private-startup laboratory.
 
 Status on 2026-09-26: not yet generated (no CI run of this branch). Add a dated
 receipt here with the run id and SHA once the artifact exists; do not replace it
