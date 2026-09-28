@@ -80,7 +80,7 @@ public final class RestrictedAudio {
     }
     /** Internal capture/test codec input; no public PCM getter or persisted recording. */
     static RestrictedContentService.Prepared encode(short[] pcm,Runnable authorization)throws Exception {
-        return new RestrictedContentService.Prepared(RestrictedPayload.Format.AAC_ADTS,encodeBytes(pcm,authorization));
+        return new RestrictedContentService.Prepared(RestrictedPayload.Format.AAC_ADTS,encodeBytes(pcm,authorization),authorization);
     }
     /** Internal codec primitive; caller owns and wipes the result or transfers it to Prepared. */
     static byte[] encodeBytes(short[] pcm,Runnable authorization)throws Exception {

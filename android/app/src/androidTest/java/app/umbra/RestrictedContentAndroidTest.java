@@ -103,6 +103,15 @@ public class RestrictedContentAndroidTest {
             assertNotNull(encoded);allowed.set(false);
             assertThrows(SecurityException.class,()->RestrictedAudio.prepare(new byte[]{1,2},()->{if(!allowed.get())throw new SecurityException("Synthetic locked");}));
         }
+        try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
+            Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
+            try(var old=SyntheticRestrictedAudio.sanitizedTone(ar.authorization())) {
+                ar.gate.lock();ar.gate.unlock();
+                var fresh=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
+                assertThrows(SecurityException.class,()->a.restricted().send(fresh,old,true));
+                assertTrue(a.outbox().isEmpty());
+            }
+        }
     }
     @Test public void nativeNotePlaybackConfirmsRouteThenLockClosesWithoutReplay() throws Exception {
         var instrumentation=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation();

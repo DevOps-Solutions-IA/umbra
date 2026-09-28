@@ -11,18 +11,27 @@ import static org.junit.Assert.*;
 
 /** Real Signal/JCA with memory transactions; not Android format/codec or durability acceptance. */
 public class RestrictedContentTest {
-    private static RestrictedContentService.Prepared synthetic() throws Exception {
+    private static RestrictedContentService.Prepared synthetic(Runnable authorization) throws Exception {
         // Test-only access to internal preparation; production callers must use format adapters.
-        var constructor=RestrictedContentService.Prepared.class.getDeclaredConstructor(RestrictedPayload.Format.class,byte[].class);
+        var constructor=RestrictedContentService.Prepared.class.getDeclaredConstructor(RestrictedPayload.Format.class,byte[].class,Runnable.class);
         constructor.setAccessible(true);
-        return constructor.newInstance(RestrictedPayload.Format.PNG,new byte[]{1,2,3,4});
+        return constructor.newInstance(RestrictedPayload.Format.PNG,new byte[]{1,2,3,4},authorization);
     }
     static final class Pair {
         final DeviceLinkingTest.Device a=new DeviceLinkingTest.Device("Synthetic sender"),b=new DeviceLinkingTest.Device("Synthetic recipient");
         Pair()throws Exception {DeviceLinkingTest.pair(a,b);}
         String send(RestrictedPayload.Mode mode)throws Exception {
-            String id=a.e.restricted().send(a.e.restricted().reviewSend(b.e.id(),mode,600,30),synthetic(),true);
+            String id=a.e.restricted().send(a.e.restricted().reviewSend(b.e.id(),mode,600,30),synthetic(a.db.authorization()),true);
             for(JSONObject row:a.e.outbox())b.e.receive(row.getJSONObject("envelope"));return id;
+        }
+    }
+    @Test public void preparedBeforeLockCannotBeSentWithFreshConsentAfterUnlock() throws Exception {
+        Pair p=new Pair();
+        try(var prepared=synthetic(p.a.db.authorization())) {
+            p.a.db.gate.lock();p.a.db.gate.unlock();
+            var fresh=p.a.e.restricted().reviewSend(p.b.e.id(),RestrictedPayload.Mode.ONCE,600,30);
+            assertThrows(SecurityException.class,()->p.a.e.restricted().send(fresh,prepared,true));
+            assertTrue(p.a.e.outbox().isEmpty());
         }
     }
     @Test public void signalDeliveryHasNoOrdinaryHistoryOrExportAndConsumesOnce() throws Exception {
@@ -60,7 +69,7 @@ public class RestrictedContentTest {
     }
     @Test public void noConsentAndUnknownIngressCannotCreateUsableContent() throws Exception {
         Pair p=new Pair();
-        try(var prepared=synthetic()) {assertThrows(ContentException.class,()->p.a.e.restricted().send(p.a.e.restricted().reviewSend(p.b.e.id(),RestrictedPayload.Mode.ONCE,600,30),prepared,false));}
+        try(var prepared=synthetic(p.a.db.authorization())) {assertThrows(ContentException.class,()->p.a.e.restricted().send(p.a.e.restricted().reviewSend(p.b.e.id(),RestrictedPayload.Mode.ONCE,600,30),prepared,false));}
         assertThrows(SecurityException.class,()->p.a.e.enqueueRestricted(null,new JSONObject()));
         assertThrows(ContentException.class,()->p.b.e.restricted().receive(null,new JSONObject()));
         assertTrue(p.a.e.outbox().isEmpty());
@@ -78,7 +87,7 @@ public class RestrictedContentTest {
         var sending=p.a.e.restricted().reviewSend(p.b.e.id(),RestrictedPayload.Mode.ONCE,600,30);
         p.b.db.gate.lock();p.b.db.gate.unlock();p.a.db.gate.lock();p.a.db.gate.unlock();
         assertThrows(SecurityException.class,()->p.b.e.restricted().open(opening,true));
-        try(var prepared=synthetic()) {assertThrows(SecurityException.class,()->p.a.e.restricted().send(sending,prepared,true));}
+        try(var prepared=synthetic(p.a.db.authorization())) {assertThrows(SecurityException.class,()->p.a.e.restricted().send(sending,prepared,true));}
         assertFalse(p.b.e.restricted().status(id).consumed());
     }
     @Test public void invalidAeadDoesNotGrantSessionOrConsumeObject() throws Exception {
@@ -92,7 +101,7 @@ public class RestrictedContentTest {
         assertFalse(p.b.e.restricted().status(id).consumed());
     }
     @Test public void terminalDeadlineClosesWithoutUiTimer() throws Exception {
-        Pair p=new Pair();String id=p.a.e.restricted().send(p.a.e.restricted().reviewSend(p.b.e.id(),RestrictedPayload.Mode.ONCE,60,1),synthetic(),true);
+        Pair p=new Pair();String id=p.a.e.restricted().send(p.a.e.restricted().reviewSend(p.b.e.id(),RestrictedPayload.Mode.ONCE,60,1),synthetic(p.a.db.authorization()),true);
         for(JSONObject row:p.a.e.outbox())p.b.e.receive(row.getJSONObject("envelope"));
         var session=p.b.e.restricted().open(p.b.e.restricted().reviewOpen(id),true);session.check();
         session.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);

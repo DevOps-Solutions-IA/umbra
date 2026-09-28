@@ -8,7 +8,7 @@ import app.umbra.privacy.ImagePreparation;
 public final class RestrictedImages {
     private RestrictedImages() {}
     public static RestrictedContentService.Prepared prepare(byte[] encoded,Runnable authorization) throws java.io.IOException {
-        return new RestrictedContentService.Prepared(RestrictedPayload.Format.PNG,ImagePreparation.sanitize(encoded,authorization));
+        return new RestrictedContentService.Prepared(RestrictedPayload.Format.PNG,ImagePreparation.sanitize(encoded,authorization),authorization);
     }
     /** Framework bitmap lifetime is confined to an explicitly owned decoder, never a public file. */
     public static final class Decoder implements AutoCloseable {

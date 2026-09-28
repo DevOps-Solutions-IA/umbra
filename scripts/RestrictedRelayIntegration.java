@@ -18,8 +18,11 @@ public final class RestrictedRelayIntegration {
         for(int x=0;x<8;x++)for(int y=0;y<8;y++)bitmap.setRGB(x,y,0x336699);
         var output=new ByteArrayOutputStream();check(javax.imageio.ImageIO.write(bitmap,"png",output),"synthetic fixture encoded");
         int history=recipient.messages(sender.id()).size();
-        String id=sender.restricted().send(sender.restricted().reviewSend(recipient.id(),RestrictedPayload.Mode.ONCE,600,30),
-                new RestrictedContentService.Prepared(RestrictedPayload.Format.PNG,output.toByteArray()),true);
+        var review=sender.restricted().reviewSend(recipient.id(),RestrictedPayload.Mode.ONCE,600,30);
+        var grant=sender.restricted().preparationAuthorization(review,true);
+        Runnable authorization=()->{try{grant.run();}catch(Exception denied){throw new SecurityException("Fixture authorization expired");}};
+        String id=sender.restricted().send(review,
+                new RestrictedContentService.Prepared(RestrictedPayload.Format.PNG,output.toByteArray(),authorization),true);
         JSONObject envelope=null;
         for(var queued:sender.outbox())if(id.equals(queued.optString("restrictedId")))envelope=queued.getJSONObject("envelope");
         if(envelope==null)throw new AssertionError("Missing restricted delivery");

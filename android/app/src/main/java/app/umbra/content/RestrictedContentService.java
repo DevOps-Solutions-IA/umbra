@@ -51,10 +51,13 @@ public final class RestrictedContentService {
     }
     /** Minted only by internal format preparation adapters; ownership transfers on send. */
     public static final class Prepared implements AutoCloseable {
-        final RestrictedPayload.Format format; private byte[] bytes;
-        Prepared(RestrictedPayload.Format format,byte[] bytes) {
-            if(bytes.length<1 || bytes.length>RestrictedPayload.MAX_BYTES)throw RestrictedPayload.invalid();
-            this.format=format;this.bytes=bytes;
+        final RestrictedPayload.Format format; private byte[] bytes; private final Runnable authorization;
+        Prepared(RestrictedPayload.Format format,byte[] bytes,Runnable authorization) {
+            try {
+                java.util.Objects.requireNonNull(authorization).run();
+                if(format==null || bytes.length<1 || bytes.length>RestrictedPayload.MAX_BYTES)throw RestrictedPayload.invalid();
+                this.format=format;this.bytes=bytes;this.authorization=authorization;
+            } catch(RuntimeException | Error failure) {Arrays.fill(bytes,(byte)0);throw failure;}
         }
         @Override public synchronized void close() { if(bytes!=null)Arrays.fill(bytes,(byte)0);bytes=null; }
         @Override public String toString() { return "PreparedContent[redacted]"; }
@@ -74,14 +77,15 @@ public final class RestrictedContentService {
             if(prepared.bytes==null)throw RestrictedPayload.invalid();
             try {
                 return db.transaction(()->{
-                    lease.run();engine.authorizeTransport(recipient);long now=Bytes.now();String id=UUID.randomUUID().toString();
+                    prepared.authorization.run();lease.run();engine.authorizeTransport(recipient);long now=Bytes.now();String id=UUID.randomUUID().toString();
                     JSONObject p=new JSONObject().put("v",1).put("id",id).put("from",engine.id()).put("to",recipient)
                         .put("format",prepared.format.name()).put("mode",mode.name()).put("created",now).put("expires",now+ttl).put("sessionSeconds",sessionSeconds);
                     byte[] key=Bytes.random(32);
                     try {
                         var sealed=VaultCodec.seal(new SecretKeySpec(key,"AES"),"restricted-content",RestrictedPayload.address(p),prepared.bytes);
                         p.put("key",Bytes.b64(key)).put("nonce",Bytes.b64(sealed.nonce())).put("ciphertext",Bytes.b64(sealed.ciphertext()));
-                        engine.enqueueRestricted(new Permit(p,lease),p);return id;
+                        Runnable original=()->{prepared.authorization.run();lease.run();};
+                        original.run();engine.enqueueRestricted(new Permit(p,original),p);return id;
                     } finally {Arrays.fill(key,(byte)0);}
                 });
             } finally {prepared.close();}
