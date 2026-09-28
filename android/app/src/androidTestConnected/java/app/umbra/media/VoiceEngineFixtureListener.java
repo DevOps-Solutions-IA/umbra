@@ -192,6 +192,16 @@ public final class VoiceEngineFixtureListener extends RunListener {
             if(id==null) throw new AssertionError("No authenticated call invitation");
             var consent=engine.calls().reviewMedia(id,REVISION);
             var lease=engine.calls().prepareMedia(consent,true);
+            write("synthetic-voice-turn-ready.json",new JSONObject().put("selectedAndConsented",true));
+            // Keep delivering SELECT to the other endpoint while the host waits
+            // for both Engines. No ADM/PeerConnection exists before this barrier.
+            while(!Files.exists(files.resolve("synthetic-voice-turn.json"))) {
+                if(SystemClock.elapsedRealtime()>=deadline)throw new AssertionError("TURN provisioning deadline");
+                lease.snapshot();pump(relay,engine);Thread.sleep(100);
+            }
+            JSONObject credential=read("synthetic-voice-turn.json");
+            Files.delete(files.resolve("synthetic-voice-turn.json"));
+            lease.snapshot();
             NativeVoiceSession.initialize(context);
             AtomicInteger decoded=new AtomicInteger(),captured=new AtomicInteger(),modified=new AtomicInteger(),loud=new AtomicInteger(),playbackSamples=new AtomicInteger(),playbackRate=new AtomicInteger();
             var processingObservation=new java.util.concurrent.atomic.AtomicReference<DecodedAudioWindow>();
@@ -229,7 +239,6 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     if(muteSample!=null)muteSample.sample(observedAt,decoded.get(),modified.get(),loud.get(),videoDecoded.frames.get());
                 }).createAudioDeviceModule();
             adm.setAudioRecordEnabled(false);
-            JSONObject credential=configuration.getJSONObject("turn");
             long remaining=Math.min(180000,(credential.getLong("expires")-Bytes.now())*1000);
             var turn=new TurnConfiguration(List.of(credential.getJSONArray("urls").getString(0)),REVISION,
                 credential.getString("username"),credential.getString("password"),remaining,SystemClock::elapsedRealtime,credential.optString("hostname",""));

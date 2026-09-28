@@ -233,3 +233,19 @@ Se añaden diagnósticos acotados del plano de control del AVD propio (rutas,
 ConnectivityService y NetworkStack) antes del cleanup. Esta ampliación es
 instrumentación diagnóstica, no una corrección demostrada de la red. No aumenta
 el plazo ni convierte un fallo de preparación/UDP en aprobación.
+
+Focalizadas e324d30 (36371129095): R8 y RFCOMM SUCCESS; debug tuvo 7/9
+casos PASS y 2 credential-expiry FAIL. Los recibos demuestran video activo a
+35–38 s, detención con audio y fallo en renegociación posterior. Las credenciales
+se emitían antes incluso de admisión, identidad y selección; su TTL incluía ese
+bootstrap. Se mueve la emisión del arnés a una barrera de ambos Engines después
+de prepareMedia válido y antes de crear ADM/PeerConnection. Mientras espera,
+el emisor continúa entregando SELECT; sin selección/consentimiento no se emite.
+No cambia TTL (60 s video / 30 s voz), credenciales en uso ni límites productivos.
+Dos regresiones prueban orden/denegación; la caducidad real y efecto temporal
+siguen pendientes de la CI del nuevo código. El fallo native-certificate-binding
+observado en este caso no demuestra por sí mismo sustitución de certificado:
+verifyRemote también exige autorización vigente.
+
+675b9fd emergency-media R8 SUCCESS en 36372125769. Es un pase posterior, no
+una causa demostrada ni corrección de la intermitencia de rutas del AVD.

@@ -24,6 +24,19 @@ ROOT=Path(__file__).resolve().parents[1]
 PACKAGE="app.umbra.privatechat.dev"
 
 
+def issue_turn_after_selection(serials, processes, deadline, write, read, issue):
+    """Issue once, after both real Engines authorize their selected media device.
+
+    Bootstrap/enrollment time must not consume the short credential-expiry test
+    interval. This does not extend, renew or replace a credential in use.
+    """
+    for serial in serials:
+        if read(serial,"synthetic-voice-turn-ready.json",processes[serial],deadline)!={"selectedAndConsented":True}:
+            raise RuntimeError("TURN requested before selected media authorization")
+    for serial in serials:
+        write(serial,"synthetic-voice-turn.json",issue())
+
+
 def valid_impairment(value):
     return all(re.search(pattern,value) for pattern in (r"\bnetem\b",r"\blimit 20\b",r"\bloss 2%(?:\s|$)",r"\brate 128Kbit\b",r"\bdelay 80(?:\.0)?ms\b"))
 
@@ -197,7 +210,7 @@ def main():
         if args.scenario=="camera-denied":run(serial,"shell","pm","revoke",PACKAGE,"android.permission.CAMERA")
         # Explicit names only, confined to this disposable debug UID.
         run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-","processing-applied-","processing-observe-")])
-        for suffix in ("admission-ready","admission-change","admission-result","public","peer","ready","start","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
+        for suffix in ("admission-ready","admission-change","admission-result","public","peer","ready","start","turn-ready","turn","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
             run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
     args.reports.mkdir(parents=True,exist_ok=True)
     if optimized_evidence:
@@ -249,7 +262,7 @@ def main():
                     if not 1<=len(found)<=8: raise RuntimeError("Expected bounded owned AVD IPv6 Wi-Fi addresses")
                     addresses6.append([str(value) for value in found])
             if addresses[0]==addresses[1]: raise RuntimeError("Expected independent AVD Wi-Fi addresses")
-            for index,serial in enumerate((args.a,args.b)):
+            def issue_turn():
                 if not direct_probe(serial,(args.a,args.b)[1-index],addresses[1-index]):
                     raise RuntimeError("Direct IPv4 UDP route between owned AVDs unavailable")
             capture_since=time.time()
@@ -271,8 +284,10 @@ def main():
                     credentials["expires"]=int(time.time())+180
                 if args.scenario=="invalid-auth": credentials["password"]="synthetic-invalid-credential"
                 if args.scenario=="unreachable": credentials["urls"]=[value.replace(":5349",":5348") if args.turn_tls else value.replace(":3478",":3479") for value in credentials["urls"]]
+                return credentials
+            for index,serial in enumerate((args.a,args.b)):
                 write(serial,"synthetic-voice-engine.json",{"stopVideoRace":args.scenario=="video-stop-race","initialModulation":args.modulated_start,"modulation":args.modulation,"video":args.video and args.scenario!="camera-denied","cameraDenied":args.scenario=="camera-denied","receiveOnlyCallee":args.scenario=="receive-only","incorrectFingerprint":args.scenario=="wrong-fingerprint","expectedRejection":rejection,"role":"A" if index==0 else "B","base":relay["base"],
-                    "admissionRevocationCheck":admission_revocation_check,"admissionRealm":relay["admission"].realm.encode(),"certificate":relay["certificate"],"invitation":relay["invitations"][index],"turn":credentials})
+                    "admissionRevocationCheck":admission_revocation_check,"admissionRealm":relay["admission"].realm.encode(),"certificate":relay["certificate"],"invitation":relay["invitations"][index]})
                 stream=(args.reports/("engine-voice-a.log" if index==0 else "engine-voice-b.log")).open("w")
                 streams.append(stream)
                 processes[serial]=subprocess.Popen([adb,"-s",serial,"shell","am","instrument","-w","-r",
@@ -290,6 +305,7 @@ def main():
             for serial in (args.a,args.b):
                 if read(serial,"synthetic-voice-ready.json",processes[serial],deadline)!={"ready":True}: raise RuntimeError("Identity preparation failed")
             for serial in (args.a,args.b): write(serial,"synthetic-voice-start.json",{"consent":True})
+            issue_turn_after_selection((args.a,args.b),processes,deadline,write,read,issue_turn)
             initial_processing=[]
             if args.modulated_start:
                 initial_processing=[read(serial,"synthetic-voice-initial-processing.json",processes[serial],deadline) for serial in (args.a,args.b)]
