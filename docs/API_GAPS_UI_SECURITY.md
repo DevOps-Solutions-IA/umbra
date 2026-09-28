@@ -1,13 +1,13 @@
 # Master v3 API gap register — technical checkpoint, not closure
 
 Compared with Claude bundle ca2a706 (not merged), including AdmissionFlow and
-VaultFlow. Technical base ba75d329; published checkpoint bde7abb. Later working
+VaultFlow. Technical base ba75d329; published checkpoint 299049b. Later working
 changes require their own tests/commit. Do not treat this document as a UI patch.
 
 | Claude gap | Technical contract | Remaining validation/integration |
 |---|---|---|
 | G1 authority | `AdmissionService.isAdmissionAuthority()` | Snapshot only; false when absent, fail closed on mismatch/lock; UI must query off main thread |
-| G2 typed failures | `AdmissionException.Code`, `ConnectivityException.Code`, `OperationFailure.classify` | Use safe generic fallback for unclassified failures; never parse message/cause or log payload |
+| G2 typed failures | `AdmissionException.Code`, `ConnectivityException.Code`, `ContentException.Code`, `OperationFailure.classify` | Use safe generic fallback for unclassified failures; never parse message/cause or log payload |
 | G3 distinct expiry | `AdmissionService.status()` | Nullable request and credential epoch-second expiries; EXPIRED alone is ambiguous |
 | G4 issued list | `issuedCredentials()` | Authority-only bounded metadata; revocation/renewal still consume authenticated credential wire through existing APIs, not a public directory |
 | G5 cancel | `cancelPendingRequest(expectedRequestId)` | Local abandonment, never global recall; UI obtains explicit decision and must discard stale async results |
@@ -24,7 +24,7 @@ simplification remains Claude's responsibility and was not overwritten.
 
 - Connected note capture/reproduction acceptance, selected-route/focus lifecycle,
   encrypted HTTPS/RFCOMM note delivery, explicit process-death consumption.
-- Restricted PNG RFCOMM acceptance (existing RFCOMM regression does not yet send it).
+- Restricted PNG RFCOMM acceptance (fixture now sends it; current CI must prove it).
 - Video-file and static PDF preparation/decoding and rejection tests.
 - Final combined technical matrix, artifact hashes and final API freeze.
 - Actual Claude screen integration, screenshot/recents verification on that UI,

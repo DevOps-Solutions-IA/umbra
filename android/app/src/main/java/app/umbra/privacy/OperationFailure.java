@@ -6,7 +6,8 @@ public enum OperationFailure {
     CAPACITY_REACHED, CONNECTIVITY_UNAVAILABLE, NEARBY_ALREADY_REQUESTED,
     ADMISSION_EXPIRED, ADMISSION_NOT_YET_VALID, ADMISSION_REVOKED, WRONG_DEVICE, NOT_AUTHORITY, NOT_ADMITTED,
     EDITION_UNAVAILABLE, CONNECTIVITY_STATE, CLEANUP_FAILED,
-    CONSENT_REQUIRED, EXPORT_FORBIDDEN, INVALID_CONTENT, RESOURCE_LIMIT, UNAVAILABLE;
+    CONSENT_REQUIRED, EXPORT_FORBIDDEN, INVALID_CONTENT, RESOURCE_LIMIT,
+    CONTENT_EXPIRED, CONTENT_CONSUMED, CONTENT_BUSY, UNAVAILABLE;
     public static OperationFailure classify(Throwable failure) {
         if(failure instanceof app.umbra.core.AccessGate.LockedException)return LOCKED;
         if(failure instanceof app.umbra.admission.AdmissionException admission)return switch(admission.code()) {
@@ -25,6 +26,12 @@ public enum OperationFailure {
         if(failure instanceof PrivacyException privacy)return switch(privacy.code()) {
             case CONSENT_REQUIRED -> CONSENT_REQUIRED; case RESTRICTED_EXPORT -> EXPORT_FORBIDDEN;
             case INVALID_CONTENT -> INVALID_CONTENT; case LIMIT_EXCEEDED -> RESOURCE_LIMIT;
+        };
+        if(failure instanceof app.umbra.content.ContentException content)return switch(content.code()) {
+            case INVALID -> INVALID_CONTENT; case EXPIRED -> CONTENT_EXPIRED;
+            case CONSUMED -> CONTENT_CONSUMED; case BUSY -> CONTENT_BUSY;
+            case CAPACITY -> RESOURCE_LIMIT; case EXPORT_FORBIDDEN -> EXPORT_FORBIDDEN;
+            case CONSENT_REQUIRED -> CONSENT_REQUIRED;
         };
         return UNAVAILABLE;
     }

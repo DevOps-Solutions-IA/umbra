@@ -1,7 +1,7 @@
 # Technical API contract for Claude — evolving master v3 checkpoint
 
 This contract is NOT frozen for final integration. Base ba75d329; current published
-checkpoint bde7abb. Consult dated validation and PR #16 for exact subsequent SHA.
+checkpoint 299049b. Consult dated validation and PR #16 for exact subsequent SHA.
 No Claude UI or production MainActivity was changed. All domain/storage/codec work
 runs on a worker; Android Window/View configuration runs on the UI thread before
 first presentation. Never render an async result from a stale screen/vault epoch.
@@ -91,7 +91,10 @@ This adapter's playback/route behavior is not yet accepted on Android in this
 checkpoint; do not offer it as complete. Completion is not proof of human listening.
 
 Failures: `ContentException.Code` is INVALID, CONSENT_REQUIRED, CONSUMED, EXPIRED,
-BUSY, CAPACITY, EXPORT_FORBIDDEN. Use safe classification, not exception strings. State consumed is
+BUSY, CAPACITY, EXPORT_FORBIDDEN. `OperationFailure.classify` maps them to
+INVALID_CONTENT, CONSENT_REQUIRED, CONTENT_CONSUMED, CONTENT_EXPIRED, CONTENT_BUSY,
+RESOURCE_LIMIT, EXPORT_FORBIDDEN; unknown failures remain UNAVAILABLE. No exception
+message/cause parsing or swallowed operation failure. State consumed is
 not delivered/displayed/completed/expired. Generation revocation does not erase
 copies already received by a malicious recipient or privileged OS.
 
