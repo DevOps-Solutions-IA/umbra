@@ -17,9 +17,14 @@ import javax.net.ssl.*;
 public final class PrivateStartupFixtureListener extends RunListener {
     private Path files;
     private void require(boolean ok,String failure) { if(!ok) throw new AssertionError(failure); }
+    private void publish(Path receipt,JSONObject value) throws Exception {
+        Path temporary=receipt.resolveSibling(receipt.getFileName()+".tmp");
+        Files.write(temporary,Bytes.utf8(value.toString()));
+        Files.move(temporary,receipt,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
+    }
     private void checkpoint(String stage) throws Exception {
         Path receipt=files.resolve("synthetic-startup-"+stage+".json"),go=files.resolve("synthetic-startup-"+stage+"-go");
-        Files.write(receipt,Bytes.utf8(new JSONObject().put("stage",stage).put("monotonicMillis",SystemClock.elapsedRealtime()).toString()));
+        publish(receipt,new JSONObject().put("stage",stage).put("monotonicMillis",SystemClock.elapsedRealtime()));
         long deadline=SystemClock.elapsedRealtime()+45_000;
         while(!Files.exists(go)) {if(SystemClock.elapsedRealtime()>deadline)throw new AssertionError("Startup host barrier: "+stage);Thread.sleep(50);}
         Files.delete(go);
@@ -126,9 +131,9 @@ public final class PrivateStartupFixtureListener extends RunListener {
             denied(engine,trap);
             try {records.gate.unlock();throw new AssertionError("Legacy unlock survived emergency");}
             catch(SecurityException expected) { /* New authentication ticket is mandatory. */ }
-            Files.write(files.resolve("synthetic-startup-emergency-result.json"),Bytes.utf8(new JSONObject()
+            publish(files.resolve("synthetic-startup-emergency-result.json"),new JSONObject()
                 .put("requestedNanos",requested.requestedNanos()).put("invalidatedNanos",requested.invalidatedNanos())
-                .put("confirmedNanos",result.finishedNanos()).put("state",result.state().name()).toString()));
+                .put("confirmedNanos",result.finishedNanos()).put("state",result.state().name()));
             checkpoint("emergency-closed");
         }
         // Deliberately left open until the host proves process death. No synthetic close/reopen claim.

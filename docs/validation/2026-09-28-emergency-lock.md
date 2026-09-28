@@ -249,3 +249,15 @@ verifyRemote también exige autorización vigente.
 
 675b9fd emergency-media R8 SUCCESS en 36372125769. Es un pase posterior, no
 una causa demostrada ni corrección de la intermitencia de rutas del AVD.
+
+Inicio privado debug 675b9fd (36372125767, job 108770475440) falló al leer el
+recibo de force-stop/reinicio: JSONDecodeError en byte 0, con `cat` exitoso.
+El productor usaba Files.write directamente sobre el nombre que el host sondea:
+el archivo se hacía visible antes de contener JSON. Se publica mediante archivo
+temporal y ATOMIC_MOVE, como los demás arneses del repositorio; el lector sigue
+rechazando JSON malformado, sin catch/reintento que oculte corrupción. Se aplica
+a checkpoints y recibo de emergencia. La prueba real existente de force-stop
+es la regresión de integración; no se cuenta este diagnóstico como test extra.
+Verify 42eace1 terminó SUCCESS (36370491720), instrumentación 48 connected y
+46 offline. Emergency 675b9fd terminó con sus cinco jobs SUCCESS (36372125769).
+Ambos son antecedentes, no validación automática del siguiente HEAD.
