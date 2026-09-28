@@ -22,17 +22,21 @@ simplification remains Claude's responsibility and was not overwritten.
 
 ## Necessary master gaps that still prevent technical closure
 
-- Connected note capture remains RED: 13c89ad debug/R8 captured nonzero AVD input,
-  while its controlled zero-PCM AAC reference stayed zero. Cause remains unknown;
-  c61abb8 adds pre-codec observation without weakening the assertion.
-- Routed playback and lock closure passed in 13c89ad. Route/focus loss and remaining
-  lifecycle cases need explicit acceptance; this does not imply physical acoustics.
-- Android note HTTPS passed in 13c89ad with two Engines/SQLite stores in one AVD,
-  not two independent devices. New note RFCOMM fixture still needs acceptance.
-- PNG RFCOMM passed in aa37375 (historical); final cumulative SHA must repeat it.
-- Real process force-stop consumption receipts passed in 6bef5e8 and 13c89ad;
-  these use laboratory SQLite, not hardware Keystore or death during commit.
-- Video-file and static PDF preparation/decoding and rejection tests.
+- Connected native note capture passed c808418 privacy debug/R8. The historical
+  exact-zero assumption was disproved by pre-codec AVD sample statistics; a
+  controlled zero-PCM codec reference remains exact zero. This is not a physical
+  microphone result and the precise HAL/resampling source remains unknown.
+- Routed playback and lock closure passed. Route/focus loss and remaining lifecycle
+  cases still require explicit acceptance; no claim of physical acoustics.
+- Android note HTTPS passed with real Signal/TLS and two SQLite stores in one AVD,
+  not two independent devices. Real RFCOMM PNG/AAC passed in 126ac2f (historical),
+  both flavors; final cumulative SHA must repeat it.
+- Process force-stop consumption passed for PNG with laboratory SQLite, not
+  hardware Keystore or death during commit. Audio/PDF lifecycle expansion remains.
+- PDF static-copy implementation published at c7584ee; Android CI pending.
+  File-video is still unimplemented. Neither is accepted by compiling classes.
+- Pending-preparation cleanup and domain-only authorization APIs are under local
+  regression now; they are not yet final native acceptance.
 - Final combined technical matrix, artifact hashes and final API freeze.
 - Actual Claude screen integration, screenshot/recents verification on that UI,
   accessibility and Android physical hardware remain separate integration work.

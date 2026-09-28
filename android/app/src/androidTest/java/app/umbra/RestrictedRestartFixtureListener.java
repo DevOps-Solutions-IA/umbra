@@ -30,8 +30,8 @@ public final class RestrictedRestartFixtureListener extends RunListener {
                 var png=new ByteArrayOutputStream();
                 try{if(!bitmap.compress(Bitmap.CompressFormat.PNG,100,png))throw new AssertionError("Synthetic PNG missing");}
                 finally{bitmap.recycle();}
-                String id=a.restricted().send(a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,60),
-                    RestrictedImages.prepare(png.toByteArray(),ar.authorization()),true);
+                var review=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,60);
+                String id=a.restricted().send(review,RestrictedImages.prepare(a,review,png.toByteArray(),true),true);
                 JSONObject envelope=a.outbox().get(0).getJSONObject("envelope");b.receive(envelope);
                 br.transaction(()->{br.put("synthetic-restart","envelope",Bytes.utf8(envelope.toString()));return null;});
                 var session=b.restricted().open(b.restricted().reviewOpen(id),true);

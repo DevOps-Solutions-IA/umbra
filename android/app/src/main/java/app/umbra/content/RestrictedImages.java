@@ -7,7 +7,15 @@ import app.umbra.privacy.ImagePreparation;
 /** Preparation and decoding only. Presentation owner must secure its surface before calling render. */
 public final class RestrictedImages {
     private RestrictedImages() {}
-    public static RestrictedContentService.Prepared prepare(byte[] encoded,Runnable authorization) throws java.io.IOException {
+    public static RestrictedContentService.Prepared prepare(app.umbra.crypto.Engine engine,
+            RestrictedContentService.Review review,byte[] encoded,boolean confirmed)throws Exception {
+        if(android.os.Looper.myLooper()==android.os.Looper.getMainLooper())throw new IllegalStateException("Preparation requires worker");
+        var grant=engine.restricted().preparationAuthorization(review,confirmed);
+        Runnable check=()->{try{grant.run();}catch(RuntimeException denied){throw denied;}catch(Exception denied){throw new ContentException(ContentException.Code.CONSENT_REQUIRED);}};
+        return engine.restricted().retainPrepared(review,prepare(encoded,check));
+    }
+
+    static RestrictedContentService.Prepared prepare(byte[] encoded,Runnable authorization) throws java.io.IOException {
         return new RestrictedContentService.Prepared(RestrictedPayload.Format.PNG,ImagePreparation.sanitize(encoded,authorization),authorization);
     }
     /** Framework bitmap lifetime is confined to an explicitly owned decoder, never a public file. */

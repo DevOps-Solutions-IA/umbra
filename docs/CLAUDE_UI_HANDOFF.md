@@ -36,3 +36,12 @@ The adjacent RESTORE file specifies `git clone -b codex/security-content-complet
 Preserve newer checkpoints and all earlier backups. No credentials/dependency
 caches are bundled. Do not apply old committed patches again, reset a newer branch
 or merge this bundle into presentation automatically.
+
+
+Pending-content API correction (not final API freeze): prepare images/audio via
+`prepare(Engine, Review, byte[], confirmed)`; do not provide an authorization
+Runnable. Keep the original review for send. The domain owns at most four pending
+prepared copies and invalidates them on lock/consent expiry. Close abandoned
+copies; wait for `Prepared.closure()` to report cleanup, not merely the first
+visual invalidation. Recording and PDF return the same managed type. These
+changes are under validation; no Claude presentation file was changed.

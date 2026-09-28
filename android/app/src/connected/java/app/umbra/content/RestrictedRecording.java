@@ -56,7 +56,7 @@ public final class RestrictedRecording {
             recorder.stop();recorder.release();released=true;check.run();
             if(count<1024)throw RestrictedPayload.invalid();
             short[] captured=Arrays.copyOf(pcm,count);
-            try{return RestrictedAudio.encode(captured,check);}finally{Arrays.fill(captured,(short)0);}
+            try{return engine.restricted().retainPrepared(review,RestrictedAudio.encode(captured,check));}finally{Arrays.fill(captured,(short)0);}
         } finally {
             try {
                 if(recorder!=null && !released)recorder.release();

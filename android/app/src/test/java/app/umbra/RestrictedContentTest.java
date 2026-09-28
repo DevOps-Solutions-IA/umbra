@@ -17,6 +17,55 @@ public class RestrictedContentTest {
         constructor.setAccessible(true);
         return constructor.newInstance(RestrictedPayload.Format.PNG,new byte[]{1,2,3,4},authorization);
     }
+    private static RestrictedContentService.Prepared retain(RestrictedContentService service,
+            RestrictedContentService.Review review,RestrictedContentService.Prepared prepared)throws Exception {
+        var method=RestrictedContentService.class.getDeclaredMethod("retainPrepared",RestrictedContentService.Review.class,RestrictedContentService.Prepared.class);
+        method.setAccessible(true);
+        try{return (RestrictedContentService.Prepared)method.invoke(service,review,prepared);}
+        catch(java.lang.reflect.InvocationTargetException failed){throw (Exception)failed.getCause();}
+    }
+    @Test public void pendingPreparationsAreBoundedAndWipedOnInvalidation()throws Exception {
+        Pair p=new Pair();var service=p.a.e.restricted();
+        var review=service.reviewSend(p.b.e.id(),RestrictedPayload.Mode.ONCE,600,30);
+        var pending=new java.util.ArrayList<RestrictedContentService.Prepared>();
+        for(int i=0;i<4;i++)pending.add(retain(service,review,synthetic(p.a.db.authorization())));
+        var excess=synthetic(p.a.db.authorization());
+        assertEquals(ContentException.Code.CAPACITY,assertThrows(ContentException.class,()->retain(service,review,excess)).code());
+        excess.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);
+        p.a.db.gate.lock();
+        var bytes=RestrictedContentService.Prepared.class.getDeclaredField("bytes");bytes.setAccessible(true);
+        for(var prepared:pending){prepared.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);assertNull(bytes.get(prepared));prepared.close();}
+        p.a.db.gate.unlock();
+        var fresh=service.reviewSend(p.b.e.id(),RestrictedPayload.Mode.ONCE,600,30);
+        assertThrows(SecurityException.class,()->service.send(fresh,pending.get(0),true));assertTrue(p.a.e.outbox().isEmpty());
+        try(var next=retain(service,fresh,synthetic(p.a.db.authorization()))){assertNotNull(next);}
+    }
+    @Test public void preparedRecipientReviewCannotBeReplacedEvenWithinSameUnlock()throws Exception {
+        Pair p=new Pair();var service=p.a.e.restricted();
+        var original=service.reviewSend(p.b.e.id(),RestrictedPayload.Mode.ONCE,600,30);
+        var replacement=service.reviewSend(p.b.e.id(),RestrictedPayload.Mode.UMBRA_ONLY,600,30);
+        try(var prepared=retain(service,original,synthetic(p.a.db.authorization()))) {
+            assertEquals(ContentException.Code.CONSENT_REQUIRED,assertThrows(ContentException.class,()->service.send(replacement,prepared,true)).code());
+            prepared.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);assertTrue(p.a.e.outbox().isEmpty());
+        }
+    }
+    @Test public void lockDoesNotWaitForPendingSendTransactionOrReviveItsPreparation()throws Exception {
+        Pair p=new Pair();var service=p.a.e.restricted();
+        var review=service.reviewSend(p.b.e.id(),RestrictedPayload.Mode.ONCE,600,30);
+        var prepared=retain(service,review,synthetic(p.a.db.authorization()));
+        var entered=new CountDownLatch(1);var release=new CountDownLatch(1);
+        p.a.db.before=()->{entered.countDown();if(!release.await(3,TimeUnit.SECONDS))throw new AssertionError("Synthetic transaction barrier");return null;};
+        var workers=Executors.newFixedThreadPool(2);
+        try {
+            var sending=workers.submit(()->service.send(review,prepared,true));assertTrue(entered.await(3,TimeUnit.SECONDS));
+            workers.submit(p.a.db.gate::lock).get(3,TimeUnit.SECONDS);
+            assertFalse(prepared.closure().toCompletableFuture().isDone());
+            release.countDown();var denied=assertThrows(ExecutionException.class,()->sending.get(3,TimeUnit.SECONDS));
+            assertTrue(denied.getCause() instanceof SecurityException);
+            prepared.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);
+            p.a.db.gate.unlock();assertTrue(p.a.e.outbox().isEmpty());
+        }finally{release.countDown();prepared.close();workers.shutdownNow();assertTrue(workers.awaitTermination(3,TimeUnit.SECONDS));}
+    }
     static final class Pair {
         final DeviceLinkingTest.Device a=new DeviceLinkingTest.Device("Synthetic sender"),b=new DeviceLinkingTest.Device("Synthetic recipient");
         Pair()throws Exception {DeviceLinkingTest.pair(a,b);}

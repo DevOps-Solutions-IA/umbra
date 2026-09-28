@@ -13,6 +13,8 @@ public final class RestrictedContentService {
     public static final int MAX_OBJECTS=128,MAX_TOMBSTONES=4096;
     private final Records db; private final Engine engine;
     private final Set<Session> active=java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final Set<Prepared> pending=java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private final java.util.concurrent.Semaphore preparedSlots=new java.util.concurrent.Semaphore(4);
     private final java.util.concurrent.ScheduledThreadPoolExecutor cleanup=new java.util.concurrent.ScheduledThreadPoolExecutor(1,work->{
         Thread thread=new Thread(work,"umbra-restricted-cleanup");thread.setDaemon(true);return thread;
     });
@@ -59,8 +61,50 @@ public final class RestrictedContentService {
                 this.format=format;this.bytes=bytes;this.authorization=authorization;
             } catch(RuntimeException | Error failure) {Arrays.fill(bytes,(byte)0);throw failure;}
         }
-        @Override public synchronized void close() { if(bytes!=null)Arrays.fill(bytes,(byte)0);bytes=null; }
+        private final java.util.concurrent.atomic.AtomicBoolean denied=new java.util.concurrent.atomic.AtomicBoolean();
+        private final java.util.concurrent.CompletableFuture<Void> closed=new java.util.concurrent.CompletableFuture<>();
+        private RestrictedContentService owner;private Review review;
+        private volatile EmergencyLock.Registration registration;
+        private volatile java.util.concurrent.ScheduledFuture<?> expiry;
+        public java.util.concurrent.CompletionStage<Void> closure(){return closed.minimalCompletionStage();}
+        private void check(Review sending) {
+            if(denied.get())throw new ContentException(ContentException.Code.CONSENT_REQUIRED);
+            authorization.run();
+            if(review!=null){review.check(true);if(sending!=review)throw new ContentException(ContentException.Code.CONSENT_REQUIRED);}
+        }
+        @Override public void close() {
+            if(!denied.compareAndSet(false,true))return;
+            var scheduled=expiry;if(scheduled!=null)scheduled.cancel(false);
+            Runnable wipe=()->{
+                synchronized(this){if(bytes!=null)Arrays.fill(bytes,(byte)0);bytes=null;}
+                if(owner!=null){owner.pending.remove(this);owner.preparedSlots.release();}
+                var registered=registration;if(registered!=null)registered.close();closed.complete(null);
+            };
+            if(owner==null)wipe.run();else owner.cleanup.execute(wipe);
+        }
         @Override public String toString() { return "PreparedContent[redacted]"; }
+    }
+    /** Internal adapters transfer completed preparation into domain-owned, bounded cleanup. */
+    Prepared retainPrepared(Review review,Prepared prepared)throws Exception {
+        if(prepared==null)throw RestrictedPayload.invalid();
+        try {
+            preparationAuthorization(review,true).run();prepared.authorization.run();
+            synchronized(prepared) {
+                if(prepared.owner!=null || prepared.denied.get())throw RestrictedPayload.invalid();
+                if(!preparedSlots.tryAcquire())throw new ContentException(ContentException.Code.CAPACITY);
+                prepared.owner=this;prepared.review=review;pending.add(prepared);
+            }
+            if(db.emergency()!=null)prepared.registration=db.emergency().register(EmergencyLock.Subsystem.DOCUMENTS,()->{
+                prepared.close();return prepared.closed;
+            });
+            if(prepared.closed.isDone() && prepared.registration!=null)prepared.registration.close();
+            prepared.check(review);
+            prepared.expiry=cleanup.scheduleWithFixedDelay(()->{
+                try{prepared.check(review);}catch(Exception expired){prepared.close();}
+            },250,250,java.util.concurrent.TimeUnit.MILLISECONDS);
+            if(prepared.denied.get())prepared.expiry.cancel(false);
+            return prepared;
+        }catch(Exception | Error failure){prepared.close();throw failure;}
     }
     public final class Permit {
         private final String body; private final Runnable lease;
@@ -77,14 +121,14 @@ public final class RestrictedContentService {
             if(prepared.bytes==null)throw RestrictedPayload.invalid();
             try {
                 return db.transaction(()->{
-                    prepared.authorization.run();lease.run();engine.authorizeTransport(recipient);long now=Bytes.now();String id=UUID.randomUUID().toString();
+                    prepared.check(review);lease.run();engine.authorizeTransport(recipient);long now=Bytes.now();String id=UUID.randomUUID().toString();
                     JSONObject p=new JSONObject().put("v",1).put("id",id).put("from",engine.id()).put("to",recipient)
                         .put("format",prepared.format.name()).put("mode",mode.name()).put("created",now).put("expires",now+ttl).put("sessionSeconds",sessionSeconds);
                     byte[] key=Bytes.random(32);
                     try {
                         var sealed=VaultCodec.seal(new SecretKeySpec(key,"AES"),"restricted-content",RestrictedPayload.address(p),prepared.bytes);
                         p.put("key",Bytes.b64(key)).put("nonce",Bytes.b64(sealed.nonce())).put("ciphertext",Bytes.b64(sealed.ciphertext()));
-                        Runnable original=()->{prepared.authorization.run();lease.run();};
+                        Runnable original=()->{prepared.check(review);lease.run();};
                         original.run();engine.enqueueRestricted(new Permit(p,original),p);return id;
                     } finally {Arrays.fill(key,(byte)0);}
                 });
@@ -232,5 +276,5 @@ public final class RestrictedContentService {
         }
         @Override public String toString() {return "RestrictedSession[redacted]";}
     }
-    public void closeAll() {for(Session session:active)session.close();}
+    public void closeAll() {for(Prepared prepared:pending)prepared.close();for(Session session:active)session.close();}
 }

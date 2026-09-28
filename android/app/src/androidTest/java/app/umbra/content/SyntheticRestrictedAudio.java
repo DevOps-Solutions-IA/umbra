@@ -5,20 +5,33 @@ import java.util.Arrays;
 /** Synthetic source/PCM observations only in androidTest, never production or physical microphones. */
 public final class SyntheticRestrictedAudio {
     private SyntheticRestrictedAudio() {}
+    public static RestrictedContentService.Prepared prepareRaw(byte[] bytes,Runnable authorization)throws Exception {
+        return RestrictedAudio.prepare(bytes,authorization);
+    }
     public static RestrictedContentService.Prepared tone(Runnable authorization)throws Exception {
         short[] pcm=new short[RestrictedAudio.SAMPLE_RATE];
         for(int i=0;i<pcm.length;i++)pcm[i]=(short)(8000*Math.sin(2*Math.PI*(i>=pcm.length-640?1320:440)*i/RestrictedAudio.SAMPLE_RATE));
         try{return RestrictedAudio.encode(pcm,authorization);}finally{Arrays.fill(pcm,(short)0);}
     }
+    public static RestrictedContentService.Prepared sanitizedTone(app.umbra.crypto.Engine engine,
+            RestrictedContentService.Review review)throws Exception {
+        var grant=engine.restricted().preparationAuthorization(review,true);
+        Runnable authorization=()->{try{grant.run();}catch(Exception denied){throw new SecurityException("Synthetic authorization expired");}};
+        return sanitizedTone(authorization,bytes->RestrictedAudio.prepare(engine,review,bytes,true));
+    }
+    private interface Preparation {RestrictedContentService.Prepared run(byte[] bytes)throws Exception;}
     /** The delivered bytes are the sanitizer result, not the original synthetic ADTS. */
     public static RestrictedContentService.Prepared sanitizedTone(Runnable authorization)throws Exception {
+        return sanitizedTone(authorization,bytes->RestrictedAudio.prepare(bytes,authorization));
+    }
+    private static RestrictedContentService.Prepared sanitizedTone(Runnable authorization,Preparation preparation)throws Exception {
         short[] pcm=new short[RestrictedAudio.SAMPLE_RATE];byte[] original=null;
         for(int i=0;i<pcm.length;i++)pcm[i]=(short)(8000*Math.sin(2*Math.PI*(i>=pcm.length-640?1320:440)*i/RestrictedAudio.SAMPLE_RATE));
         try {
             original=RestrictedAudio.encodeBytes(pcm,authorization);
             byte[] unchanged=original.clone();
             try {
-                var prepared=RestrictedAudio.prepare(original,authorization);
+                var prepared=preparation.run(original);
                 try {org.junit.Assert.assertArrayEquals(unchanged,original);return prepared;}
                 catch(RuntimeException | Error failure){prepared.close();throw failure;}
             } finally {Arrays.fill(unchanged,(byte)0);}

@@ -161,12 +161,12 @@ public final class NearbyFixtureListener extends RunListener {
                         finally{pixels.recycle();}
                         try {
                             var consent=engine.restricted().reviewSend(peer,RestrictedPayload.Mode.ONCE,600,30);
-                            engine.restricted().send(consent,RestrictedImages.prepare(original,records.authorization()),true);imageSent=true;
+                            engine.restricted().send(consent,RestrictedImages.prepare(engine,consent,original,true),true);imageSent=true;
                         }finally{Arrays.fill(original,(byte)0);}
                     }
                     if(imageSent && !noteSent) {
                         var consent=engine.restricted().reviewSend(peer,RestrictedPayload.Mode.ONCE,600,30);
-                        engine.restricted().send(consent,SyntheticRestrictedAudio.tone(records.authorization()),true);noteSent=true;
+                        engine.restricted().send(consent,SyntheticRestrictedAudio.sanitizedTone(engine,consent),true);noteSent=true;
                     }
                     queue = engine.outbox();
                 }

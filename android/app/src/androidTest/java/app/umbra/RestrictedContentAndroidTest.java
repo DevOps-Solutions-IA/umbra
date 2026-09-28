@@ -22,7 +22,8 @@ public class RestrictedContentAndroidTest {
         try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
             byte[] original=png(),copy=original.clone();
-            String id=a.restricted().send(a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),RestrictedImages.prepare(original,ar.authorization()),true);
+            var review=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
+            String id=a.restricted().send(review,RestrictedImages.prepare(a,review,original,true),true);
             assertArrayEquals(copy,original);
             for(var row:a.outbox())b.receive(row.getJSONObject("envelope"));
             assertEquals(1,b.restricted().received(a.id()).size());
@@ -43,7 +44,8 @@ public class RestrictedContentAndroidTest {
     @Test public void sqliteConsumeFailureDoesNotDeliverDecoderSession() throws Exception {
         try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
-            String id=a.restricted().send(a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),RestrictedImages.prepare(png(),ar.authorization()),true);
+            var review=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
+            String id=a.restricted().send(review,RestrictedImages.prepare(a,review,png(),true),true);
             for(var row:a.outbox())b.receive(row.getJSONObject("envelope"));
             br.failBucket="restricted-state";assertThrows(IllegalStateException.class,()->b.restricted().open(b.restricted().reviewOpen(id),true));br.failBucket=null;
             assertFalse(b.restricted().status(id).consumed());
@@ -53,7 +55,8 @@ public class RestrictedContentAndroidTest {
     @Test public void lockAfterPositiveRenderClosesDecoderAndRejectsLateFrame() throws Exception {
         try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
-            String id=a.restricted().send(a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),RestrictedImages.prepare(png(),ar.authorization()),true);
+            var review=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
+            String id=a.restricted().send(review,RestrictedImages.prepare(a,review,png(),true),true);
             for(var row:a.outbox())b.receive(row.getJSONObject("envelope"));
             var session=b.restricted().open(b.restricted().reviewOpen(id),true);Bitmap output=Bitmap.createBitmap(24,16,Bitmap.Config.ARGB_8888);
             try(var decoder=new RestrictedImages.Decoder(session)) {
@@ -73,8 +76,8 @@ public class RestrictedContentAndroidTest {
     @Test public void syntheticNoteEncodedSanitizedSignalDecodedAndConsumed() throws Exception {
         try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
-            String id=a.restricted().send(a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),
-                SyntheticRestrictedAudio.sanitizedTone(ar.authorization()),true);
+            var review=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
+            String id=a.restricted().send(review,SyntheticRestrictedAudio.sanitizedTone(a,review),true);
             for(var row:a.outbox()){b.receive(row.getJSONObject("envelope"));b.receive(row.getJSONObject("envelope"));}
             assertTrue(b.messages(a.id()).isEmpty());assertEquals(1,b.restricted().received(a.id()).size());
             var session=b.restricted().open(b.restricted().reviewOpen(id),true);
@@ -95,18 +98,19 @@ public class RestrictedContentAndroidTest {
         }
     }
     @Test public void notePreparationRejectsMalformedAndExpiredAuthorizationWithoutRecording() throws Exception {
-        assertThrows(Exception.class,()->RestrictedAudio.prepare(new byte[]{1,2,3,4},()->{}));
+        assertThrows(Exception.class,()->SyntheticRestrictedAudio.prepareRaw(new byte[]{1,2,3,4},()->{}));
         var allowed=new java.util.concurrent.atomic.AtomicBoolean(false);
         assertThrows(SecurityException.class,()->SyntheticRestrictedAudio.tone(()->{if(!allowed.get())throw new SecurityException("Synthetic locked");}));
         allowed.set(true);
         try(var encoded=SyntheticRestrictedAudio.tone(()->{if(!allowed.get())throw new SecurityException("Synthetic locked");})) {
             assertNotNull(encoded);allowed.set(false);
-            assertThrows(SecurityException.class,()->RestrictedAudio.prepare(new byte[]{1,2},()->{if(!allowed.get())throw new SecurityException("Synthetic locked");}));
+            assertThrows(SecurityException.class,()->SyntheticRestrictedAudio.prepareRaw(new byte[]{1,2},()->{if(!allowed.get())throw new SecurityException("Synthetic locked");}));
         }
         try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
-            try(var old=SyntheticRestrictedAudio.sanitizedTone(ar.authorization())) {
-                ar.gate.lock();ar.gate.unlock();
+            var initial=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
+            try(var old=SyntheticRestrictedAudio.sanitizedTone(a,initial)) {
+                ar.gate.lock();old.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);ar.gate.unlock();
                 var fresh=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
                 assertThrows(SecurityException.class,()->a.restricted().send(fresh,old,true));
                 assertTrue(a.outbox().isEmpty());

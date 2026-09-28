@@ -13,6 +13,14 @@ public final class RestrictedAudio {
     // No opaque OEM encoder is assumed to have this delay contract.
     private static final int FRAME_SAMPLES=1024,DRAIN_SAMPLES=2*FRAME_SAMPLES;
     private RestrictedAudio() {}
+    public static RestrictedContentService.Prepared prepare(app.umbra.crypto.Engine engine,
+            RestrictedContentService.Review review,byte[] encoded,boolean confirmed)throws Exception {
+        if(android.os.Looper.myLooper()==android.os.Looper.getMainLooper())throw new IllegalStateException("Preparation requires worker");
+        var grant=engine.restricted().preparationAuthorization(review,confirmed);
+        Runnable check=()->{try{grant.run();}catch(RuntimeException denied){throw denied;}catch(Exception denied){throw new ContentException(ContentException.Code.CONSENT_REQUIRED);}};
+        return engine.restricted().retainPrepared(review,prepare(encoded,check));
+    }
+
     static void requireFormat(MediaFormat format) {
         if(!MediaFormat.MIMETYPE_AUDIO_AAC.equals(format.getString(MediaFormat.KEY_MIME)) ||
                 format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)!=1 || format.getInteger(MediaFormat.KEY_SAMPLE_RATE)!=SAMPLE_RATE)
@@ -22,7 +30,7 @@ public final class RestrictedAudio {
             throw RestrictedPayload.invalid();
     }
     /** Decode and re-encode: container metadata and AAC ancillary bytes are not copied. */
-    public static RestrictedContentService.Prepared prepare(byte[] encoded,Runnable authorization)throws Exception {
+    static RestrictedContentService.Prepared prepare(byte[] encoded,Runnable authorization)throws Exception {
         short[] pcm=decode(encoded,authorization);
         try{return encode(pcm,authorization);}finally{Arrays.fill(pcm,(short)0);}
     }

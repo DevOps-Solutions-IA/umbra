@@ -1,5 +1,19 @@
 # Transferencia técnica a Codex
 
+## Avance acumulativo — PDF y preparación, 2026-09-28
+
+PR #16 sigue abierta en borrador. `c7584ee` incorpora PDF acotado en proceso
+Android aislado; privacidad debug pasó en run 36461176840. R8 falló antes de
+instrumentar por una omisión del fixture en TraceReferences, corregida en a909b60
+y comprobada localmente en ambos mappings; falta repetir su ejecución Android. `c808418` aprobó privacidad debug/R8 y el resto de
+resultados se conserva por SHA, no como aceptación de cambios posteriores.
+La corrección `4e969dc` impide enviar una preparación de una generación anterior
+con un consentimiento nuevo. La siguiente revisión añade ownership de pendientes,
+cuatro slots, invalidación inmediata y cierre comprobable sin esperar bajo el gate.
+Ver UI_API_CONTRACT y validation/2026-09-28-restricted-pdf-checkpoint.md.
+Video de archivo aún no implementado; matriz final y contrato definitivo pendientes.
+No hay integración de UI de Claude ni validación física nueva. Master A/B/C abierto.
+
 ## Master v3 — continuación técnica, 2026-09-28
 
 PR #16 permanece parcial, sin UI de Claude. Consultar

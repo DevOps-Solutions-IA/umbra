@@ -28,7 +28,7 @@ final class PdfPreparation {
                 registration=engine.emergency().register(EmergencyLock.Subsystem.DOCUMENTS,()->{owned.cancel();return owned.closed;});
                 job.start(input);
                 byte[] pages=job.execute();
-                try {check.run();DocumentPages.parse(pages);return new RestrictedContentService.Prepared(RestrictedPayload.Format.PDF_PAGES,pages,check);}
+                try {check.run();DocumentPages.parse(pages);return engine.restricted().retainPrepared(review,new RestrictedContentService.Prepared(RestrictedPayload.Format.PDF_PAGES,pages,check));}
                 catch(Exception | Error failure){Arrays.fill(pages,(byte)0);throw failure;}
             } finally {
                 try {job.close();if(registration!=null)registration.close();}

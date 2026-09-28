@@ -67,8 +67,10 @@ public final class RestrictedHttpsFixtureListener extends RunListener {
                 String al=ad.roster(a.id()),bl=bd.roster(b.id());ad.apply(bl);bd.apply(al);
                 var ac=ad.reviewRoster(bl);ad.approveRoster(ac,ac.fingerprint(),true);
                 var bc=bd.reviewRoster(al);bd.approveRoster(bc,bc.fingerprint(),true);
-                String ai=a.restricted().send(a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),SyntheticRestrictedAudio.tone(ar.authorization()),true);
-                String bi=b.restricted().send(b.restricted().reviewSend(a.id(),RestrictedPayload.Mode.ONCE,600,30),SyntheticRestrictedAudio.tone(br.authorization()),true);
+                var aConsent=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
+                String ai=a.restricted().send(aConsent,SyntheticRestrictedAudio.sanitizedTone(a,aConsent),true);
+                var bConsent=b.restricted().reviewSend(a.id(),RestrictedPayload.Mode.ONCE,600,30);
+                String bi=b.restricted().send(bConsent,SyntheticRestrictedAudio.sanitizedTone(b,bConsent),true);
                 send(ra,a);fetch(rb,b);send(rb,b);fetch(ra,a);send(ra,a);fetch(rb,b);
                 consume(b,a.id(),ai);consume(a,b.id(),bi);
                 a.connectivity().disconnect();

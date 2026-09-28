@@ -59,16 +59,22 @@ Android lacks atomic clipboard compare-and-clear, so no global-erasure promise.
 `engine.restricted().reviewSend(String recipient, Mode mode, long ttlSeconds,
 long sessionSeconds)` binds one exact verified/admitted device and vault generation.
 TTL 60..86400 seconds, session 1..60 seconds. Consent review lasts 60 monotonic
-seconds. `send(Review,Prepared,true)` transfers ownership of Prepared, wipes it on
-attempt, encrypts per-object with AES-GCM and queues inside Signal transaction.
+seconds. `send(Review,Prepared,true)` transfers ownership of Prepared, invalidates
+it on a transaction attempt and schedules wiping; `Prepared.closure()` confirms
+cleanup. It encrypts per-object with AES-GCM inside the Signal transaction.
 No ordinary history plaintext/preview or forwarding/export API is created.
 
-Preparation adapters: `RestrictedImages.prepare(byte[],Runnable)` accepts bounded
-JPEG/PNG and makes sanitized PNG; source remains caller-owned and unchanged.
-`RestrictedAudio.prepare(byte[],Runnable)` accepts the narrow AAC profile and
-re-encodes it through Android, not WebRTC. Supply the captured domain authorization,
-not an empty callback. This preparation alone does not permit sending; send
-revalidates its independently bound review. See ADR-restricted-audio for limits.
+Preparation adapters: `RestrictedImages.prepare(Engine,Review,byte[],boolean)`
+accepts bounded JPEG/PNG and makes sanitized PNG; source remains caller-owned.
+`RestrictedAudio.prepare(Engine,Review,byte[],boolean)` accepts the narrow AAC
+profile and re-encodes it through Android, not WebRTC. Both run on a worker and
+mint/check their authorization internally. UI cannot substitute a no-op callback.
+Pass the SAME review to `send`; a new review cannot reassign a prepared object.
+There are at most four pending prepared objects per Engine; close abandoned
+ones. Domain invalidation immediately denies them, then wipes their bounded bytes
+without waiting under the vault gate. `closure()` confirms cleanup. They expire
+with the original review (60 seconds), never renew across lock/unlock. Capture
+and PDF use the same pending-object ownership. See ADR-restricted-audio for limits.
 
 `received(peer)` and `status(id)` return public policy/status metadata only.
 `reviewOpen(id)` followed by `open(review,true)` consumes ONCE persistently before
