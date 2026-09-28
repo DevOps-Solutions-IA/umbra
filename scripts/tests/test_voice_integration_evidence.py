@@ -4,10 +4,26 @@ import sys
 import unittest
 from unittest.mock import patch, Mock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing, coordinate_mute, processing_barrier, issue_turn_after_selection
+from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing, coordinate_mute, processing_barrier, issue_turn_after_selection, require_completed_run
 import voice_network_evidence as network
 
 class VoiceEvidenceTest(unittest.TestCase):
+    def test_early_success_return_or_empty_receipt_cannot_approve_media(self):
+        import tempfile,json
+        for result in (None,True,{}, {'syntheticCredential':True}):
+            with self.assertRaises(RuntimeError):require_completed_run(result)
+        with tempfile.TemporaryDirectory() as d:
+            receipt=Path(d)/'voice-evidence.json'
+            with self.assertRaises(RuntimeError):require_completed_run(receipt)
+            receipt.write_text('{}')
+            with self.assertRaises(RuntimeError):require_completed_run(receipt)
+            good={'synthetic':True,'endpoints':2,'observedSeconds':1,
+                  'audio':[{'rejectedBeforeCapture':True}]*2,'network':[{'syntheticObservation':1}]*2}
+            receipt.write_text(json.dumps(good));require_completed_run(receipt)
+            for field in good:
+                bad=good.copy();del bad[field];receipt.write_text(json.dumps(bad))
+                with self.assertRaises(RuntimeError):require_completed_run(receipt)
+
     def test_turn_issued_once_only_after_both_selected_engines_request_it(self):
         events=[]
         def read(serial,*args):

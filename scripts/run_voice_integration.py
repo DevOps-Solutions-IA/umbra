@@ -144,6 +144,8 @@ def main():
     parser.add_argument("--optimized",action="store_true",help="Run the isolated non-debuggable R8 mediaLab APK on rooted AOSP AVDs")
     parser.add_argument("--scenario",choices=("audio","expired-auth","allocation-expiry","invalid-auth","unreachable","turn-loss","trust-loss","lock","emergency-lock","credential-expiry","direct-blocked","force-stop","permission-revoked","device-revoked","storage-failure","unauthorized-redirect","wrong-fingerprint","receive-only","degraded-network","camera-denied","camera-permission-revoked","video-stop-race"),default="audio")
     args=parser.parse_args()
+    if (args.reports/"voice-evidence.json").exists():
+        raise RuntimeError("Use a new media report directory; previous evidence must be preserved")
     if args.turn_ipv6 and args.scenario in ("unauthorized-redirect","unreachable"):
         parser.error("IPv6 redirect/unreachable packet evidence is not implemented")
     if (args.scenario.startswith("camera-") or args.scenario in ("receive-only","video-stop-race")) and not args.video: parser.error("Camera cases require the explicit video suite")
@@ -262,7 +264,7 @@ def main():
                     if not 1<=len(found)<=8: raise RuntimeError("Expected bounded owned AVD IPv6 Wi-Fi addresses")
                     addresses6.append([str(value) for value in found])
             if addresses[0]==addresses[1]: raise RuntimeError("Expected independent AVD Wi-Fi addresses")
-            def issue_turn():
+            for index,serial in enumerate((args.a,args.b)):
                 if not direct_probe(serial,(args.a,args.b)[1-index],addresses[1-index]):
                     raise RuntimeError("Direct IPv4 UDP route between owned AVDs unavailable")
             capture_since=time.time()
@@ -274,7 +276,7 @@ def main():
                     if direct_probe(serial,(args.a,args.b)[1-index],peer):
                         raise RuntimeError("Direct UDP route blocking was not demonstrated")
             clients_started=time.monotonic()
-            for index,serial in enumerate((args.a,args.b)):
+            def issue_turn():
                 credentials=turn.credentials((60 if args.video else 30) if args.scenario=="credential-expiry" else 180)
                 if args.scenario=="expired-auth":
                     credentials=turn.credentials(1)
@@ -527,7 +529,7 @@ def main():
                 except Exception as failure: errors.append(failure)
                 try: run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-","processing-applied-","processing-observe-")])
                 except Exception as failure: errors.append(failure)
-                for suffix in ("engine","admission-ready","admission-change","admission-result","public","peer","ready","start","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
+                for suffix in ("engine","admission-ready","admission-change","admission-result","public","peer","ready","start","turn-ready","turn","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
                     try: run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
                     except Exception as failure: errors.append(failure)
                 # These exact files belong solely to this named synthetic fixture, including failed runs.
@@ -536,6 +538,20 @@ def main():
                     except Exception as failure: errors.append(failure)
             for stream in streams: stream.close()
             if errors: raise RuntimeError("Voice lab cleanup failed; all endpoints were attempted") from errors[0]
+    return args.reports/"voice-evidence.json"
 
 
-if __name__=="__main__": main()
+def require_completed_run(result):
+    """A zero-exception early return is not multimedia acceptance evidence."""
+    if not isinstance(result,Path) or not result.is_file():
+        raise RuntimeError("Media driver ended without a completed evidence receipt")
+    report=json.loads(result.read_text())
+    if (report.get('synthetic') is not True or report.get('endpoints')!=2
+            or not isinstance(report.get('observedSeconds'),(int,float)) or report['observedSeconds']<=0
+            or len(report.get('audio',[]))!=2 or len(report.get('network',[]))!=2
+            or not all(isinstance(row,dict) and row for row in report['network'])
+            or not all(valid_audio(row) or row.get('rejectedBeforeCapture') is True for row in report['audio'])):
+        raise RuntimeError("Incomplete multimedia acceptance receipt")
+
+
+if __name__=="__main__": require_completed_run(main())

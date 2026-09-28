@@ -281,3 +281,24 @@ ocultado el exit 1 de unittest en el estado global del shell. Se conserva
 null-window-after.log FAILED y se corrige solo el fixture. Ejecución independiente
 null-window-corrected.log: exit 0, 177 PASS. Este resultado sustituye la afirmación
 prematura de PASS anterior; no se relajó el filtro de paquetes ni el test.
+
+## Invalidación de falsos positivos multimedia (b6e1b3e–84d6e48)
+
+La revisión de artefactos detectó que el cambio de emisión TURN sustituyó el
+bucle de probe UDP equivocado por la definición del proveedor y dejó un return
+de credenciales en main. El script terminaba con exit 0 antes de arrancar los
+clientes. Es un defecto introducido por esta PR, no un pase multimedia.
+**Quedan invalidados los verdes de voz, video, modulación, focalizadas de media
+y emergency-media de b6e1b3e, e8348ea, 97b8b4f y 84d6e48.** Sus matrices PASS
+no contienen recibos de audio/red/cierre y NO demuestran escenarios ejecutados.
+Las suites independientes (dominio, SQLite, Nearby, etc.) se distinguen de esas
+pruebas no ejecutadas. Los resultados completos de 675b9fd son anteriores al
+error y se conservan, sin usarlos para aceptar código posterior.
+
+Se restaura el bucle UDP y se coloca el proveedor en su bloque correcto. El entry
+point exige ahora un recibo final de media con dos extremos, observación positiva,
+audio o rechazo nativo explícito y evidencia de red. Una salida anticipada, None,
+boolean, credenciales, archivo ausente o recibo incompleto hace fallar el proceso.
+No se reutiliza un directorio con recibo de éxito previo. Se añade regresión de
+salidas vacías/anticipadas y se conserva cleanup de los nuevos archivos TURN.
+178 herramientas PASS. Falta CI multimedia realmente ejecutada del nuevo HEAD.
