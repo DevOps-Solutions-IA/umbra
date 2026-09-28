@@ -56,3 +56,12 @@ References reviewed 2026-09-28:
 https://developer.android.com/reference/android/graphics/ImageDecoder
 https://developer.android.com/security/fraud-prevention/activities
 https://developer.android.com/privacy-and-security/risks/secure-clipboard-handling
+
+Clipboard adapter accepts only an explicitly selected existing ordinary text
+message from Engine, not a content buffer/type boolean. It requires current
+vault/contact/admission authorization and focused foreground Activity. No URI,
+attachment or restricted object copying. An opaque ownership marker permits
+explicit cleanup of the currently matching clip; Android offers no compare-and-
+swap clipboard API, so competing clipboard writes and copies already obtained by
+other apps cannot be recalled. No background timer or indiscriminate global clear.
+The permission is for deliberate ordinary-message export, not restricted content.
