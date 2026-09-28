@@ -198,3 +198,11 @@ Emergency media debug de f9e25a6, job 108764001966: SUCCESS, voz y video sintét
 activos antes de emergencyLock, cierre y ventana posterior. RFCOMM y dominio
 debug también SUCCESS. Media R8 quedó bloqueada en el preflight anterior, y
 dominio R8 tuvo un fallo de conexión inicial al relay; no son aprobados.
+
+42eace1: la preparación inicial de rutas pasó, pero restaurar solamente Wi-Fi
+después de deshabilitar ambas redes dejó `getActiveNetwork()==null` durante la
+espera acotada. Los jobs de emergencia debug/R8 fallaron explícitamente en esa
+precondición, no se dieron por correctos. Se revierte exclusivamente esa restricción
+de orquestación y se restauran ambas redes originales, conservando la comprobación
+de disponibilidad real antes de una nueva acción connect y las observaciones
+de cero tráfico de UMBRA. No se añade reconexión automática al producto.

@@ -159,9 +159,9 @@ def main():
                     read('synthetic-startup-loss-ready.json')
                     run('shell','svc','wifi','disable');run('shell','svc','data','disable');go('loss-ready')
                     read('synthetic-startup-network-lost.json')
-                    # Restore the owned Wi-Fi path alone; cellular is restored in cleanup.
-                    # Starting both creates another default-network switch during the next action.
-                    reset();run('shell','svc','wifi','enable');time.sleep(5)
+                    # Restore both original OS paths; the Android fixture observes actual
+                    # default-network readiness before the new explicit connect action.
+                    reset();run('shell','svc','wifi','enable');run('shell','svc','data','enable');time.sleep(5)
                     observe('network-return-no-reconnect',dns_log);go('network-lost')
                     read('synthetic-startup-locked.json');time.sleep(1);reset();observe('vault-lock',dns_log);go('locked')
                 else:
