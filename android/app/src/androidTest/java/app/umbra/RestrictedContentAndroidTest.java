@@ -129,8 +129,9 @@ public class RestrictedContentAndroidTest {
                 assertEquals("Actual route confirmation before cancellation required",RestrictedPlayback.State.PLAYING,player.state());
                 long requested=System.nanoTime();br.gate.lock();long invalidated=System.nanoTime();
                 session.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);long closed=System.nanoTime();
-                assertEquals(RestrictedPlayback.State.CLOSED,player.state());
-                Thread.sleep(100);assertEquals(RestrictedPlayback.State.CLOSED,player.state());
+                var outcome=player.state();
+                assertTrue("Resource closure must leave a terminal outcome",outcome==RestrictedPlayback.State.CLOSED || outcome==RestrictedPlayback.State.INTERRUPTED);
+                Thread.sleep(100);assertEquals("Late callback changed terminal outcome",outcome,player.state());
                 br.gate.unlock();assertThrows(SecurityException.class,player::start);
                 assertEquals(ContentException.Code.CONSUMED,assertThrows(ContentException.class,
                     ()->b.restricted().open(b.restricted().reviewOpen(id),true)).code());

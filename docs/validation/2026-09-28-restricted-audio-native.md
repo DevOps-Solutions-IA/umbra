@@ -182,3 +182,40 @@ report regression still expected 56/54; the first cumulative run failed two of
 187 tool tests. Update those fixtures to the actual new totals and explicitly
 reject the historical 56/54 summaries. No minimum was reduced or test skipped.
 The corrected complete 187-test tool suite passed (exit 0).
+
+## a5a931b acceptance: HTTPS passed; recording reference still needed
+
+Privacy 36453551593 debug artifact 10984741309 SHA-256
+`edc81eb874b2765921ece4e20a3bea1559fa6dcae2400c30868615ccd5a4b1d2`, checkout
+`0117df32ac1a485e2626c7135c2f52d682b54660`. The new HTTPS fixture passed with its
+three packaged JNI regression tests: two Engine stores in one Android process,
+real relay TLS/admission, native AAC, both directions and consume/reopen rejection.
+This is not yet a green privacy workflow: two of ten subsequent Android cases failed.
+
+Playback now reached actual route-confirmed PLAYING and its closure future
+completed after lock. The assertion wrongly required only CLOSED although a
+source/routing callback can first report INTERRUPTED. Closure confirmation is a
+separate contract. Retain positive PLAYING, successful native closure, no restart
+and no reopen checks; accept the documented terminal interruption outcome and
+require it to remain stable in the observation window. Production terminal state
+updates now use atomic transitions so late callbacks cannot replace a terminal
+outcome or re-enter playback. This does not turn failed native release into success.
+
+Captured decoded statistics: 17408 samples, peak 10, RMS 2.54759. Exact-zero
+assumption remains red pending a controlled zero-PCM reference encoded and decoded
+through the same native codec. The next fixture reports both measurements, stores
+no PCM, and retains the rejecting assertion until the source of the discrepancy
+is demonstrated. No change to production capture permissions or input routing.
+
+Local e855363: four APK builds passed, APK policies/integrity passed for both
+flavors/debug/release. Initial test_local invocation used the wrong default JDK
+and failed at --release 21; log preserved. With explicit JDK21 it passed 204 backend
+cases, 20 utility scenarios, 85 security scenarios and 13 static source checks.
+The backend retains one Starlette TestClient/httpx deprecation warning; no
+unreviewed dependency update or suppression was introduced.
+
+Exported full-history backup `umbra-security-content-e855363.tar.gz` SHA-256
+`aacae2ac55a0442938f3b870874a32e9f839987f7d7b262008a5b14bf361cd20` in Windows
+Downloads/UMBRA_RESPALDOS_CODEX. It includes master text, recoverable bundle,
+validation, exact HEAD/tree and CI/APK hash snapshot. Isolated restore matched
+HEAD and fsck passed. Later working changes require their next backup.

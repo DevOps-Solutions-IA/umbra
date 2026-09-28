@@ -15,10 +15,10 @@ public final class RestrictedPlayback implements AutoCloseable {
     private MediaPlayer player;
     private AudioFocusRequest focus;
     private MemoryMediaSource source;
-    private volatile State state=State.READY;
+    private final java.util.concurrent.atomic.AtomicReference<State> state=new java.util.concurrent.atomic.AtomicReference<>(State.READY);
     private volatile boolean released;
     private boolean routesRegistered;
-    private final Runnable routingTimeout=()->{if(state==State.ROUTING)interrupt();};
+    private final Runnable routingTimeout=()->{if(state.get()==State.ROUTING)interrupt();};
     private final java.util.concurrent.atomic.AtomicBoolean started=new java.util.concurrent.atomic.AtomicBoolean();
     private final AudioDeviceCallback routes=new AudioDeviceCallback() {
         @Override public void onAudioDevicesRemoved(AudioDeviceInfo[] devices) {
@@ -45,14 +45,14 @@ public final class RestrictedPlayback implements AutoCloseable {
                     // Select only after preparation, still muted and before start/focus.
                     if(!player.setPreferredDevice(selected))throw RestrictedPayload.invalid();
                     if(player.getDuration()<1 || player.getDuration()>10000)throw RestrictedPayload.invalid();
-                    player.setOnCompletionListener(ignored->{state=State.COMPLETED;session.close();});
-                    player.setOnErrorListener((ignored,what,extra)->{state=State.FAILED;session.close();return true;});
+                    player.setOnCompletionListener(ignored->{terminal(State.COMPLETED);session.close();});
+                    player.setOnErrorListener((ignored,what,extra)->{terminal(State.FAILED);session.close();return true;});
                     player.addOnRoutingChangedListener(route->{
                         try {session.use(()->{
                             AudioDeviceInfo actual=route.getRoutedDevice();
-                            if(state==State.ROUTING && actual!=null && actual.getId()==selected.getId()) {
-                                callbacks.removeCallbacks(routingTimeout);player.setVolume(1f,1f);state=State.PLAYING;
-                            } else if(state==State.PLAYING && (actual==null || actual.getId()!=selected.getId())) {
+                            if(state.get()==State.ROUTING && actual!=null && actual.getId()==selected.getId()) {
+                                if(state.compareAndSet(State.ROUTING,State.PLAYING)){callbacks.removeCallbacks(routingTimeout);player.setVolume(1f,1f);}
+                            } else if(state.get()==State.PLAYING && (actual==null || actual.getId()!=selected.getId())) {
                                 player.setVolume(0f,0f);interrupt();
                             }
                         });} catch(Exception denied){interrupt();}
@@ -63,17 +63,20 @@ public final class RestrictedPlayback implements AutoCloseable {
                     audio.registerAudioDeviceCallback(routes,callbacks);routesRegistered=true;return this;
                 } catch(Exception | Error failure) {release();throw failure;}
             },RestrictedPlayback::release);
-        } catch(Exception | Error failure) {state=State.FAILED;session.close();throw failure;}
+        } catch(Exception | Error failure) {terminal(State.FAILED);session.close();throw failure;}
     }
     public void start()throws Exception {
-        if(!started.compareAndSet(false,true) || state!=State.READY || released)throw RestrictedPayload.invalid();
+        if(!started.compareAndSet(false,true) || state.get()!=State.READY || released)throw RestrictedPayload.invalid();
         session.check();
         if(audio.requestAudioFocus(focus)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {interrupt();throw new ContentException(ContentException.Code.CONSENT_REQUIRED);}
-        try {session.use(()->{state=State.ROUTING;player.start();callbacks.postDelayed(routingTimeout,1000);});}
-        catch(Exception failure){state=State.FAILED;session.close();throw failure;}
+        try {session.use(()->{if(!state.compareAndSet(State.READY,State.ROUTING))throw RestrictedPayload.invalid();player.start();callbacks.postDelayed(routingTimeout,1000);});}
+        catch(Exception failure){terminal(State.FAILED);session.close();throw failure;}
     }
-    public State state(){return state;}
-    private void interrupt(){if(state!=State.COMPLETED && state!=State.CLOSED)state=State.INTERRUPTED;session.close();}
+    public State state(){return state.get();}
+    private void terminal(State outcome){state.updateAndGet(previous->switch(previous){
+        case READY,ROUTING,PLAYING -> outcome; default -> previous;
+    });}
+    private void interrupt(){terminal(State.INTERRUPTED);session.close();}
     private synchronized void release() {
         if(released)return;released=true;
         try {if(player!=null)player.release();}
@@ -81,7 +84,7 @@ public final class RestrictedPlayback implements AutoCloseable {
             callbacks.removeCallbacks(routingTimeout);
             if(source!=null)source.close();if(routesRegistered)audio.unregisterAudioDeviceCallback(routes);
             if(focus!=null)audio.abandonAudioFocusRequest(focus);
-            if(state==State.READY || state==State.ROUTING || state==State.PLAYING)state=State.CLOSED;
+            terminal(State.CLOSED);
         }
     }
     @Override public void close(){session.close();}

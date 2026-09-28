@@ -41,8 +41,21 @@ public class RestrictedRecordingAndroidTest {
                 String id=a.restricted().send(review,prepared,true);
                 for(var row:a.outbox())b.receive(row.getJSONObject("envelope"));
                 var session=b.restricted().open(b.restricted().reviewOpen(id),true);
-                try {assertTrue(SyntheticRestrictedAudio.requireSilentCapture(session)>=1024);}
+                SyntheticRestrictedAudio.CaptureObservation captured;
+                try {captured=SyntheticRestrictedAudio.captureStatistics(session);}
                 finally {session.close();session.closure().toCompletableFuture().get(3,java.util.concurrent.TimeUnit.SECONDS);}
+                String zeroId=a.restricted().send(a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),
+                    SyntheticRestrictedAudio.silence(ar.authorization()),true);
+                for(var row:a.outbox())b.receive(row.getJSONObject("envelope"));
+                var zeroSession=b.restricted().open(b.restricted().reviewOpen(zeroId),true);
+                SyntheticRestrictedAudio.CaptureObservation zero;
+                try {zero=SyntheticRestrictedAudio.captureStatistics(zeroSession);}
+                finally {zeroSession.close();zeroSession.closure().toCompletableFuture().get(3,java.util.concurrent.TimeUnit.SECONDS);}
+                var status=new android.os.Bundle();status.putString("syntheticCaptureStatistics",
+                    "capturedSamples="+captured.samples()+",capturedPeak="+captured.peak()+",capturedRms="+captured.rms()+
+                    ",knownZeroPeak="+zero.peak()+",knownZeroRms="+zero.rms());
+                instrumentation.sendStatus(0,status);
+                assertEquals("Disabled host input not exact zero; compare controlled native-codec reference before changing contract",0,captured.peak());
             }
             ar.gate.lock();ar.gate.unlock();
             final AudioDeviceInfo input=selected;

@@ -11,17 +11,19 @@ public final class SyntheticRestrictedAudio {
         try{return RestrictedAudio.encode(pcm,authorization);}finally{Arrays.fill(pcm,(short)0);}
     }
     public record Observation(int samples,double rms,double targetEnergy,double otherEnergy,int encodedFrames,double tailFraction) {}
-    /** Disposable emulator AudioRecord input is disabled at the host; never use a physical mic. */
-    public static int requireSilentCapture(RestrictedContentService.Session session)throws Exception {
+    public static RestrictedContentService.Prepared silence(Runnable authorization)throws Exception {
+        short[] pcm=new short[RestrictedAudio.SAMPLE_RATE];
+        try{return RestrictedAudio.encode(pcm,authorization);}finally{Arrays.fill(pcm,(short)0);}
+    }
+    public record CaptureObservation(int samples,int peak,double rms) {}
+    /** Statistics only; no raw PCM escapes or persists. */
+    public static CaptureObservation captureStatistics(RestrictedContentService.Session session)throws Exception {
         return session.decode(bytes->{
             short[] pcm=RestrictedAudio.decode(bytes,()->{try{session.check();}catch(Exception denied){throw new SecurityException("Synthetic capture cancelled");}});
             try {
                 double energy=0;int peak=0;for(short sample:pcm){energy+=(double)sample*sample;peak=Math.max(peak,Math.abs((int)sample));}
-                var status=new android.os.Bundle();status.putString("syntheticCaptureStatistics","samples="+pcm.length+",peak="+peak+",rms="+Math.sqrt(energy/pcm.length));
-                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
-                for(short sample:pcm)if(sample!=0)throw new AssertionError("Expected disabled emulator host input, not real microphone data");
                 if(pcm.length<1024)throw new AssertionError("No native captured samples");
-                return pcm.length;
+                return new CaptureObservation(pcm.length,peak,Math.sqrt(energy/pcm.length));
             }finally{Arrays.fill(pcm,(short)0);}
         },ignored->{});
     }
