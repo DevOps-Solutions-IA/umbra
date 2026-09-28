@@ -24,7 +24,7 @@ public final class AdmissionScreens {
     private static void fingerprint(Ui ui, LinearLayout box, String label, String value) {
         if (value == null) return;
         box.addView(ui.text(UmbraType.CAPTION, label), ui.margins(Ui.match(), 8, 0));
-        TextView code = ui.code(value); code.setContentDescription(label + ": " + value); box.addView(code);
+        TextView code = ui.code(value); code.setContentDescription(label + ". " + code.getContentDescription()); box.addView(code);
     }
 
     public static Screen status(Ui ui, AdmissionState s, AdmissionActions a) {
