@@ -100,3 +100,51 @@ acceptance is NOT executed locally: /dev/kvm remains unavailable (accel-check 11
 The fixture requires a positive decoded PNG before kill, then persisted consumption
 and duplicate rejection after restart. It uses synthetic plaintext test SQLite,
 not a production Keystore fallback and not death during commit.
+
+## Native correction verified on 6bef5e8
+
+Privacy 36451474410 SUCCESS debug AND R8, connected AND offline. Integration
+checkout `840b4dde547d5d46faff9fd5f26ef5fdb855ad7e`, source HEAD
+`6bef5e8fd391bd150842c830edeb3d1c95ed87b8`. Eight Android cases per flavor and
+actual host force-stop consumption scenario passed in each matrix. AAC output:
+18 access units, 18432 decoded samples, final-marker spectral fraction
+0.9972409152, RMS 5644.33. Earlier tail-loss failures remain recorded above.
+This validates the narrow synthetic codec pipeline, not native recording,
+output-device playback, physical speech or HTTPS/RFCOMM notes yet.
+
+Artifacts:
+- debug 10983998000: `33e125f2fd0f59fca98e3f12f43a44b226d3171f62048027612123240fcc87af`
+- R8 10982684819: `f3505d692bb1866d0e4bc5edccb4f33dbb1206d2ebeabfef136dd60cf3e7826d`
+
+Local complete JVM: 249 connected / 192 offline, zero failures/errors/skips;
+Gradle exit 0 (1m8s). Both R8 vaultLab app/test APK builds exit 0 (1m7s).
+186 Python tool tests passed. These are separate from Android execution.
+
+Full-history backup `umbra-security-content-6bef5e8.tar.gz` exported to
+`C:\Users\Usuario\Downloads\UMBRA_RESPALDOS_CODEX\` without overwriting originals.
+SHA-256 `ce0f715050fb5ee51e072dca7c96a5a3545be16e29d1a041c3dbecd7f6bf29a3`.
+Recovered HEAD exactly matched; git fsck --full exit 0, no bundle prerequisites.
+It does not include subsequent playback/capture/nearby test work.
+
+## Other checkpoint regressions, kept separate
+
+On aa37375 Verify 36449076139 executed 56 connected Android cases with exactly
+one failure: the same pre-correction AAC sample count (15360). Offline not reached.
+Artifact 10983716170 SHA-256
+`0e2457427c94709229213d161a32e1daeb51115f902e2facc9f67155908373bd`.
+
+Focused 36449076146 nearby job SUCCESS: three connected and three offline
+RFCOMM exchanges with new PNG decoder/consumption assertions, plus unadmitted
+rejection in both. Artifact 10982917881 SHA-256
+`afd4722023008f7c2880a66496447319348ea3d47bd386eaebd70a76fc2c0124`.
+This is the emulated Bluetooth stack and synthetic records, not physical radio or
+production Vault persistence. Whole focused workflow status must be checked separately.
+
+Modulation 36449076084 R8 failed expected effective mode. Diagnostic recorded
+ACTIVE / ERROR_MUTED, faults=1, maxBlockNanos=10756631, processed=752 on A; B was
+OFF/faults=0. Processor budget remains 10000000ns, and its code fails muted above
+that wall-time bound. The source of the excessive delay is NOT established by
+these aggregate metrics. No threshold, fail-closed behavior or native binary was
+changed; future passes do not prove this intermittent failure corrected.
+Artifact 10983685512 SHA-256
+`35f5846a87d5541b1ffc9fcf226eacc9f581655eb0f67238358669fd94407067`.

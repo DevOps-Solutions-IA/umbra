@@ -104,4 +104,39 @@ public class RestrictedContentAndroidTest {
             assertThrows(SecurityException.class,()->RestrictedAudio.prepare(new byte[]{1,2},()->{if(!allowed.get())throw new SecurityException("Synthetic locked");}));
         }
     }
+    @Test public void nativeNotePlaybackConfirmsRouteThenLockClosesWithoutReplay() throws Exception {
+        var instrumentation=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation();
+        var context=instrumentation.getTargetContext();
+        // Existing locked Activity is only a foreground host for Android audio-focus rules.
+        // No product UI is changed or unlocked; synthetic Records remain test-APK-only.
+        var intent=context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+        assertNotNull(intent);
+        try(var host=androidx.test.core.app.ActivityScenario.launch(intent);
+                var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
+            Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
+            String id=a.restricted().send(a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),
+                SyntheticRestrictedAudio.tone(ar.authorization()),true);
+            for(var row:a.outbox())b.receive(row.getJSONObject("envelope"));
+            var audio=context.getSystemService(android.media.AudioManager.class);
+            android.media.AudioDeviceInfo selected=null;
+            for(var device:audio.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS))
+                if(device.getType()==android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER){selected=device;break;}
+            assertNotNull("Disposable AVD synthetic output required",selected);
+            var session=b.restricted().open(b.restricted().reviewOpen(id),true);
+            try(var player=new RestrictedPlayback(context,session,selected)) {
+                player.start();long until=System.nanoTime()+2_000_000_000L;
+                while(player.state()==RestrictedPlayback.State.ROUTING && System.nanoTime()<until)Thread.sleep(10);
+                assertEquals("Actual route confirmation before cancellation required",RestrictedPlayback.State.PLAYING,player.state());
+                long requested=System.nanoTime();br.gate.lock();long invalidated=System.nanoTime();
+                session.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);long closed=System.nanoTime();
+                assertEquals(RestrictedPlayback.State.CLOSED,player.state());
+                Thread.sleep(100);assertEquals(RestrictedPlayback.State.CLOSED,player.state());
+                br.gate.unlock();assertThrows(SecurityException.class,player::start);
+                assertEquals(ContentException.Code.CONSUMED,assertThrows(ContentException.class,
+                    ()->b.restricted().open(b.restricted().reviewOpen(id),true)).code());
+                var status=new android.os.Bundle();status.putString("restrictedPlaybackLockNanos",requested+","+invalidated+","+closed);
+                instrumentation.sendStatus(0,status);
+            } finally {session.close();}
+        }
+    }
 }

@@ -62,8 +62,8 @@ def consumption_restart(adb, package, reports):
         'postRestartDuplicateRejected': True}, indent=2) + '\n')
 
 
-def valid_report(text, code):
-    return (code == 0 and re.search(r'^OK \(8 tests\)$', text, re.M)
+def valid_report(text, code, expected=9):
+    return (expected in (9, 10) and code == 0 and re.search(r'^OK \('+str(expected)+r' tests\)$', text, re.M)
             and 'INSTRUMENTATION_CODE: -1' in text
             and not re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)
             and not any(x in text for x in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'Process crashed')))
@@ -78,7 +78,8 @@ def optimized_classes(mapping, configuration):
     for name in ('app.umbra.privacy.ImagePreparation',
                  'app.umbra.content.RestrictedContentService',
                  'app.umbra.content.RestrictedImages$Decoder',
-                 'app.umbra.content.RestrictedAudio'):
+                 'app.umbra.content.RestrictedAudio',
+                 'app.umbra.content.RestrictedPlayback'):
         match = re.search(r'^' + re.escape(name) + r' -> ([^:]+):$', mapping, re.M)
         if not match or match[1] == name:
             raise RuntimeError('Optimized privacy entry point missing or not obfuscated')
@@ -113,13 +114,17 @@ def main():
         evidence['optimizedClasses'] = optimized_classes(mapping.read_text(), configuration.read_text())
         evidence['mappingSha256'] = hashlib.sha256(mapping.read_bytes()).hexdigest()
     consumption_restart(adb, package, args.reports)
+    classes = 'app.umbra.PrivacyAdaptersAndroidTest,app.umbra.RestrictedContentAndroidTest'
+    expected = 10 if args.flavor == 'connected' else 9
+    if args.flavor == 'connected':
+        classes += ',app.umbra.RestrictedRecordingAndroidTest'
     log = args.reports / 'privacy-tests.log'
     with log.open('w') as stream:
         result = subprocess.run([*adb, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
-            'app.umbra.PrivacyAdaptersAndroidTest,app.umbra.RestrictedContentAndroidTest', package + '.test/androidx.test.runner.AndroidJUnitRunner'],
+            classes, '-e', 'syntheticNoHostAudio', 'true', package + '.test/androidx.test.runner.AndroidJUnitRunner'],
             stdout=stream, stderr=subprocess.STDOUT, timeout=180)
-    if not valid_report(log.read_text(), result.returncode):
-        raise RuntimeError(f'Privacy instrumentation did not pass all eight cases: {log}')
+    if not valid_report(log.read_text(), result.returncode, expected):
+        raise RuntimeError(f'Privacy instrumentation did not pass all {expected} cases: {log}')
     evidence['result'] = 'PASS'
     (args.reports / 'receipt.json').write_text(json.dumps(evidence, indent=2) + '\n')
 

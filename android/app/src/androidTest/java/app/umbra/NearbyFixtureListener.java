@@ -143,7 +143,7 @@ public final class NearbyFixtureListener extends RunListener {
                 engine.sendText(peer, "Synthetic " + role + " text", 3600);
                 engine.sendFile(peer, "synthetic.bin", Bytes.utf8("Synthetic " + role + " attachment"), 3600);
             }
-            Set<String> sent = new HashSet<>(); boolean locationSent=false, imageSent=false, imageConsumed=false, drainedAnnounced=false;long emergencyActiveNanos=0;
+            Set<String> sent = new HashSet<>(); boolean locationSent=false, imageSent=false, imageConsumed=false, noteSent=false, noteConsumed=false, drainedAnnounced=false;long emergencyActiveNanos=0;
             long deadline = SystemClock.elapsedRealtime() + 45000;
             while (SystemClock.elapsedRealtime() < deadline) {
                 if (receiveFailure != null) throw new AssertionError("Incoming processing failed", receiveFailure);
@@ -163,6 +163,10 @@ public final class NearbyFixtureListener extends RunListener {
                             var consent=engine.restricted().reviewSend(peer,RestrictedPayload.Mode.ONCE,600,30);
                             engine.restricted().send(consent,RestrictedImages.prepare(original,records.authorization()),true);imageSent=true;
                         }finally{Arrays.fill(original,(byte)0);}
+                    }
+                    if(imageSent && !noteSent) {
+                        var consent=engine.restricted().reviewSend(peer,RestrictedPayload.Mode.ONCE,600,30);
+                        engine.restricted().send(consent,SyntheticRestrictedAudio.tone(records.authorization()),true);noteSent=true;
                     }
                     queue = engine.outbox();
                 }
@@ -186,9 +190,9 @@ public final class NearbyFixtureListener extends RunListener {
                     long delivered = messages.stream().filter(m -> m.optBoolean("outgoing") && "Entregado".equals(m.optString("status"))).count();
                     require(incoming <= 2, "Duplicate displayed more than once");
                     var restricted=engine.restricted().received(peer);
-                    require(restricted.size()<=1,"Restricted RFCOMM duplicate created another object");
-                    if(!restricted.isEmpty() && !imageConsumed) {
-                        var object=restricted.get(0);require(object.format()==RestrictedPayload.Format.PNG,"Wrong restricted RFCOMM format");
+                    require(restricted.size()<=2,"Restricted RFCOMM duplicate created another object");
+                    for(var object:restricted) {
+                    if(object.format()==RestrictedPayload.Format.PNG && !imageConsumed) {
                         var session=engine.restricted().open(engine.restricted().reviewOpen(object.id()),true);
                         android.graphics.Bitmap output=android.graphics.Bitmap.createBitmap(16,16,android.graphics.Bitmap.Config.ARGB_8888);
                         try(var decoder=new RestrictedImages.Decoder(session)) {
@@ -200,8 +204,23 @@ public final class NearbyFixtureListener extends RunListener {
                         catch(ContentException expected){require(expected.code()==ContentException.Code.CONSUMED,"Unexpected restricted rejection");}
                         imageConsumed=true;
                     }
-                    if(imageConsumed)require(engine.restricted().status(restricted.get(0).id()).consumed(),"Duplicate reset restricted consumption");
-                    complete = imageSent && imageConsumed && incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null && locationSent &&
+                    if(object.format()==RestrictedPayload.Format.AAC_ADTS && !noteConsumed) {
+                        var session=engine.restricted().open(engine.restricted().reviewOpen(object.id()),true);
+                        try {
+                            var observed=SyntheticRestrictedAudio.observe(session);
+                            require(observed.samples()>=16000 && observed.samples()<24000,"Restricted RFCOMM note duration mismatch");
+                            require(observed.rms()>1000 && observed.rms()<10000 && observed.targetEnergy()>100*observed.otherEnergy()
+                                && observed.tailFraction()>0.6,"Restricted RFCOMM decoded note mismatch");
+                        }finally{session.close();}
+                        session.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);
+                        try{engine.restricted().open(engine.restricted().reviewOpen(object.id()),true);throw new AssertionError("Consumed RFCOMM note reopened");}
+                        catch(ContentException expected){require(expected.code()==ContentException.Code.CONSUMED,"Unexpected restricted rejection");}
+                        noteConsumed=true;
+                    }
+                    if((object.format()==RestrictedPayload.Format.PNG && imageConsumed) || (object.format()==RestrictedPayload.Format.AAC_ADTS && noteConsumed))
+                        require(engine.restricted().status(object.id()).consumed(),"Duplicate reset restricted consumption");
+                    }
+                    complete = imageSent && imageConsumed && noteSent && noteConsumed && incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null && locationSent &&
                         engine.locations().received(peer).size()==1 && engine.outbox().isEmpty();
                     if(complete) require(engine.locations().received(peer).get(0).getJSONObject("lastPoint").getLong("latE7")==123456780,"Location content mismatch");
                     if (complete) {
@@ -237,7 +256,7 @@ public final class NearbyFixtureListener extends RunListener {
                         status("nearbyEmergency","PASS active="+emergencyActiveNanos+",request="+requested.requestedNanos()+",invalidated="+requested.invalidatedNanos()+
                             ",confirmed="+result.finishedNanos()+",observationMillis="+(SystemClock.elapsedRealtime()-observation));
                     }
-                    status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, encrypted location, restricted PNG decoded/consumed, duplicate, receipts");
+                    status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, encrypted location, restricted PNG and native AAC decoded/consumed, duplicate, receipts");
                     return;
                 }
                 Thread.sleep(100);
