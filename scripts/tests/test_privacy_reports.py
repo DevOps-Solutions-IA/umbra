@@ -15,3 +15,17 @@ class PrivacyReportsTest(unittest.TestCase):
                     good + 'INSTRUMENTATION_STATUS_CODE: -3'):
             self.assertFalse(runner.valid_report(bad, 0))
         self.assertFalse(runner.valid_report(good, 1))
+
+    def test_r8_requires_all_exercised_entry_points_and_optimization(self):
+        names = ('app.umbra.privacy.ImagePreparation',
+                 'app.umbra.content.RestrictedContentService',
+                 'app.umbra.content.RestrictedImages$Decoder')
+        mapping = '\n'.join(f'{name} -> synthetic.c{index}:' for index, name in enumerate(names))
+        self.assertEqual(3, len(runner.optimized_classes(mapping, '')))
+        for bad in ('', mapping.replace(names[0], 'synthetic.Missing'),
+                    mapping.replace('synthetic.c0', names[0])):
+            with self.assertRaises(RuntimeError):
+                runner.optimized_classes(bad, '')
+        for disabled in ('-dontoptimize', '-dontobfuscate', '-dontshrink'):
+            with self.assertRaises(RuntimeError):
+                runner.optimized_classes(mapping, disabled)

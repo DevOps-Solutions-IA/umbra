@@ -18,6 +18,22 @@ def valid_report(text, code):
             and not any(x in text for x in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'Process crashed')))
 
 
+
+def optimized_classes(mapping, configuration):
+    """Require the actual tested production entry points, with optimization enabled."""
+    if re.search(r'^\s*-(?:dontoptimize|dontobfuscate|dontshrink)\b', configuration, re.M):
+        raise RuntimeError('Privacy optimization disabled')
+    result = {}
+    for name in ('app.umbra.privacy.ImagePreparation',
+                 'app.umbra.content.RestrictedContentService',
+                 'app.umbra.content.RestrictedImages$Decoder'):
+        match = re.search(r'^' + re.escape(name) + r' -> ([^:]+):$', mapping, re.M)
+        if not match or match[1] == name:
+            raise RuntimeError('Optimized privacy entry point missing or not obfuscated')
+        result[name] = match[1]
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--serial', required=True)
@@ -42,12 +58,7 @@ def main():
     if args.optimized:
         mapping = output / f'mapping/{args.flavor}VaultLab/mapping.txt'
         configuration = mapping.with_name('configuration.txt')
-        if re.search(r'^\s*-(?:dontoptimize|dontobfuscate|dontshrink)\b', configuration.read_text(), re.M):
-            raise RuntimeError('Privacy optimization disabled')
-        match = re.search(r'^app\.umbra\.privacy\.ImagePreparation -> ([^:]+):$', mapping.read_text(), re.M)
-        if not match or match[1] == 'app.umbra.privacy.ImagePreparation':
-            raise RuntimeError('Optimized image preparation missing or not obfuscated')
-        evidence['imagePreparationClass'] = match[1]
+        evidence['optimizedClasses'] = optimized_classes(mapping.read_text(), configuration.read_text())
         evidence['mappingSha256'] = hashlib.sha256(mapping.read_bytes()).hexdigest()
     log = args.reports / 'privacy-tests.log'
     with log.open('w') as stream:
