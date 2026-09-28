@@ -17,7 +17,7 @@ from turn_lab import TurnLab, docker
 from voice_relay_lab import voice_relay
 from android_apk_install import ensure_apk
 from admission_lab import reset_exchange
-from voice_direct_route import probe_udp
+from voice_direct_route import probe_udp, wait_wifi_ipv4
 from check_optimized_media import inspect as inspect_optimized_media
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -240,14 +240,8 @@ def main():
                 candidates=list(root.glob("android*/netsimd/pcaps/*-"+avd_path.stem+"-WIFI.pcap"))
                 if len(candidates)!=1: raise RuntimeError("Owned netsim Wi-Fi capture missing; start with ci_emulator.sh")
                 capture_paths.append(candidates[0])
-                ready=time.monotonic()+20
-                while True:
-                    result=run(serial,"shell","ip","-4","addr","show","wlan0").stdout.decode()
-                    address=re.search(r"inet (10\.0\.2\.[0-9]+)/",result)
-                    if address: break
-                    if time.monotonic()>=ready: raise RuntimeError("Disposable AVD Wi-Fi did not acquire an address")
-                    time.sleep(0.2)
-                addresses.append(str(ipaddress.ip_address(address[1])))
+                address=wait_wifi_ipv4(adb,serial,args.reports/f'wifi-ready-{serial}.json')
+                addresses.append(str(ipaddress.ip_address(address)))
                 if args.turn_ipv6:
                     value=run(serial,"shell","ip","-6","addr","show","wlan0").stdout.decode()
                     found=[ipaddress.ip_address(item) for item in re.findall(r"inet6 ([0-9a-f:]+)/",value)]

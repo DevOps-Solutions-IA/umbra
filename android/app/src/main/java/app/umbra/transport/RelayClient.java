@@ -24,6 +24,9 @@ public final class RelayClient implements AutoCloseable {
     private final java.util.Set<java.net.Socket> plainSockets=ConcurrentHashMap.newKeySet();
     private final java.util.Set<java.net.Socket> tlsSockets=ConcurrentHashMap.newKeySet();
     private app.umbra.core.EmergencyLock.Registration emergencyRegistration;
+    // One factory identity per client: Android's HTTPS pool keys TLS connections
+    // by factory identity. A new wrapper per request defeats reuse unnecessarily.
+    private final CancellableTls socketFactory=new CancellableTls(HttpsURLConnection.getDefaultSSLSocketFactory());
     private final java.util.ArrayDeque<app.umbra.admission.AdmissionChallenge> challenges=new java.util.ArrayDeque<>();
     public RelayClient(String address) throws Exception { this(address, () -> true); }
     public RelayClient(String address, BooleanSupplier permitted) throws Exception { this(address,permitted,null); }
@@ -182,7 +185,7 @@ public final class RelayClient implements AutoCloseable {
             allowed();
             // Delegate trust, cipher suites and endpoint verification unchanged. Retain the
             // actual socket so close cannot wait behind HttpURLConnection's body-read lock.
-            connection.setSSLSocketFactory(new CancellableTls(connection.getSSLSocketFactory()));
+            connection.setSSLSocketFactory(socketFactory);
             deadline = timer.schedule(()->{closeSockets();connection.disconnect();}, 20, TimeUnit.SECONDS);
             for(var header:admissionHeaders.entrySet()) connection.setRequestProperty(header.getKey(),header.getValue());
             connection.setRequestMethod(method); connection.setInstanceFollowRedirects(false);
@@ -222,7 +225,11 @@ public final class RelayClient implements AutoCloseable {
             throw failure;
         } finally {
             if (deadline != null) deadline.cancel(false);
-            closeSockets();connection.disconnect(); active.compareAndSet(connection,null);
+            connection.disconnect(); active.compareAndSet(connection,null);
+            // Keep ownership of idle reusable sockets until client cancellation.
+            // Closing every socket here turns each poll into another TLS handshake.
+            plainSockets.removeIf(java.net.Socket::isClosed);
+            tlsSockets.removeIf(java.net.Socket::isClosed);
         }
     }
     public void register(JSONObject profile, String invitation) throws Exception {
@@ -280,6 +287,8 @@ public final class RelayClient implements AutoCloseable {
         request("DELETE", "/v1/boxes/" + Wire.uuid(profile.getString("box")), profile.getString("read"), null);
     }
     private java.net.Socket trackSocket(java.net.Socket socket,java.util.Set<java.net.Socket> group) throws IOException {
+        group.removeIf(java.net.Socket::isClosed);
+        if(group.size()>=16) {socket.close();throw new java.net.SocketException("Relay socket ownership limit");}
         group.add(socket);
         if(closed.get()) {socket.close();group.remove(socket);throw new java.net.SocketException("Relay cancelled");}
         return socket;

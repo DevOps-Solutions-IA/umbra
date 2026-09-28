@@ -4,9 +4,39 @@ Run outside the multimedia packet observation window. A random challenge must
 arrive at a confirmed listening socket; ICMP availability is not assumed.
 """
 import ipaddress
+import re
 import secrets
 import subprocess
 import time
+
+
+def wifi_ipv4_route(text: str, source: str) -> bool:
+    """An address alone is insufficient: netd may not have populated policy routes."""
+    return (re.search(r'(?:^|\s)dev wlan0(?:\s|$)',text) is not None
+            and re.search(r'(?:^|\s)src '+re.escape(source)+r'(?:\s|$)',text) is not None
+            and not re.search(r'\b(?:unreachable|prohibit|blackhole)\b',text))
+
+
+def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20):
+    """Observe netlink only, no DNS/traffic. Same 20s AVD readiness budget as before."""
+    if not serial.startswith('emulator-') or not serial[9:].isdigit():
+        raise ValueError('Owned emulator required')
+    import json
+    start=time.monotonic();attempts=[]
+    try:
+        while True:
+            address=subprocess.run([adb,'-s',serial,'shell','ip','-4','addr','show','wlan0'],capture_output=True,text=True,timeout=3)
+            route=subprocess.run([adb,'-s',serial,'shell','ip','-4','route','get','10.0.2.2'],capture_output=True,text=True,timeout=3)
+            found=re.search(r'inet (10\.0\.2\.[0-9]+)/',address.stdout)
+            ready=address.returncode==0 and route.returncode==0 and found and wifi_ipv4_route(route.stdout,found[1])
+            attempts.append({'elapsedMillis':round((time.monotonic()-start)*1000),
+                'addressExit':address.returncode,'routeExit':route.returncode,
+                'source':found[1] if found else None,'route':route.stdout[:1024],'error':route.stderr[:512]})
+            if ready:return found[1]
+            if time.monotonic()-start>=timeout:raise RuntimeError('Owned AVD Wi-Fi IPv4 policy route unavailable within readiness budget')
+            time.sleep(.2)
+    finally:
+        reports.write_text(json.dumps({'serial':serial,'attempts':attempts},indent=2)+'\n')
 
 
 def probe_udp(adb: str, sender: str, receiver: str, address: str, evidence: dict | None = None) -> bool:

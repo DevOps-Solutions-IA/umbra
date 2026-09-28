@@ -100,6 +100,18 @@ public final class PrivateStartupFixtureListener extends RunListener {
                 long deadline=SystemClock.elapsedRealtime()+15_000;
                 while(engine.connectivity().isNetworkSessionAllowed()) {if(SystemClock.elapsedRealtime()>deadline)throw new AssertionError("Network loss not observed");Thread.sleep(50);}
                 checkpoint("network-lost");denied(engine,trap);
+                // svc wifi enable is asynchronous. Observe OS readiness, without
+                // retrying connect or performing DNS/I/O, inside the host's 45s barrier.
+                long recoveryBegan=SystemClock.elapsedRealtime();
+                var manager=context.getSystemService(android.net.ConnectivityManager.class);
+                while(manager.getActiveNetwork()==null) {
+                    denied(engine,trap);
+                    if(SystemClock.elapsedRealtime()-recoveryBegan>=15_000)throw new AssertionError("Lab network did not return before explicit action");
+                    Thread.sleep(50);
+                }
+                android.os.Bundle recovery=new android.os.Bundle();
+                recovery.putLong("networkRecoveryWaitMillis",SystemClock.elapsedRealtime()-recoveryBegan);
+                InstrumentationRegistry.getInstrumentation().sendStatus(0,recovery);
                 AndroidConnectivity.connect(context,engine.connectivity(),base,true);records.gate.lock();
                 require(engine.connectivity().getConnectivityState()==ConnectivityService.State.LOCKED_PRIVATE,"Vault lock left online");checkpoint("locked");
                 records.gate.unlock();engine.connectivity().vaultUnlocked();AndroidConnectivity.connect(context,engine.connectivity(),base,true);

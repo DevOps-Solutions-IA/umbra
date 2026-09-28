@@ -131,7 +131,12 @@ public final class EmergencyLockAndroidTest {
         var instrumentation=InstrumentationRegistry.getInstrumentation();var context=instrumentation.getTargetContext();
         String pkg=context.getPackageName();
         instrumentation.getUiAutomation().grantRuntimePermission(pkg,android.Manifest.permission.ACCESS_COARSE_LOCATION);
-        instrumentation.getUiAutomation().grantRuntimePermission(pkg,android.Manifest.permission.ACCESS_FINE_LOCATION);
+        // Do not grant FINE to a previously coarse-only package: the following
+        // coarse-provider regression must retain its real Android permission level.
+        // Dedicated startup labs already granted FINE explicitly; respect either setup.
+        int originalFine=context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION);
+        String provider=originalFine==android.content.pm.PackageManager.PERMISSION_GRANTED
+            ?android.location.LocationManager.GPS_PROVIDER:android.location.LocationManager.NETWORK_PROVIDER;
         LocationAndroidTest.shell("appops set "+pkg+" android:mock_location allow");
         LocationAndroidTest.shell("cmd location set-location-enabled true --user 0");
         var manager=context.getSystemService(android.location.LocationManager.class);
@@ -141,18 +146,18 @@ public final class EmergencyLockAndroidTest {
             var a=new app.umbra.crypto.Engine(ar,android.os.SystemClock::elapsedRealtime);
             var b=new app.umbra.crypto.Engine(br,android.os.SystemClock::elapsedRealtime);LocationAndroidTest.pair(a,b,ar,br);
             String sender=a.id();String id=a.locations().start(a.locations().review(b.id(),app.umbra.location.LocationPayload.Mode.ZONE,120,true),true);
-            manager.addTestProvider(android.location.LocationManager.GPS_PROVIDER,new android.location.provider.ProviderProperties.Builder()
+            manager.addTestProvider(provider,new android.location.provider.ProviderProperties.Builder()
                 .setAccuracy(android.location.provider.ProviderProperties.ACCURACY_FINE).setPowerUsage(android.location.provider.ProviderProperties.POWER_USAGE_HIGH).build());
-            manager.setTestProviderEnabled(android.location.LocationManager.GPS_PROVIDER,true);
+            manager.setTestProviderEnabled(provider,true);
             var measured=new CountDownLatch(1);var callbacks=new java.util.concurrent.atomic.AtomicInteger();
             capture=new app.umbra.location.AndroidLocationCapture(context,worker,()->true,a.locations(),message->{
                 if(message.startsWith("Ubicación activa")){callbacks.incrementAndGet();measured.countDown();}
             });
             var active=capture;worker.submit(()->{active.start(id,app.umbra.location.LocationPayload.Mode.ZONE,true);return null;}).get(5,TimeUnit.SECONDS);
-            var point=new android.location.Location(android.location.LocationManager.GPS_PROVIDER);
+            var point=new android.location.Location(provider);
             point.setLatitude(12.345678);point.setLongitude(45.678912);point.setAccuracy(5);
             point.setTime(System.currentTimeMillis());point.setElapsedRealtimeNanos(android.os.SystemClock.elapsedRealtimeNanos());
-            manager.setTestProviderLocation(android.location.LocationManager.GPS_PROVIDER,point);
+            manager.setTestProviderLocation(provider,point);
             assertTrue("Missing positive provider callback",measured.await(20,TimeUnit.SECONDS));
             for(var row:a.outbox())b.receive(row.getJSONObject("envelope"));
             assertTrue(b.locations().received(sender).get(0).has("lastPoint"));
@@ -161,7 +166,7 @@ public final class EmergencyLockAndroidTest {
             assertEquals(EmergencyLock.State.CLOSED,a.emergency().status().state());assertNull(active.activeSession());
             int before=callbacks.get();long observed=System.nanoTime();
             point.setTime(System.currentTimeMillis());point.setElapsedRealtimeNanos(android.os.SystemClock.elapsedRealtimeNanos());
-            manager.setTestProviderLocation(android.location.LocationManager.GPS_PROVIDER,point);Thread.sleep(1000);
+            manager.setTestProviderLocation(provider,point);Thread.sleep(1000);
             assertEquals(before,callbacks.get());assertNull(active.activeSession());
             assertThrows(SecurityException.class,()->active.start(id,app.umbra.location.LocationPayload.Mode.ZONE,true));
             var receipt=new android.os.Bundle();receipt.putString("emergencyLocationRequestNanos",Long.toString(requested.requestedNanos()));
@@ -170,7 +175,8 @@ public final class EmergencyLockAndroidTest {
             instrumentation.sendStatus(0,receipt);
         } finally {
             if(capture!=null)capture.close();worker.shutdownNow();assertTrue(worker.awaitTermination(5,TimeUnit.SECONDS));
-            manager.removeTestProvider(android.location.LocationManager.GPS_PROVIDER);
+            manager.removeTestProvider(provider);
+            assertEquals("Fixture changed fine permission",originalFine,context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION));
             LocationAndroidTest.shell("appops set "+pkg+" android:mock_location deny");
         }
     }

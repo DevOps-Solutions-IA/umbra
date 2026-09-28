@@ -153,3 +153,48 @@ completos se conservan antes de evaluar para no perder diagnóstico ante fallo.
 El cierre de proceso que aparece después del fallo host pertenece a su cleanup,
 no prueba por sí solo un crash previo del motor. La aceptación multimedia completa
 sigue pendiente de una ejecución que termine todos los controles.
+
+Verify `36368708031`: 48 casos connected ejecutados, uno falló en el callback
+coarse de LocationAndroidTest. El orden documentado muestra que la nueva prueba
+de emergencia había concedido FINE runtime previamente; el caso coarse denegaba
+Fine por AppOps, pero `fine=0` seguía indicando permiso runtime concedido. Antes
+de esta PR ese caso se ejecutaba antes de cualquier concesión Fine. Se corrige
+la contaminación de la fixture de emergencia: no concede Fine y usa el proveedor
+compatible con el permiso disponible (GPS si ya concedido; AOSP network si coarse).
+Afirma que no modificó el permiso Fine. No se cambia política productiva, timeout
+ni la prueba coarse existente; falta comprobar el nuevo orden en CI.
+
+En f9e25a6, inicio privado R8 falló después de la pérdida de red por
+`No default network available`, antes de la acción que debía conectar y bloquear.
+El arnés habilitaba Wi-Fi y datos y esperaba tiempo fijo sin comprobar la red
+default. Ahora restaura solo Wi-Fi, observa `getActiveNetwork()` hasta 15 segundos
+dentro de la barrera host existente de 45 segundos, y comprueba que el Engine
+permanece desconectado durante esa espera. No reintenta connect ni modifica el
+comportamiento productivo; el fallo si no aparece red se conserva explícito.
+
+Focalizadas de 9dbccdd: los tres credential-expiry debug fallaron antes de acabar
+reactivación; video activo tardaba 45–47 s frente a 24–31 s en la base verde
+36361843278. Revisión encontró un wrapper TLS nuevo por petición y cierre
+incondicional de sockets normales, que impiden reutilizar conexiones Android.
+Se conserva una fábrica TLS por RelayClient y propiedad acotada de sockets hasta
+cancelación, manteniendo disconnect normal y cierre forzado en timeout/emergencia.
+Integración HTTPS/JNI local repetida: 36 comprobaciones principales PASS, incluidos
+lectura bloqueada, emergencia y nombre TLS incorrecto. Los TTL no se aumentan.
+La mejora temporal y aceptación credential-expiry aún deben verificarse en AVD.
+
+Preflight UDP R8 de f9e25a6 volvió a fallar, ahora con topología conservada:
+`wlan0` tenía 10.0.2.16, pero faltaban las rutas IPv4 de su tabla 1016 mientras
+las reglas enviaban el tráfico a esa tabla (el otro AVD sí tenía ruta). Una
+dirección DHCP no acreditaba preparación del encaminamiento Android. Se amplía
+la condición de preparación existente de 20 s para exigir `ip -4 route get`
+por wlan0 con origen esperado, sin generar tráfico, alterar rutas ni aumentar
+el plazo. Se conserva después el intercambio UDP real y sus rechazos. Tres
+regresiones host prueban dirección sin ruta, llegada de ruta y fallo persistente;
+174 herramientas PASS. Inicio privado usa la misma observación de preparación
+antes de abrir la aplicación. La causa de este fallo está demostrada por el
+recibo; no se generaliza a todos los fallos UDP históricos sin igual evidencia.
+
+Emergency media debug de f9e25a6, job 108764001966: SUCCESS, voz y video sintéticos
+activos antes de emergencyLock, cierre y ventana posterior. RFCOMM y dominio
+debug también SUCCESS. Media R8 quedó bloqueada en el preflight anterior, y
+dominio R8 tuvo un fallo de conexión inicial al relay; no son aprobados.

@@ -17,6 +17,7 @@ import sys
 import tempfile
 import time
 from voice_relay_lab import voice_relay
+from voice_direct_route import wait_wifi_ipv4
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -67,6 +68,10 @@ def main():
     for apk in apks:run('install','-r',str(apk))
     run('shell','am','force-stop',package)
     run('shell','pm','clear',package)
+    # Stabilize the owned Wi-Fi policy route before any application action. This
+    # is host netlink observation, not UMBRA traffic or a bypass of its gate.
+    run('shell','svc','data','disable');run('shell','svc','wifi','enable')
+    wait_wifi_ipv4(adb[0],args.serial,args.reports/'initial-wifi-route.json')
     installed=run('shell','pm','list','packages','-U',package).stdout.decode()
     match=re.search(r'^package:'+re.escape(package)+r' uid:(\d+)$',installed,re.M)
     if not match:raise RuntimeError('Missing unique application UID')
@@ -154,7 +159,9 @@ def main():
                     read('synthetic-startup-loss-ready.json')
                     run('shell','svc','wifi','disable');run('shell','svc','data','disable');go('loss-ready')
                     read('synthetic-startup-network-lost.json')
-                    reset();run('shell','svc','wifi','enable');run('shell','svc','data','enable');time.sleep(5)
+                    # Restore the owned Wi-Fi path alone; cellular is restored in cleanup.
+                    # Starting both creates another default-network switch during the next action.
+                    reset();run('shell','svc','wifi','enable');time.sleep(5)
                     observe('network-return-no-reconnect',dns_log);go('network-lost')
                     read('synthetic-startup-locked.json');time.sleep(1);reset();observe('vault-lock',dns_log);go('locked')
                 else:
