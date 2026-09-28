@@ -73,6 +73,9 @@ def main() -> int:
     sources = ROOT / "android/app/src/main/java/app/umbra"
     java_sources = sorted((sources / "core").glob("*.java")) + sorted((sources / "crypto").glob("*.java"))
     java_sources += sorted((sources / "pairing").glob("*.java"))
+    # Domain content is required by Engine; Android codecs are exercised by the APK laboratory.
+    java_sources += [sources / "content" / name for name in
+                     ("ContentException.java", "RestrictedPayload.java", "RestrictedContentService.java")]
     java_sources += sorted((sources / "admission").glob("*.java"))
     java_sources += [p for p in sorted((sources / "connectivity").glob("*.java")) if not p.name.startswith("Android")]
     java_sources += [ROOT / "android/app/src/androidTest/java/app/umbra/AdmissionLab.java"]
@@ -84,7 +87,7 @@ def main() -> int:
     java_sources += [sources / "protocol/Wire.java", sources / "data/Records.java",
                      sources / "transport/RelayClient.java",
                      ROOT / "android/app/src/test/java/app/umbra/MemoryRecords.java",
-                     ROOT / "scripts/RelayIntegrationTest.java", ROOT / "scripts/DeviceRelayIntegration.java", ROOT / "scripts/AdmissionRelayIntegration.java"]
+                     ROOT / "scripts/RelayIntegrationTest.java", ROOT / "scripts/RestrictedRelayIntegration.java", ROOT / "scripts/DeviceRelayIntegration.java", ROOT / "scripts/AdmissionRelayIntegration.java"]
     with tempfile.TemporaryDirectory(prefix="umbra-https-integration-") as directory:
         temporary = Path(directory)
         classes = temporary / "classes"
