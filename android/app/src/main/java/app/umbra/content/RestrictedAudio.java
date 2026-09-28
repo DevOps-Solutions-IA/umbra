@@ -96,7 +96,7 @@ public final class RestrictedAudio {
                         input.clear();int count=Math.min(Math.min(1024,input.remaining()/2),pcm.length-queued);
                         if(count==0 && queued<pcm.length)throw RestrictedPayload.invalid();
                         for(int i=0;i<count;i++)input.putShort(pcm[queued+i]);
-                        long timestamp=queued*1_000_000L/SAMPLE_RATE;queued+=count;inputEnded=queued==pcm.length;
+                        long timestamp=queued*1_000_000L/SAMPLE_RATE;queued+=count;inputEnded=count==0;
                         codec.queueInputBuffer(index,0,count*2,timestamp,inputEnded?android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM:0);
                     }
                 }

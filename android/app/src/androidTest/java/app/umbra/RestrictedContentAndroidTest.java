@@ -80,11 +80,12 @@ public class RestrictedContentAndroidTest {
             var session=b.restricted().open(b.restricted().reviewOpen(id),true);
             try {
                 var observed=SyntheticRestrictedAudio.observe(session);
-                assertTrue(observed.samples()>=16000);assertTrue(observed.samples()<24000);
-                assertTrue(observed.rms()>1000 && observed.rms()<10000);
-                assertTrue(observed.targetEnergy()>100*observed.otherEnergy());
                 var receipt=new android.os.Bundle();receipt.putString("restrictedAac", "decodedSamples="+observed.samples()+",rms="+observed.rms());
                 androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendStatus(0,receipt);
+                assertTrue("Decoded note shorter than input: "+observed.samples(),observed.samples()>=16000);
+                assertTrue("Decoded note exceeded bounded priming: "+observed.samples(),observed.samples()<24000);
+                assertTrue("Decoded note RMS outside profile",observed.rms()>1000 && observed.rms()<10000);
+                assertTrue("Decoded note did not preserve synthetic frequency",observed.targetEnergy()>100*observed.otherEnergy());
             }finally{session.close();}
             session.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);br.reopen();
             var restarted=new Engine(br);
