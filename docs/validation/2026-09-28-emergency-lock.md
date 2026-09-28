@@ -112,3 +112,32 @@ SHA-256 de los cuatro APK locales de este candidato:
 | offline release unsigned | 8b596a2288b3de41c1a708d096b2960315e6ec87b9f6e5069cb9ede7b172a8e2 |
 
 Estos hashes identifican builds locales, no artefactos de una CI todavía pendiente.
+
+## Primera CI del código publicado
+
+HEAD `9dbccddbc07302df3914cb10886b9fd34260403e`, checkout de integración
+`44932d8095657a7dacc4c1a112effd914df4ce62`. PR #15 en borrador contra #14.
+JVM final local: 217 connected / 160 offline; test_local con JDK 21 exit 0.
+Se conserva una invocación errónea con JDK predeterminado anterior a 21 que falló
+al compilar JavaSyntaxCheck, sin atribuirla a un defecto Android.
+
+Emergency laboratory `36368708133`: los seis casos Android connected pasaron
+en debug y R8, incluido fallo intencional de cierre que exige INCOMPLETE. El paso
+siguiente de inicio privado falló por sensorOrScanAccess, después de ejecutar
+el caso positivo de ubicación en ese mismo paquete. El recibo muestra cero
+paquetes UID IPv4/IPv6 y cero consultas DNS en esa ventana. La guarda AppOps
+examina también accesos históricos, por lo que la nueva orquestación ejecuta
+inicio privado antes de cualquier adquisición intencional; no borra ni ignora
+la comprobación. Se añade el resultado AppOps por etapa a los artefactos.
+La explicación histórica se debe contrastar con esos nuevos registros; no se
+atribuye el fallo automáticamente a una captura que siguiera activa.
+
+RFCOMM de emergencia de ambos flavors: job `108760237310` SUCCESS. Media R8:
+job `108760237268` FAILED antes de audio, en probe UDP: listener exit 1,
+`nc: connect: Network is unreachable`, cero bytes. No se corrigió ni omitió
+la aserción: se añaden comandos, códigos, stderr acotado y topología antes/después
+a los recibos para investigar una nueva reproducción. No se modifica TURN.
+
+Suites existentes de este HEAD: admisión `36368708029`, contraseña
+`36368708017` e inicio privado `36368708001` SUCCESS. Otras aún no finalizadas
+al escribir esta entrada. Estos resultados no validan el commit siguiente.

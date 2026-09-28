@@ -14,3 +14,7 @@ class EmergencyReceiptTests(unittest.TestCase):
                     good+'Process crashed',good+'INSTRUMENTATION_STATUS_CODE: -3',
                     good.replace('INSTRUMENTATION_CODE: -1','')):
             self.assertFalse(valid_report(bad,0))
+
+    def test_startup_is_observed_before_intentional_sensor_acquisition(self):
+        workflow=(Path(__file__).resolve().parents[2]/'.github/workflows/emergency-lock.yml').read_text()
+        self.assertLess(workflow.index('python scripts/run_private_startup.py'),workflow.index('python scripts/run_emergency_tests.py'))

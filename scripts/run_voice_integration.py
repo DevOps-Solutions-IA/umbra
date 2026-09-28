@@ -188,6 +188,31 @@ def main():
     args.reports.mkdir(parents=True,exist_ok=True)
     if optimized_evidence:
         (args.reports/"optimized-apk.json").write_text(json.dumps(optimized_evidence,indent=2)+"\n")
+    probe_number=0
+    def direct_probe(sender,receiver,address):
+        nonlocal probe_number
+        probe_number+=1
+        evidence={'sender':sender,'receiver':receiver,'destination':address,'synthetic':True}
+        def topology():
+            result={}
+            for serial in (sender,receiver):
+                result[serial]={}
+                for label,command in (
+                    ('addresses',('ip','addr','show')),
+                    ('rules',('ip','rule','show')),
+                    ('routes',('ip','route','show','table','all')),
+                    ('udp',('cat','/proc/net/udp'))):
+                    captured=subprocess.run([adb,'-s',serial,'shell',*command],capture_output=True,text=True,timeout=5)
+                    result[serial][label]={'exit':captured.returncode,'stdout':captured.stdout[:16384],'stderr':captured.stderr[:1024]}
+            return result
+        try:
+            evidence['before']=topology()
+            proved=probe_udp(adb,sender,receiver,address,evidence)
+            evidence['delivered']=proved
+            return proved
+        finally:
+            try: evidence['after']=topology()
+            finally: (args.reports/f'direct-route-{probe_number}.json').write_text(json.dumps(evidence,indent=2)+'\n')
     processes={}; streams=[]
     with voice_relay() as relay, TurnLab(alternate_port=3479 if args.scenario=="unauthorized-redirect" else None, allocation_lifetime=180,tls_mode=args.turn_tls,ipv6=args.turn_ipv6) as turn:
         capture_paths=[]; blocked_routes=[]; shaped=[]; shape_evidence=[]; allocation_evidence=None
@@ -217,7 +242,7 @@ def main():
                     addresses6.append([str(value) for value in found])
             if addresses[0]==addresses[1]: raise RuntimeError("Expected independent AVD Wi-Fi addresses")
             for index,serial in enumerate((args.a,args.b)):
-                if not probe_udp(adb,serial,(args.a,args.b)[1-index],addresses[1-index]):
+                if not direct_probe(serial,(args.a,args.b)[1-index],addresses[1-index]):
                     raise RuntimeError("Direct IPv4 UDP route between owned AVDs unavailable")
             capture_since=time.time()
             if args.scenario=="direct-blocked":
@@ -225,7 +250,7 @@ def main():
                     peer=addresses[1-index]
                     run(serial,"shell","su","0","iptables","-I","OUTPUT","-d",peer,"-m","comment","--comment","umbra-private-voice-test","-j","REJECT")
                     blocked_routes.append((serial,peer))
-                    if probe_udp(adb,serial,(args.a,args.b)[1-index],peer):
+                    if direct_probe(serial,(args.a,args.b)[1-index],peer):
                         raise RuntimeError("Direct UDP route blocking was not demonstrated")
             clients_started=time.monotonic()
             for index,serial in enumerate((args.a,args.b)):
@@ -426,7 +451,7 @@ def main():
             capture_until=time.time()
             if args.scenario=="turn-loss":
                 for index,serial in enumerate((args.a,args.b)):
-                    if not probe_udp(adb,serial,(args.a,args.b)[1-index],addresses[1-index]):
+                    if not direct_probe(serial,(args.a,args.b)[1-index],addresses[1-index]):
                         raise RuntimeError("Direct UDP route unavailable after TURN loss")
             network=[]
             with tempfile.TemporaryDirectory(prefix="umbra-owned-wifi-snapshot-") as snapshot_dir:

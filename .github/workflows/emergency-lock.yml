@@ -66,8 +66,9 @@ jobs:
           options=()
           if [ "${{ matrix.optimized }}" = true ]; then options+=(--optimized); fi
           for flavor in connected offline; do
-            python scripts/run_emergency_tests.py --serial emulator-5554 --flavor "$flavor" "${options[@]}" --reports "$UMBRA_DEVICE_REPORTS/$flavor"
+            # Startup observes a fresh package before intentional location acquisition.
             python scripts/run_private_startup.py --emergency --serial emulator-5554 --flavor "$flavor" "${options[@]}" --reports "$UMBRA_DEVICE_REPORTS/$flavor/restart"
+            python scripts/run_emergency_tests.py --serial emulator-5554 --flavor "$flavor" "${options[@]}" --reports "$UMBRA_DEVICE_REPORTS/$flavor"
           done
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()

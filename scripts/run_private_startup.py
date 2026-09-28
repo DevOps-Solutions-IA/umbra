@@ -95,6 +95,7 @@ def main():
         counts={tool:packets(tool) for tool in chains}
         queries=dns_log.read_text().count('TRAP_QUERY')-before
         apps=run('shell','cmd','appops','get',package).stdout.decode()
+        (args.reports/(stage+'-appops.txt')).write_text(apps)
         sensors=sensor_access(apps)
         evidence['stages'][stage]={'observedMillis':round((time.monotonic()-start)*1000),'uidEgress':counts,'trapQueries':queries,'sensorOrScanAccess':sensors}
         save()
