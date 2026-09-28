@@ -4,12 +4,57 @@ Run outside the multimedia packet observation window. A random challenge must
 arrive at a confirmed listening socket; ICMP availability is not assumed.
 """
 import ipaddress
+import re
 import secrets
 import subprocess
 import time
 
 
-def probe_udp(adb: str, sender: str, receiver: str, address: str) -> bool:
+def wifi_ipv4_route(text: str, source: str) -> bool:
+    """An address alone is insufficient: netd may not have populated policy routes."""
+    return (re.search(r'(?:^|\s)dev wlan0(?:\s|$)',text) is not None
+            and re.search(r'(?:^|\s)src '+re.escape(source)+r'(?:\s|$)',text) is not None
+            and not re.search(r'\b(?:unreachable|prohibit|blackhole)\b',text))
+
+
+def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20):
+    """Observe netlink only, no DNS/traffic. Same 20s AVD readiness budget as before."""
+    if not serial.startswith('emulator-') or not serial[9:].isdigit():
+        raise ValueError('Owned emulator required')
+    import json
+    start=time.monotonic();attempts=[];failure_state={}
+    try:
+        while True:
+            address=subprocess.run([adb,'-s',serial,'shell','ip','-4','addr','show','wlan0'],capture_output=True,text=True,timeout=3)
+            route=subprocess.run([adb,'-s',serial,'shell','ip','-4','route','get','10.0.2.2'],capture_output=True,text=True,timeout=3)
+            found=re.search(r'inet (10\.0\.2\.[0-9]+)/',address.stdout)
+            ready=address.returncode==0 and route.returncode==0 and found and wifi_ipv4_route(route.stdout,found[1])
+            attempts.append({'elapsedMillis':round((time.monotonic()-start)*1000),
+                'addressExit':address.returncode,'routeExit':route.returncode,
+                'source':found[1] if found else None,'route':route.stdout[:1024],'error':route.stderr[:512]})
+            if ready:return found[1]
+            if time.monotonic()-start>=timeout:raise RuntimeError('Owned AVD Wi-Fi IPv4 policy route unavailable within readiness budget')
+            time.sleep(.2)
+    except (RuntimeError, subprocess.TimeoutExpired):
+        # Owned synthetic AVD only. Capture control-plane state before cleanup;
+        # never app logcat, packet payloads, SDP or TURN credentials.
+        for label,command in (
+                ('addresses',('ip','-4','addr','show')),
+                ('rules',('ip','-4','rule','show')),
+                ('routes',('ip','-4','route','show','table','all')),
+                ('connectivity',('dumpsys','connectivity')),
+                ('network_stack',('dumpsys','network_stack'))):
+            try:
+                captured=subprocess.run([adb,'-s',serial,'shell',*command],capture_output=True,text=True,timeout=5)
+                failure_state[label]={'exit':captured.returncode,'stdout':captured.stdout[:65536],'stderr':captured.stderr[:1024]}
+            except subprocess.TimeoutExpired:
+                failure_state[label]={'error':'diagnostic_timeout'}
+        raise
+    finally:
+        reports.write_text(json.dumps({'serial':serial,'attempts':attempts,'failureState':failure_state},indent=2)+'\n')
+
+
+def probe_udp(adb: str, sender: str, receiver: str, address: str, evidence: dict | None = None) -> bool:
     if not all(value.startswith('emulator-') and value[9:].isdigit() for value in (sender,receiver)) or sender==receiver:
         raise ValueError('Two owned emulator serials required')
     peer=ipaddress.ip_address(address)
@@ -17,8 +62,9 @@ def probe_udp(adb: str, sender: str, receiver: str, address: str) -> bool:
         raise ValueError('Expected owned AVD Wi-Fi address')
     port=40000+secrets.randbelow(5000)
     challenge=('umbra-owned-route-'+secrets.token_hex(16)).encode()
-    listener=subprocess.Popen([adb,'-s',receiver,'shell','timeout','5','toybox','nc','-4','-u','-l','-p',str(port),'-W','1'],
-                              stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+    command=[adb,'-s',receiver,'shell','timeout','5','toybox','nc','-4','-u','-l','-p',str(port),'-W','1']
+    if evidence is not None: evidence['listenerCommand']=command
+    listener=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     try:
         ready=time.monotonic()+2
         while True:
@@ -27,10 +73,18 @@ def probe_udp(adb: str, sender: str, receiver: str, address: str) -> bool:
             if any(row.split()[1].endswith(f':{port:04X}') for row in table.splitlines()[1:] if row.strip()): break
             if time.monotonic()>=ready: raise RuntimeError('Owned UDP listener did not bind')
             time.sleep(0.05)
+        if evidence is not None: evidence['boundPort']=port
         sent=subprocess.run([adb,'-s',sender,'shell','timeout','3','toybox','nc','-4','-u','-q','1','-w','2',str(peer),str(port)],
                             input=challenge,capture_output=True,timeout=5)
+        if evidence is not None:
+            evidence['senderExit']=sent.returncode
+            evidence['senderStderr']=repr(sent.stderr[:256])
         if sent.returncode not in (0,1,124): raise RuntimeError('AVD UDP probe tool failed')
         received,diagnostic=listener.communicate(timeout=7)
+        if evidence is not None:
+            evidence['listenerExit']=listener.returncode
+            evidence['listenerStderr']=repr(diagnostic[:256])
+            evidence['receivedBytes']=len(received)
         if listener.returncode not in (0,124) or diagnostic:
             kind='timeout' if b'timeout' in diagnostic.lower() else ('refused' if b'refused' in diagnostic.lower() else 'other' if diagnostic else 'none')
             # This stderr belongs only to toybox nc on our synthetic UDP probe,

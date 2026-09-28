@@ -17,9 +17,14 @@ import javax.net.ssl.*;
 public final class PrivateStartupFixtureListener extends RunListener {
     private Path files;
     private void require(boolean ok,String failure) { if(!ok) throw new AssertionError(failure); }
+    private void publish(Path receipt,JSONObject value) throws Exception {
+        Path temporary=receipt.resolveSibling(receipt.getFileName()+".tmp");
+        Files.write(temporary,Bytes.utf8(value.toString()));
+        Files.move(temporary,receipt,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);
+    }
     private void checkpoint(String stage) throws Exception {
         Path receipt=files.resolve("synthetic-startup-"+stage+".json"),go=files.resolve("synthetic-startup-"+stage+"-go");
-        Files.write(receipt,Bytes.utf8(new JSONObject().put("stage",stage).put("monotonicMillis",SystemClock.elapsedRealtime()).toString()));
+        publish(receipt,new JSONObject().put("stage",stage).put("monotonicMillis",SystemClock.elapsedRealtime()));
         long deadline=SystemClock.elapsedRealtime()+45_000;
         while(!Files.exists(go)) {if(SystemClock.elapsedRealtime()>deadline)throw new AssertionError("Startup host barrier: "+stage);Thread.sleep(50);}
         Files.delete(go);
@@ -100,10 +105,36 @@ public final class PrivateStartupFixtureListener extends RunListener {
                 long deadline=SystemClock.elapsedRealtime()+15_000;
                 while(engine.connectivity().isNetworkSessionAllowed()) {if(SystemClock.elapsedRealtime()>deadline)throw new AssertionError("Network loss not observed");Thread.sleep(50);}
                 checkpoint("network-lost");denied(engine,trap);
+                // svc wifi enable is asynchronous. Observe OS readiness, without
+                // retrying connect or performing DNS/I/O, inside the host's 45s barrier.
+                long recoveryBegan=SystemClock.elapsedRealtime();
+                var manager=context.getSystemService(android.net.ConnectivityManager.class);
+                while(manager.getActiveNetwork()==null) {
+                    denied(engine,trap);
+                    if(SystemClock.elapsedRealtime()-recoveryBegan>=15_000)throw new AssertionError("Lab network did not return before explicit action");
+                    Thread.sleep(50);
+                }
+                android.os.Bundle recovery=new android.os.Bundle();
+                recovery.putLong("networkRecoveryWaitMillis",SystemClock.elapsedRealtime()-recoveryBegan);
+                InstrumentationRegistry.getInstrumentation().sendStatus(0,recovery);
                 AndroidConnectivity.connect(context,engine.connectivity(),base,true);records.gate.lock();
                 require(engine.connectivity().getConnectivityState()==ConnectivityService.State.LOCKED_PRIVATE,"Vault lock left online");checkpoint("locked");
                 records.gate.unlock();engine.connectivity().vaultUnlocked();AndroidConnectivity.connect(context,engine.connectivity(),base,true);
             } finally {HttpsURLConnection.setDefaultSSLSocketFactory(original);}
+        }
+        if("true".equals(InstrumentationRegistry.getArguments().getString("emergency","false"))) {
+            var requested=engine.emergencyLock();
+            long until=SystemClock.elapsedRealtime()+6000;
+            while(engine.emergency().status().state()==app.umbra.core.EmergencyLock.State.CLOSING && SystemClock.elapsedRealtime()<until)Thread.sleep(10);
+            var result=engine.emergency().status();
+            require(result.state()==app.umbra.core.EmergencyLock.State.CLOSED,"Emergency did not confirm closure before force-stop");
+            denied(engine,trap);
+            try {records.gate.unlock();throw new AssertionError("Legacy unlock survived emergency");}
+            catch(SecurityException expected) { /* New authentication ticket is mandatory. */ }
+            publish(files.resolve("synthetic-startup-emergency-result.json"),new JSONObject()
+                .put("requestedNanos",requested.requestedNanos()).put("invalidatedNanos",requested.invalidatedNanos())
+                .put("confirmedNanos",result.finishedNanos()).put("state",result.state().name()));
+            checkpoint("emergency-closed");
         }
         // Deliberately left open until the host proves process death. No synthetic close/reopen claim.
         checkpoint("kill-ready");Thread.sleep(45_000);throw new AssertionError("Host failed to terminate fixture");

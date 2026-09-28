@@ -4,10 +4,56 @@ import sys
 import unittest
 from unittest.mock import patch, Mock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing, coordinate_mute, processing_barrier
+from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing, coordinate_mute, processing_barrier, issue_turn_after_selection, require_completed_run, await_expired_turn_timestamp
 import voice_network_evidence as network
 
 class VoiceEvidenceTest(unittest.TestCase):
+    def test_expired_turn_waits_past_the_entire_integer_expiry_second(self):
+        clock=Mock(side_effect=[101.0,101.1,101.9,102.0])
+        sleep=Mock()
+        await_expired_turn_timestamp(101,clock=clock,monotonic=lambda:0,sleep=sleep)
+        self.assertEqual(4,clock.call_count)
+        self.assertEqual(3,sleep.call_count)
+
+    def test_expired_turn_wait_is_bounded_when_wall_clock_stalls(self):
+        with self.assertRaises(RuntimeError):
+            await_expired_turn_timestamp(101,clock=lambda:100,monotonic=Mock(side_effect=[0,0,4]),sleep=Mock())
+
+    def test_early_success_return_or_empty_receipt_cannot_approve_media(self):
+        import tempfile,json
+        for result in (None,True,{}, {'syntheticCredential':True}):
+            with self.assertRaises(RuntimeError):require_completed_run(result)
+        with tempfile.TemporaryDirectory() as d:
+            receipt=Path(d)/'voice-evidence.json'
+            with self.assertRaises(RuntimeError):require_completed_run(receipt)
+            receipt.write_text('{}')
+            with self.assertRaises(RuntimeError):require_completed_run(receipt)
+            good={'synthetic':True,'endpoints':2,'observedSeconds':1,
+                  'audio':[{'rejectedBeforeCapture':True}]*2,'network':[{'syntheticObservation':1}]*2}
+            receipt.write_text(json.dumps(good));require_completed_run(receipt)
+            for field in good:
+                bad=good.copy();del bad[field];receipt.write_text(json.dumps(bad))
+                with self.assertRaises(RuntimeError):require_completed_run(receipt)
+
+    def test_turn_issued_once_only_after_both_selected_engines_request_it(self):
+        events=[]
+        def read(serial,*args):
+            events.append(('selected',serial));return {'selectedAndConsented':True}
+        def issue():
+            self.assertEqual([('selected','A'),('selected','B')],events[:2])
+            events.append(('issued',));return {'synthetic':True}
+        write=Mock()
+        issue_turn_after_selection(('A','B'),{'A':object(),'B':object()},123,write,read,issue)
+        self.assertEqual(2,events.count(('issued',)))
+        self.assertEqual(2,write.call_count)
+
+    def test_turn_not_issued_when_either_engine_lacks_selection(self):
+        for reports in (({},),({'selectedAndConsented':True},{'selectedAndConsented':False})):
+            issue=Mock();write=Mock()
+            with self.assertRaises(RuntimeError):
+                issue_turn_after_selection(('A','B'),{'A':object(),'B':object()},123,write,Mock(side_effect=reports),issue)
+            issue.assert_not_called();write.assert_not_called()
+
     def test_modulation_needs_decoded_output_and_positive_observation_windows(self):
         good=dict(natural=0,modified=80,loud=80,settleMillis=1300,observedMillis=2000,videoFrames=10,step=0,metrics=[200]*34)
         self.assertTrue(valid_processing(good,"modified",video=True))

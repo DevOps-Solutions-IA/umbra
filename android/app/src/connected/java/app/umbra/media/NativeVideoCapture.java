@@ -89,7 +89,7 @@ final class NativeVideoCapture implements AutoCloseable {
         try { track.setEnabled(false); }
         finally {
             try { capturer.stopCapture(); }
-            catch(InterruptedException interrupted) { Thread.currentThread().interrupt();onFailure.run(); }
+            catch(InterruptedException interrupted) { Thread.currentThread().interrupt();onFailure.run();throw new IllegalStateException("Camera closure interrupted"); }
             finally {
                 try {capturer.dispose();}
                 finally {try {track.dispose();} finally {try {source.dispose();} finally {

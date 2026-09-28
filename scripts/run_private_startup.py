@@ -17,6 +17,7 @@ import sys
 import tempfile
 import time
 from voice_relay_lab import voice_relay
+from voice_direct_route import wait_wifi_ipv4
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -43,6 +44,7 @@ def main():
     parser.add_argument('--serial',required=True)
     parser.add_argument('--flavor',choices=('connected','offline'),required=True)
     parser.add_argument('--optimized',action='store_true')
+    parser.add_argument('--emergency',action='store_true')
     parser.add_argument('--reports',type=Path,required=True)
     args=parser.parse_args();args.reports.mkdir(parents=True,exist_ok=True)
     build='vaultLab' if args.optimized else 'debug'
@@ -54,7 +56,7 @@ def main():
     if run('shell','getprop','ro.kernel.qemu').stdout.strip()!=b'1':raise RuntimeError('Disposable owned AVD required')
     output=ROOT/'android/app/build/outputs'
     apks=[output/f'apk/{args.flavor}/{build}/app-{args.flavor}-{build}.apk',output/f'apk/androidTest/{args.flavor}/{build}/app-{args.flavor}-{build}-androidTest.apk']
-    evidence={'synthetic':True,'optimized':args.optimized,'exactProductionApk':False,'flavor':args.flavor,
+    evidence={'synthetic':True,'emergency':args.emergency,'optimized':args.optimized,'exactProductionApk':False,'flavor':args.flavor,
               'artifacts':{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in apks},'stages':{}}
     def save(): (args.reports/'receipt.json').write_text(json.dumps(evidence,indent=2)+'\n')
     if args.optimized:
@@ -66,6 +68,11 @@ def main():
     for apk in apks:run('install','-r',str(apk))
     run('shell','am','force-stop',package)
     run('shell','pm','clear',package)
+    if args.flavor=='connected':
+        # Positive HTTPS acceptance needs an OS route; offline deliberately does not.
+        # Host netlink observation is not UMBRA traffic or a bypass of its gate.
+        run('shell','svc','data','disable');run('shell','svc','wifi','enable')
+        wait_wifi_ipv4(adb[0],args.serial,args.reports/'initial-wifi-route.json')
     installed=run('shell','pm','list','packages','-U',package).stdout.decode()
     match=re.search(r'^package:'+re.escape(package)+r' uid:(\d+)$',installed,re.M)
     if not match:raise RuntimeError('Missing unique application UID')
@@ -94,6 +101,7 @@ def main():
         counts={tool:packets(tool) for tool in chains}
         queries=dns_log.read_text().count('TRAP_QUERY')-before
         apps=run('shell','cmd','appops','get',package).stdout.decode()
+        (args.reports/(stage+'-appops.txt')).write_text(apps)
         sensors=sensor_access(apps)
         evidence['stages'][stage]={'observedMillis':round((time.monotonic()-start)*1000),'uidEgress':counts,'trapQueries':queries,'sensorOrScanAccess':sensors}
         save()
@@ -103,7 +111,7 @@ def main():
         if quiet and (queries or any(v['packets'] for v in counts.values())):raise RuntimeError('Unexpected startup egress: '+stage)
         return counts
     runner=package+'.test/androidx.test.runner.AndroidJUnitRunner'
-    command=[*adb,'shell','am','instrument','-w','-r','-e','class','app.umbra.DeviceSignalTest','-e','listener','app.umbra.PrivateStartupFixtureListener','-e','startupPhase']
+    command=[*adb,'shell','am','instrument','-w','-r','-e','class','app.umbra.DeviceSignalTest','-e','listener','app.umbra.PrivateStartupFixtureListener','-e','emergency',str(args.emergency).lower(),'-e','startupPhase']
     with tempfile.TemporaryDirectory(prefix='umbra-startup-') as temporary:
         dns_log=Path(temporary)/'dns.log'
         try:
@@ -152,11 +160,21 @@ def main():
                     read('synthetic-startup-loss-ready.json')
                     run('shell','svc','wifi','disable');run('shell','svc','data','disable');go('loss-ready')
                     read('synthetic-startup-network-lost.json')
+                    # Restore both original OS paths; the Android fixture observes actual
+                    # default-network readiness before the new explicit connect action.
                     reset();run('shell','svc','wifi','enable');run('shell','svc','data','enable');time.sleep(5)
                     observe('network-return-no-reconnect',dns_log);go('network-lost')
                     read('synthetic-startup-locked.json');time.sleep(1);reset();observe('vault-lock',dns_log);go('locked')
                 else:
                     read('synthetic-startup-offline.json');reset();observe('offline-flavor',dns_log);go('offline')
+                if args.emergency:
+                    read('synthetic-startup-emergency-closed.json')
+                    receipt=read('synthetic-startup-emergency-result.json')
+                    if (receipt.get('state')!='CLOSED' or not 0<receipt.get('requestedNanos',0)<=receipt.get('invalidatedNanos',0)<=receipt.get('confirmedNanos',0)
+                            or receipt['confirmedNanos']-receipt['requestedNanos']>5_000_000_000):
+                        raise RuntimeError('Emergency closure was not bounded and confirmed')
+                    evidence['emergency']=receipt;save()
+                    reset();observe('emergency-closed',dns_log);go('emergency-closed')
                 read('synthetic-startup-kill-ready.json')
                 pid=run('shell','pidof',package).stdout.decode().strip()
                 if not re.fullmatch(r'\d+',pid):raise RuntimeError('Missing live target before force-stop')

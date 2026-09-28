@@ -120,15 +120,16 @@ def main() -> int:
                 pass  # Synthetic capability headers and paths never enter logs.
 
             def do_GET(self):
+                (exchange / "pending-response").touch()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", "2")
                 self.end_headers()
+                self.wfile.write(b"{")
                 self.wfile.flush()
-                (exchange / "pending-response").touch()
                 release_fixture.wait(30)
                 try:
-                    self.wfile.write(b"{}")
+                    self.wfile.write(b"}")
                 except (BrokenPipeError, ConnectionResetError, ssl.SSLError):
                     pass
 

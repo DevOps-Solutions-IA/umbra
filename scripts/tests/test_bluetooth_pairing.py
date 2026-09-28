@@ -105,3 +105,14 @@ class PairingTests(unittest.TestCase):
                 self.assertEqual(call.call_count,2)
             with patch.object(flow,'command',side_effect=['','UI hierchary dumped to: /sdcard/umbra-pairing.xml','broken']):
                 with self.assertRaises(ET.ParseError):flow.ui('a')
+
+    def test_null_active_window_needs_fresh_snapshot_and_has_same_attempt_limit(self):
+        missing='ERROR: null root node returned by UiTestAutomationBridge.'
+        with tempfile.TemporaryDirectory() as folder:
+            flow=pairing.Pairing('adb',('a','b'),Path(folder),60)
+            with patch.object(flow,'command',side_effect=['',missing,'','UI hierchary dumped to: /sdcard/umbra-pairing.xml','<hierarchy><node package="com.android.settings" text="fresh"/></hierarchy>']),patch.object(pairing.time,'sleep'):
+                self.assertEqual('fresh',flow.ui('a')[0].get('text'))
+            with patch.object(flow,'command',return_value=missing) as call,patch.object(pairing.time,'sleep'):
+                with self.assertRaises(RuntimeError):flow.ui('a')
+                self.assertEqual(6,call.call_count)
+                self.assertFalse(any(c.args[2]=='cat' for c in call.call_args_list))

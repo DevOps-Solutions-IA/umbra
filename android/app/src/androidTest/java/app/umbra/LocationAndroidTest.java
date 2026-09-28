@@ -28,7 +28,7 @@ public class LocationAndroidTest {
         var ac=ad.reviewRoster(bList); ad.approveRoster(ac,ac.fingerprint(),true);
         var bc=bd.reviewRoster(aList); bd.approveRoster(bc,bc.fingerprint(),true);
     }
-    private static void shell(String command) throws Exception {
+    static void shell(String command) throws Exception {
         try(var fd=InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(command);
             var input=new android.os.ParcelFileDescriptor.AutoCloseInputStream(fd)) { input.readAllBytes(); }
     }

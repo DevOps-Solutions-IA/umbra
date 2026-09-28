@@ -13,5 +13,7 @@ public interface Records {
     default Runnable authorization() { throw new SecurityException("Session authorization unavailable"); }
     /** Optional lifecycle notification; authorization() remains mandatory on every operation. */
     default void onInvalidation(Runnable callback) {}
+    /** Only implementations backed by a process AccessGate provide coordinated closure. */
+    default app.umbra.core.EmergencyLock emergency() { return null; }
     interface Work<T> { T run() throws Exception; }
 }

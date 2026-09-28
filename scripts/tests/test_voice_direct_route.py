@@ -5,7 +5,7 @@ import sys
 import unittest
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from voice_direct_route import probe_udp
+from voice_direct_route import probe_udp, wifi_ipv4_route, wait_wifi_ipv4
 
 class DirectRouteProbeTest(unittest.TestCase):
     def test_only_exact_challenge_from_bound_receiver_proves_delivery(self):
@@ -33,3 +33,33 @@ class DirectRouteProbeTest(unittest.TestCase):
         self.assertIn('nc: synthetic failure',diagnostic)
         self.assertNotIn('\n',diagnostic)
         self.assertLess(len(diagnostic),450)
+
+    def test_address_without_a_matching_ipv4_wifi_route_is_not_ready(self):
+        self.assertTrue(wifi_ipv4_route('10.0.2.2 dev wlan0 src 10.0.2.16 uid 2000','10.0.2.16'))
+        for route in ('RTNETLINK answers: Network is unreachable',
+                      '10.0.2.2 dev eth0 src 10.0.2.16',
+                      '10.0.2.2 dev wlan0 src 10.0.2.17',
+                      'default dev wlan0','blackhole dev wlan0 src 10.0.2.16'):
+            self.assertFalse(wifi_ipv4_route(route,'10.0.2.16'))
+
+    def test_waits_for_route_not_just_dhcp_address_and_records_attempts(self):
+        import tempfile,json
+        addr=subprocess.CompletedProcess([],0,'inet 10.0.2.16/24','')
+        absent=subprocess.CompletedProcess([],2,'','Network is unreachable')
+        present=subprocess.CompletedProcess([],0,'10.0.2.2 dev wlan0 src 10.0.2.16','')
+        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',side_effect=[addr,absent,addr,present]),patch('voice_direct_route.time.sleep'):
+            report=Path(d)/'readiness.json'
+            self.assertEqual('10.0.2.16',wait_wifi_ipv4('adb','emulator-5554',report))
+            self.assertEqual(2,len(json.loads(report.read_text())['attempts']))
+
+    def test_missing_route_fails_and_preserves_diagnostics(self):
+        import tempfile,json
+        addr=subprocess.CompletedProcess([],0,'inet 10.0.2.16/24','')
+        absent=subprocess.CompletedProcess([],2,'','Network is unreachable')
+        diagnostics=[subprocess.CompletedProcess([],0,'synthetic control-plane state','') for _ in range(5)]
+        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',side_effect=[addr,absent,*diagnostics]):
+            report=Path(d)/'readiness.json'
+            with self.assertRaises(RuntimeError):wait_wifi_ipv4('adb','emulator-5554',report,timeout=0)
+            receipt=json.loads(report.read_text())
+            self.assertEqual(2,receipt['attempts'][0]['routeExit'])
+            self.assertEqual({'addresses','rules','routes','connectivity','network_stack'},set(receipt['failureState']))

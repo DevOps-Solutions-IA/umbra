@@ -86,7 +86,9 @@ class Pairing:
         path = '/sdcard/umbra-pairing.xml'
         # uiautomator can exit zero without producing XML while Settings is changing.
         # Never consume a stale snapshot or treat missing observation as confirmation.
-        # Retry only its explicit idle-state failure, within the original global deadline.
+        # Reacquire only for its explicit idle/null-active-window diagnostics,
+        # within the original global deadline and three-attempt limit. Neither
+        # condition proves bonding or permits using a previous XML snapshot.
         for attempt in range(3):
             self.command(serial, 'shell', 'rm', '-f', path)
             report = self.command(serial, 'shell', 'uiautomator', 'dump', path)
@@ -97,7 +99,9 @@ class Pairing:
                 tree = nodes(xml)
                 (self.logs / f'{serial}-last-ui.xml').write_text(xml, encoding='utf-8')
                 return tree
-            if 'ERROR: could not get idle state.' not in report:
+            if not any(message in report for message in (
+                    'ERROR: could not get idle state.',
+                    'ERROR: null root node returned by UiTestAutomationBridge.')):
                 raise RuntimeError('UI dump did not confirm a fresh snapshot; inspect acquisition report')
             time.sleep(0.25)
         raise RuntimeError('UI remained non-idle during bounded snapshot acquisition')

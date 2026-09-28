@@ -1,5 +1,16 @@
 # Seguridad y límites de UMBRA 0.2
 
+## Bloqueo de emergencia — 2026-09-28, implementación bajo validación
+
+Rama `codex/emergency-lock`, base exacta `52cd1e531b9de41ecd398ba53309b630ce1074f5`
+de PR #14, comprobada contra GitHub antes de modificar. Una solicitud deniega el
+AccessGate antes de esperar cierres independientes. CLOSED exige confirmaciones;
+INCOMPLETE impide otra sesión. Se conserva la bóveda y el commit ya confirmado.
+Ver [contrato para UI](EMERGENCY_LOCK.md), [ADR](adr/ADR-emergency-lock.md) y
+[evidencia](validation/2026-09-28-emergency-lock.md). Botón de Claude y aplicación
+combinada pendientes. Ningún resultado histórico valida esta implementación.
+
+
 ## Private startup strict — 2026-09-27, implementación bajo validación
 
 Rama `codex/private-startup-no-network`, base exacta

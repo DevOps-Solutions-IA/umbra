@@ -53,6 +53,11 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     };
     private final ScheduledExecutorService worker=Executors.newSingleThreadScheduledExecutor();
     private final ScheduledExecutorService watchdog=Executors.newSingleThreadScheduledExecutor();
+    private final java.util.concurrent.CompletableFuture<Void> closure=new java.util.concurrent.CompletableFuture<>();
+    private app.umbra.core.EmergencyLock.Registration emergencyRegistration;
+    public app.umbra.core.EmergencyLock emergency() { return authorization.emergency(); }
+    public java.util.concurrent.CompletionStage<Void> closure() { return closure.thenApply(value->value); }
+    private volatile boolean cleanupFailure;
     private final AtomicBoolean cancelled=new AtomicBoolean(), disposed=new AtomicBoolean();
     private volatile State state=State.NEGOTIATING;
     private volatile String failureStage="none";
@@ -134,6 +139,9 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         this.descriptionPublisher=labPublisher==null?authorization::description:labPublisher;
         this.turn=Objects.requireNonNull(turn); this.adm=Objects.requireNonNull(adm); this.requireMicrophone=requireMicrophone;
         try { synchronized(lifecycle) {
+            if(authorization.emergency()!=null)emergencyRegistration=authorization.emergency().register(app.umbra.core.EmergencyLock.Subsystem.MEDIA,()->{
+                cancelLocally();return closure();
+            });
             initialize(context); JSONObject row=authorization.snapshot(); turn.check();
             sessionDeadline=row.getLong("deadline");sessionBegan=row.getLong("began");
             self=authorization.localDevice(); caller=self.equals(row.getJSONObject("context").getString("callerDevice"));
@@ -515,10 +523,11 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
     }
     private void releaseVideo() {
         videoStopped=true;
-        if(remoteVideo!=null) { remoteVideo.removeSink(videoSink);remoteVideo=null; }
+        VideoTrack previous=remoteVideo;remoteVideo=null;
+        if(previous!=null)release(()->previous.removeSink(videoSink));
         NativeVideoCapture capture=videoCapture;videoCapture=null;
-        if(pc!=null && mediaTransceivers.size()==2) mediaTransceivers.get(1).getSender().setTrack(null,false);
-        if(capture!=null)capture.close();
+        release(()->{if(pc!=null && mediaTransceivers.size()==2)mediaTransceivers.get(1).getSender().setTrack(null,false);});
+        if(capture!=null)release(capture::close);
     }
     public java.util.List<android.media.AudioDeviceInfo> communicationDevices() throws Exception {
         check(); if(route==null) throw new IllegalStateException("Synthetic endpoint has no physical audio route"); return route.available();
@@ -602,9 +611,23 @@ public final class NativeVoiceSession implements AutoCloseable, PeerConnection.O
         watchdog.shutdown();worker.shutdown();
         // An unavailable store must not keep the watchdog alive after native cleanup.
         try { authorization.end(); } catch(Exception unavailable) { endDeliveryFailed=true; }
+        // disposed means teardown started. Confirm only after queued native releases and
+        // callbacks have left BOTH executors; otherwise an old camera close may still fail.
+        Thread observer=new Thread(()->{
+            boolean terminated=false;
+            try {
+                long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(4);
+                terminated=watchdog.awaitTermination(4,TimeUnit.SECONDS)
+                    && worker.awaitTermination(Math.max(0,deadline-System.nanoTime()),TimeUnit.NANOSECONDS);
+            } catch(InterruptedException interrupted) { Thread.currentThread().interrupt(); }
+            if(!terminated || cleanupFailure)closure.completeExceptionally(new IllegalStateException("Media closure incomplete"));
+            else closure.complete(null);
+            if(!closure.isCompletedExceptionally() && emergencyRegistration!=null)emergencyRegistration.close();
+        },"umbra-media-closure");
+        observer.setDaemon(true);observer.start();
     } }
     private void release(Runnable operation) {
-        try { operation.run(); } catch(RuntimeException failure) { state=State.FAILED; failureStage="resource-cleanup"; }
+        try { operation.run(); } catch(RuntimeException failure) { cleanupFailure=true; state=State.FAILED; failureStage="resource-cleanup"; }
     }
     private final class Callback implements SdpObserver {
         private final boolean create; private final Runnable applied; private final int expectedGeneration=generation;
