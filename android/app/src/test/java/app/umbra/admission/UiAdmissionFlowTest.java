@@ -25,7 +25,7 @@ public class UiAdmissionFlowTest {
         assertEquals("UNCONFIGURED", before.state());
         assertNull(before.realmId()); assertNull(before.request());
         assertTrue(present(before).canImportRealm());
-        AdmissionFlow.applyMember(device.admission, parsed(realm.encode()), true);
+        AdmissionFlow.applyMember(device.db, device.admission, parsed(realm.encode()), true);
         AdmissionFlow.Snapshot after = read(device);
         assertEquals("NOT_ADMITTED", after.state());
         assertEquals(realm.realmId(), after.realmId());
@@ -36,14 +36,14 @@ public class UiAdmissionFlowTest {
     @Test public void importRequiresTheCurrentExplicitConfirmation() throws Exception {
         AdmissionServiceTest.Device admin = new AdmissionServiceTest.Device(), device = new AdmissionServiceTest.Device();
         RealmConfig realm = admin.admission.createAdmissionRealm(true);
-        assertThrows(SecurityException.class, () -> AdmissionFlow.applyMember(device.admission, parsed(realm.encode()), false));
+        assertThrows(SecurityException.class, () -> AdmissionFlow.applyMember(device.db, device.admission, parsed(realm.encode()), false));
         assertEquals("UNCONFIGURED", read(device).state());
-        assertThrows(IllegalArgumentException.class, () -> AdmissionFlow.applyMember(device.admission, AdmissionImport.classify("umbra:invite:x"), true));
+        assertThrows(IllegalArgumentException.class, () -> AdmissionFlow.applyMember(device.db, device.admission, AdmissionImport.classify("umbra:invite:x"), true));
     }
     @Test public void authorityMismatchIsAnImportFailureThatKeepsThePreviousPin() throws Exception {
         AdmissionServiceTest.Setup s = new AdmissionServiceTest.Setup();
         RealmConfig foreign = new AdmissionServiceTest.Device().admission.createAdmissionRealm(true);
-        assertThrows(SecurityException.class, () -> AdmissionFlow.applyMember(s.a.admission, parsed(foreign.encode()), true));
+        assertThrows(SecurityException.class, () -> AdmissionFlow.applyMember(s.a.db, s.a.admission, parsed(foreign.encode()), true));
         AdmissionFlow.Snapshot after = read(s.a);
         assertEquals("NOT_ADMITTED", after.state());
         assertEquals(s.realm.realmId(), after.realmId());
@@ -71,14 +71,14 @@ public class UiAdmissionFlowTest {
         AdmissionServiceTest.Setup s = new AdmissionServiceTest.Setup();
         AdmissionRequest first = s.a.admission.createAdmissionRequest();
         AdmissionRejection rejection = s.admin.admission.rejectAdmission(s.admin.admission.reviewAdmissionRequest(first.wire()), true);
-        AdmissionFlow.applyMember(s.a.admission, parsed(rejection.wire()), true);
+        AdmissionFlow.applyMember(s.a.db, s.a.admission, parsed(rejection.wire()), true);
         AdmissionFlow.Snapshot rejected = read(s.a);
         assertEquals("REJECTED", rejected.state());
         assertTrue(present(rejected).canCreateRequest());
         assertFalse(present(rejected).admitted());
         AdmissionRequest second = s.a.admission.createAdmissionRequest();
         AdmissionCredential credential = s.admin.admission.approveAdmission(s.admin.admission.reviewAdmissionRequest(second.wire()), true, 3600);
-        AdmissionFlow.applyMember(s.a.admission, parsed(credential.wire()), true);
+        AdmissionFlow.applyMember(s.a.db, s.a.admission, parsed(credential.wire()), true);
         AdmissionFlow.Snapshot admitted = read(s.a);
         assertEquals("ADMITTED", admitted.state());
         assertTrue(present(admitted).admitted());
@@ -91,7 +91,7 @@ public class UiAdmissionFlowTest {
         s.a.admission.createAdmissionRequest();
         AdmissionRequest other = s.b.admission.createAdmissionRequest();
         AdmissionCredential forB = s.admin.admission.approveAdmission(s.admin.admission.reviewAdmissionRequest(other.wire()), true, 3600);
-        assertThrows(SecurityException.class, () -> AdmissionFlow.applyMember(s.a.admission, parsed(forB.wire()), true));
+        assertThrows(SecurityException.class, () -> AdmissionFlow.applyMember(s.a.db, s.a.admission, parsed(forB.wire()), true));
         assertEquals("REQUEST_PENDING", read(s.a).state());
     }
     @Test public void requestExpiryAndCredentialExpiryAreDistinguished() throws Exception {
@@ -105,7 +105,7 @@ public class UiAdmissionFlowTest {
 
         AdmissionRequest request = s.b.admission.createAdmissionRequest();
         AdmissionCredential shortLived = s.admin.admission.approveAdmission(s.admin.admission.reviewAdmissionRequest(request.wire()), true, 60);
-        AdmissionFlow.applyMember(s.b.admission, parsed(shortLived.wire()), true);
+        AdmissionFlow.applyMember(s.b.db, s.b.admission, parsed(shortLived.wire()), true);
         assertEquals("ADMITTED", read(s.b).state());
         s.b.clock.addAndGet(61);
         AdmissionFlow.Snapshot credentialExpired = read(s.b);
@@ -119,7 +119,7 @@ public class UiAdmissionFlowTest {
         AdmissionCredential credential = s.enroll(s.a);
         byte[] identity = s.a.db.get("meta", "identity");
         AdmissionRevocation revocation = s.admin.admission.revokeAdmission(credential.wire(), true, "device_lost");
-        AdmissionFlow.applyMember(s.a.admission, parsed(revocation.wire()), true);
+        AdmissionFlow.applyMember(s.a.db, s.a.admission, parsed(revocation.wire()), true);
         AdmissionFlow.Snapshot revoked = read(s.a);
         assertEquals("REVOKED", revoked.state());
         AdmissionPresentation p = present(revoked);
@@ -149,11 +149,26 @@ public class UiAdmissionFlowTest {
         AdmissionService.Renewal renewal = s.admin.admission.renewAdmission(review, renewalRequest.parts().get(1), true, 3600);
         AdmissionImport.Parsed result = parsed(renewal.credential().wire(), renewal.revocation().wire());
         assertEquals(AdmissionImport.Kind.RENEWAL_RESULT, result.kind());
-        AdmissionFlow.applyMember(s.a.admission, result, true);
+        AdmissionFlow.applyMember(s.a.db, s.a.admission, result, true);
         AdmissionFlow.Snapshot renewed = read(s.a);
         assertEquals("ADMITTED", renewed.state());
         assertEquals(renewal.credential().wire(), renewed.credentialWire());
         assertNotNull(s.a.db.get("admission-revoked", old.credentialId()));
+    }
+    @Test public void renewalResultIsAtomicWhenTheRevocationIsRejected() throws Exception {
+        AdmissionServiceTest.Setup s = new AdmissionServiceTest.Setup();
+        AdmissionCredential old = s.enroll(s.a);
+        s.a.admission.createAdmissionRequest();
+        AdmissionFlow.Snapshot pending = read(s.a);
+        AdmissionService.Renewal renewal = s.admin.admission.renewAdmission(
+            s.admin.admission.reviewAdmissionRequest(pending.request().wire()), pending.credentialWire(), true, 3600);
+        AdmissionImport.Parsed broken = parsed(renewal.credential().wire(), "umbra:admission:revocation:1:broken.broken");
+        assertEquals(AdmissionImport.Kind.RENEWAL_RESULT, broken.kind());
+        assertThrows(Exception.class, () -> AdmissionFlow.applyMember(s.a.db, s.a.admission, broken, true));
+        AdmissionFlow.Snapshot unchanged = read(s.a);
+        assertEquals("ADMITTED", unchanged.state());
+        assertEquals("the new credential was rolled back with the failed revocation", old.wire(), unchanged.credentialWire());
+        assertNotNull("the renewal request is still pending", unchanged.request());
     }
     @Test public void admissionIsPerDeviceStore() throws Exception {
         AdmissionServiceTest.Setup s = new AdmissionServiceTest.Setup();

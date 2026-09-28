@@ -48,4 +48,6 @@ public enum AccessStep {
     public static final String LOCKED_AFTER_CHANGE = "Contraseña cambiada. La bóveda quedó bloqueada: desbloquea con Android y la nueva contraseña.";
     /** Generic by design: the domain does not reveal whether the password or the tag failed. */
     public static final String UNLOCK_FAILED = "No se pudo abrir la bóveda. Revisa la contraseña e inténtalo de nuevo.";
+    /** The password was accepted but the stored records could not be read; the vault was locked again. */
+    public static final String RECORDS_UNREADABLE = "La contraseña abrió la bóveda, pero sus registros no se pudieron leer. Se volvió a bloquear; no se borró ni se reinició nada.";
 }

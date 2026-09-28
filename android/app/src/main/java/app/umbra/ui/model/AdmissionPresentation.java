@@ -68,6 +68,12 @@ public record AdmissionPresentation(Status status, String title, String body, To
             Tone.NEUTRAL, Glyph.TIMER, false, false, false, false, false);
     }
 
+    /** The domain read failed (not a lock). Nothing is claimed or offered; the next refresh reads again. */
+    public static AdmissionPresentation unreadable() {
+        return new AdmissionPresentation(Status.INVALID, "No se pudo leer la admisión", "UMBRA no pudo leer el estado de admisión ahora. No se modificó nada.",
+            Tone.WARNING, Glyph.WARNING, false, false, false, false, false);
+    }
+
     /** Offline revocation is only known once the signed revocation is imported; say so plainly. */
     public static final String OFFLINE_REVOCATION_NOTE =
         "Sin conexión, otros teléfonos solo conocen una revocación cuando reciben el archivo firmado. Revocar no borra datos que ya se entregaron.";

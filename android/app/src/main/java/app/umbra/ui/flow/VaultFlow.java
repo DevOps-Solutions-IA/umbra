@@ -28,6 +28,14 @@ public final class VaultFlow {
     }
 
     /**
+     * The password opened the vault but its records could not be used afterwards. The vault has already been
+     * locked again (no data key is left held without a session); nothing was deleted or reset.
+     */
+    public static final class RecordsUnreadable extends Exception {
+        public RecordsUnreadable(Throwable cause) { super("Vault records unreadable after unlock", cause); }
+    }
+
+    /**
      * Applies the process-local auto-lock choice while still locked (domain rule), unlocks with the
      * password and builds the Engine. Connectivity starts at UNLOCKED_OFFLINE: this never connects.
      */
@@ -36,7 +44,9 @@ public final class VaultFlow {
             vault.setAutoLockPolicy(autoLockMillis);
             vault.unlock(password);
         } finally { PasswordPolicy.erase(password); }
-        return open(vault, elapsed);
+        try { return open(vault, elapsed); }
+        catch (AccessGate.LockedException locked) { throw locked; }
+        catch (Exception unreadable) { vault.lock(); throw new RecordsUnreadable(unreadable); }
     }
 
     /** Legacy (not enrolled) vault: Android authentication alone opens it, as before v1. */

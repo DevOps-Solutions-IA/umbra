@@ -5,6 +5,7 @@ import app.umbra.admission.AdmissionRequest;
 import app.umbra.admission.AdmissionService;
 import app.umbra.admission.RealmConfig;
 import app.umbra.core.AccessGate;
+import app.umbra.data.Records;
 import app.umbra.ui.model.AdmissionImport;
 
 /**
@@ -43,17 +44,19 @@ public final class AdmissionFlow {
      * Member-side import after an explicit confirmation. {@code confirmed} must come from the user's
      * current action. Returns nothing: the caller re-reads the domain state to present the result.
      */
-    public static void applyMember(AdmissionService admission, AdmissionImport.Parsed parsed, boolean confirmed) throws Exception {
+    public static void applyMember(Records records, AdmissionService admission, AdmissionImport.Parsed parsed, boolean confirmed) throws Exception {
         if (!confirmed) throw new SecurityException("Explicit confirmation required");
         switch (parsed.kind()) {
             case REALM -> admission.installRealmConfig(parsed.parts().get(0), true);
             case CREDENTIAL -> admission.installAdmissionCredential(parsed.parts().get(0));
             case REJECTION -> admission.installRejection(parsed.parts().get(0));
             case REVOCATION -> admission.applyRevocation(parsed.parts().get(0));
-            case RENEWAL_RESULT -> {
+            // One transaction: the new credential and the revocation of the old one commit together or not at all.
+            case RENEWAL_RESULT -> records.transaction(() -> {
                 admission.installAdmissionCredential(parsed.parts().get(0));
                 admission.applyRevocation(parsed.parts().get(1));
-            }
+                return null;
+            });
             default -> throw new IllegalArgumentException("Not a member admission object");
         }
     }
