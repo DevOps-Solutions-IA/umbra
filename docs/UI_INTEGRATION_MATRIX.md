@@ -16,8 +16,8 @@ technical branch. Domain implementation and laboratory acceptance are distinct.
 | Generic notification | PrivateAndroidSurface.notification | No payload/preview input |
 | Protected window/dialog/surface | PrivateAndroidSurface.protect | Before first frame; integrated screen test pending |
 | Ordinary text clipboard | PrivateClipboard | Explicit one-use review; not restricted content |
-| F01 photo once | RestrictedImages + RestrictedContentService | PNG Android/HTTPS checkpoint acceptance; RFCOMM pending |
-| F02 note once | RestrictedAudio + RestrictedPlayback | Native codec tests submitted; capture/playback acceptance pending |
+| F01 photo once | RestrictedImages + RestrictedContentService | PNG Android/HTTPS and historical RFCOMM acceptance; final cumulative repeat pending |
+| F02 note once | RestrictedAudio + RestrictedPlayback | Native codec/HTTPS and playback positive at prior SHAs; capture remains RED, RFCOMM note acceptance pending |
 | F03 video once | None yet | BLOCKING technical gap, not videoconferencing |
 | F04 PDF once | None yet | BLOCKING technical gap, no external app fallback |
 | F05 only in UMBRA | Mode.UMBRA_ONLY | Common motor implemented; format-specific acceptance pending |

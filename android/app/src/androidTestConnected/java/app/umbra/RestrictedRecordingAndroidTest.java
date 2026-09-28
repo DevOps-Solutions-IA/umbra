@@ -11,7 +11,7 @@ import app.umbra.lab.SqliteDeviceRecords;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-/** AVD with -no-audio only: native AudioRecord silence, not acoustic capture acceptance. */
+/** Owned AVD with -no-audio only: native AudioRecord path, not acoustic capture acceptance. */
 public class RestrictedRecordingAndroidTest {
     @Test public void deniedPermissionThenEmulatorCaptureUsesReviewedLeaseAndNativeCodec()throws Exception {
         var instrumentation=InstrumentationRegistry.getInstrumentation();var context=instrumentation.getTargetContext();
@@ -59,7 +59,13 @@ public class RestrictedRecordingAndroidTest {
                     ",knownZeroPeak="+zero.peak()+",knownZeroRms="+zero.rms()+
                     ",rawInputSamples="+raw.samples()+",rawInputPeak="+raw.peak()+",rawInputRms="+raw.rms());
                 instrumentation.sendStatus(0,status);
-                assertEquals("Disabled host input not exact zero; compare controlled native-codec reference before changing contract",0,captured.peak());
+                // -no-audio excludes host audio; it does not specify the samples returned
+                // by the guest capture stack. The raw-input diagnostic established that
+                // nonzero values already exist BEFORE our encoder. Exact silence belongs
+                // to the known-zero PCM control, not an assumed HAL output contract.
+                assertEquals("Known-zero native codec input must decode to zero",0,zero.peak());
+                assertTrue("Recording produced no decodable native samples",captured.samples()>=1024);
+                assertTrue("Capture exceeded the bounded note profile",captured.samples()<=9*RestrictedAudio.SAMPLE_RATE);
             }
             ar.gate.lock();ar.gate.unlock();
             final AudioDeviceInfo input=selected;

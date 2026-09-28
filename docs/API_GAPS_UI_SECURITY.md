@@ -1,7 +1,7 @@
 # Master v3 API gap register — technical checkpoint, not closure
 
 Compared with Claude bundle ca2a706 (not merged), including AdmissionFlow and
-VaultFlow. Technical base ba75d329; published checkpoint 299049b. Later working
+VaultFlow. Technical base ba75d329; published checkpoint c61abb8. Later working
 changes require their own tests/commit. Do not treat this document as a UI patch.
 
 | Claude gap | Technical contract | Remaining validation/integration |
@@ -22,9 +22,16 @@ simplification remains Claude's responsibility and was not overwritten.
 
 ## Necessary master gaps that still prevent technical closure
 
-- Connected note capture/reproduction acceptance, selected-route/focus lifecycle,
-  encrypted HTTPS/RFCOMM note delivery, explicit process-death consumption.
-- Restricted PNG RFCOMM acceptance (fixture now sends it; current CI must prove it).
+- Connected note capture remains RED: 13c89ad debug/R8 captured nonzero AVD input,
+  while its controlled zero-PCM AAC reference stayed zero. Cause remains unknown;
+  c61abb8 adds pre-codec observation without weakening the assertion.
+- Routed playback and lock closure passed in 13c89ad. Route/focus loss and remaining
+  lifecycle cases need explicit acceptance; this does not imply physical acoustics.
+- Android note HTTPS passed in 13c89ad with two Engines/SQLite stores in one AVD,
+  not two independent devices. New note RFCOMM fixture still needs acceptance.
+- PNG RFCOMM passed in aa37375 (historical); final cumulative SHA must repeat it.
+- Real process force-stop consumption receipts passed in 6bef5e8 and 13c89ad;
+  these use laboratory SQLite, not hardware Keystore or death during commit.
 - Video-file and static PDF preparation/decoding and rejection tests.
 - Final combined technical matrix, artifact hashes and final API freeze.
 - Actual Claude screen integration, screenshot/recents verification on that UI,

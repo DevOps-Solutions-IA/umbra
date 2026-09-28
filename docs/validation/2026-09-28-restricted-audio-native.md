@@ -271,3 +271,49 @@ SHA-256 `13f53d1d2cc8dc61c569f7fa4997e0d45cc1e2e5373e8606a83317da1de10860`.
 Its adjacent RESTORE file documents explicit branch selection. The archive
 contains the initial uncommitted decoder regression, not the subsequent fix;
 original backups remain untouched. A/B remain partial and C remains pending.
+
+### c61abb8 follow-up: raw capture separates the fixture assumption
+
+R8 privacy run 36455601965 / checkout
+`30495c310cbfaa88607b8ff6ad14f2865d1a552f` again failed only the exact-zero
+capture assertion (10 connected cases). Artifact 10985418421 SHA-256
+`1fb1ecbf04ac672715a06ad012d353b3d52b9c01f770231572b60875c3e52eef`.
+Raw AudioRecord before the product codec: 4096 samples, peak 8,
+RMS 3.797614382740828. Product capture after AAC/Signal/decode: 20480 samples,
+peak 10, RMS 3.770775782249589. Known-zero PCM through AAC: peak/RMS 0.
+The assertion's assumption is demonstrably false before product encoding.
+It is NOT evidence that the product captures the host microphone, nor proof
+of the particular HAL/resampler component introducing those small values.
+Attempts to inspect the relevant upstream source returned HTTP 503; no source
+hypothesis is recorded as a demonstrated cause.
+
+Test correction: exact-zero remains required for the explicitly zero PCM
+control; actual AVD recording must produce bounded decodable samples, preserve
+permission/consent/original-lease rejection, and retains raw/decoded statistics.
+The owned-emulator and host `-no-audio` requirements remain unchanged. No
+amplitude tolerance was invented or raised, and this test is not an acoustic
+privacy/amplitude test. Separate known-tone tests still verify AAC frequency,
+energy and tail preservation. Native verification of this correction is pending.
+
+Full local JVM on c61abb8: 251 connected / 194 offline, zero failures/errors/skips.
+Four production APK builds and both APK/JNI policy scripts returned 0. Offline
+permissions still exclude INTERNET/ACCESS_NETWORK_STATE/RECORD_AUDIO/CAMERA.
+SHA-256 (local c61abb8, not future CI artifacts):
+- connected debug: `db9fc9dff23350428214ae6b081c87302251acc4a4eda704706ebc5d3e48af16`.
+- connected release unsigned: `c9e0d3fa994048dc4d367582d52980f687143cd373c9e175a9916351420dd0a8`.
+- offline debug: `cbc50a22a6271bfd7c50a2d165e07f1fef84c17b673bb9c1df5101738e1ee3f2`.
+- offline release unsigned: `6b6c2a976cb5e5e564c23d9f9d6fcc4ebc539f65deddfb43e2bb23b3195a9d31`.
+
+Full-history c61abb8 backup exported to Windows Downloads/UMBRA_RESPALDOS_CODEX,
+`umbra-security-content-c61abb8.tar.gz`, SHA-256
+`b750bc047a5f9c22ea89c7f697945ebb9f0bbc1e25c809229e0a934c19737a46`.
+Explicit branch clone, exact HEAD and fsck verified. Includes then-pending four
+contract-document diffs, not this subsequent capture assertion correction.
+
+Debug of the same c61abb8 run independently confirmed pre-codec nonzero input:
+raw peak 8 / RMS 4.032612415125585; decoded peak 11 / RMS 3.9148875091832234,
+17408 samples; zero reference remained zero. Artifact 10985269031 SHA-256
+`ed736736244b8237ca433af8efe31c58fe939a57108cde2448cc9de28b942c4a`.
+Capture-test correction compiled and linted locally (exit 0, 22 seconds).
+The runner still starts AVDs with `-no-audio` in `scripts/ci_emulator.sh`;
+no production audio source, codec, security threshold or offline permission changed.

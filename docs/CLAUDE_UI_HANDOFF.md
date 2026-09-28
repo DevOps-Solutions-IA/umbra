@@ -3,8 +3,9 @@
 Do not begin a final integration on the assumption that A/B/C are accepted.
 Technical branch codex/security-content-completion, draft PR #16 against
 codex/emergency-lock. Exact base ba75d329bedb2a26cd2e70371d2369e2fb3ba7a1.
-Published checkpoint 299049b follows two failed native AAC checkpoints. Its CI
-requires review; consult dated evidence before selecting a final SHA.
+Published checkpoint c61abb89725ae095e999aeb51f60ad8c0a460726 adds failed-decoder
+closure regressions. Its own CI is pending. The preceding 13c89ad native privacy
+run failed capture in debug/R8; do not select either as a final accepted SHA.
 
 Claude reference bundle ca2a706fd30c8194181588b19e72c69529f70335 was inspected
 without merge. Hash a8cb0eaddee9610cbc1c8ad931cec55cf718a79d84e419db825ed94c298bc9c1;
@@ -26,9 +27,12 @@ windows/recents/capture policy and connected/offline APKs. A technical host is n
 that combined app; software-key AVDs are not hardware Keystore or physical sensors.
 
 Blocking technical work remains in API_GAPS_UI_SECURITY. No final API freeze yet.
-Full recoverable backup `umbra-security-content-aa37375.tar.gz` was exported to
-Windows Downloads/UMBRA_RESPALDOS_CODEX and restored with matching HEAD and fsck.
-SHA-256: `6edd1f33624e31702e34c5ee562a8a318690f3fdeb572b5f09115b8bcd1e8edf`.
-It does not cover later 299049b/working changes; preserve the next checkpoint too.
-No credentials/dependency caches are bundled. Do not apply old committed patches
-again, reset a newer branch or merge this bundle into presentation automatically.
+Full recoverable backup `umbra-security-content-13c89ad.tar.gz` was exported to
+Windows Downloads/UMBRA_RESPALDOS_CODEX and restored with explicit branch checkout
+and `git fsck --full`. SHA-256:
+`13f53d1d2cc8dc61c569f7fa4997e0d45cc1e2e5373e8606a83317da1de10860`.
+It contains an initial pending regression, not the later c61abb8 correction.
+The adjacent RESTORE file specifies `git clone -b codex/security-content-completion`.
+Preserve newer checkpoints and all earlier backups. No credentials/dependency
+caches are bundled. Do not apply old committed patches again, reset a newer branch
+or merge this bundle into presentation automatically.

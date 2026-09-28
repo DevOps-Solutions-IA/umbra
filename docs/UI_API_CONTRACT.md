@@ -1,7 +1,7 @@
 # Technical API contract for Claude — evolving master v3 checkpoint
 
 This contract is NOT frozen for final integration. Base ba75d329; current published
-checkpoint 299049b. Consult dated validation and PR #16 for exact subsequent SHA.
+checkpoint c61abb8. Consult dated validation and PR #16 for exact subsequent SHA.
 No Claude UI or production MainActivity was changed. All domain/storage/codec work
 runs on a worker; Android Window/View configuration runs on the UI thread before
 first presentation. Never render an async result from a stale screen/vault epoch.
@@ -114,3 +114,15 @@ UI must request permission only on a real local action. No background exception.
 Runnable examples are existing regression methods in RestrictedContentTest,
 RestrictedContentAndroidTest and AdmissionFailureContractTest. Android tests use
 synthetic isolated storage; they are not production hardware Keystore acceptance.
+
+### Restricted native failures and closure (c61abb8)
+
+A failed decoder initialization immediately denies the consumed session; it does
+not restore the opening right. `Session.closure()` confirms resource cleanup
+separately. A reported native cleanup failure completes that stage exceptionally
+and retains emergency coordination; never offer a new overlapping session based
+only on a playback outcome. `RestrictedPlayback.state()` preserves its first
+terminal outcome (COMPLETED/INTERRUPTED/FAILED/CLOSED); it is not a cleanup receipt.
+Lock can legitimately produce INTERRUPTED with successfully confirmed closure.
+Creation/start/render belong on their documented threads with the original lease;
+new unlock cannot reuse those objects. Native failures remain generic to UI.
