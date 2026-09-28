@@ -206,3 +206,12 @@ precondición, no se dieron por correctos. Se revierte exclusivamente esa restri
 de orquestación y se restauran ambas redes originales, conservando la comprobación
 de disponibilidad real antes de una nueva acción connect y las observaciones
 de cero tráfico de UMBRA. No se añade reconexión automática al producto.
+
+42eace1 media R8: voz PASS; video falló con AccessGate.LockedException en
+VoiceEngineFixtureListener:520 al leer CallService.session después de solicitar
+emergencyLock. El motor aún estaba ACTIVE durante el cierre asíncrono y el arnés
+continuaba su auditoría SDP. La bóveda rechazó correctamente la lectura. Se
+corrige el arnés: tras invalidación no bombea ni consulta datos sensibles, observa
+cierre/progreso, acepta DISCONNECTING solamente durante emergencia con autorización
+de red denegada, y sigue exigiendo CLOSED y cero callbacks al finalizar. No se
+ignora LockedException ni se desbloquea para terminar el test.

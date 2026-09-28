@@ -268,7 +268,10 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     Files.exists(files.resolve("synthetic-voice-loss.json")) &&
                     read("synthetic-voice-loss.json").optString("action").equals("credential-expiry");
                 if(localLockApplied) {
-                    if(engine.connectivity().getConnectivityState()!=app.umbra.connectivity.ConnectivityService.State.LOCKED_PRIVATE)
+                    var connectivity=engine.connectivity().getConnectivityState();
+                    if(engine.connectivity().isNetworkSessionAllowed() ||
+                            connectivity!=app.umbra.connectivity.ConnectivityService.State.LOCKED_PRIVATE &&
+                            !(emergencyApplied && connectivity==app.umbra.connectivity.ConnectivityService.State.DISCONNECTING))
                         throw new AssertionError("Connectivity restored during native closure");
                 } else pump(relay,engine,id,voice,expiryExpected,credential.getLong("expires"));
                 if(voice.state()==NativeVoiceSession.State.FAILED && !evidence) {
@@ -318,6 +321,13 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         catch(SecurityException expected) { /* New unlock cannot restore old consent. */ }
                     }
                     terminationApplied=true;
+                }
+                if(localLockApplied && voice.state()!=NativeVoiceSession.State.FAILED && voice.state()!=NativeVoiceSession.State.ENDED) {
+                    // Authorization is already dead. Do not read SQLite/SDP or run any
+                    // old consent while asynchronous native resources are still closing.
+                    if(emergencyApplied && engine.emergency().status().state()==app.umbra.core.EmergencyLock.State.INCOMPLETE)
+                        throw new AssertionError("Emergency resources did not confirm closure");
+                    Thread.sleep(10);continue;
                 }
                 if(withVideo && evidence && voice.state()==NativeVoiceSession.State.FAILED && !terminationApplied)
                     throw new AssertionError("Video path failed: "+voice.failureStage()+", video="+voice.videoStatus());
