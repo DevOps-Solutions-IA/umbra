@@ -68,10 +68,11 @@ def main():
     for apk in apks:run('install','-r',str(apk))
     run('shell','am','force-stop',package)
     run('shell','pm','clear',package)
-    # Stabilize the owned Wi-Fi policy route before any application action. This
-    # is host netlink observation, not UMBRA traffic or a bypass of its gate.
-    run('shell','svc','data','disable');run('shell','svc','wifi','enable')
-    wait_wifi_ipv4(adb[0],args.serial,args.reports/'initial-wifi-route.json')
+    if args.flavor=='connected':
+        # Positive HTTPS acceptance needs an OS route; offline deliberately does not.
+        # Host netlink observation is not UMBRA traffic or a bypass of its gate.
+        run('shell','svc','data','disable');run('shell','svc','wifi','enable')
+        wait_wifi_ipv4(adb[0],args.serial,args.reports/'initial-wifi-route.json')
     installed=run('shell','pm','list','packages','-U',package).stdout.decode()
     match=re.search(r'^package:'+re.escape(package)+r' uid:(\d+)$',installed,re.M)
     if not match:raise RuntimeError('Missing unique application UID')

@@ -215,3 +215,11 @@ corrige el arnés: tras invalidación no bombea ni consulta datos sensibles, obs
 cierre/progreso, acepta DISCONNECTING solamente durante emergencia con autorización
 de red denegada, y sigue exigiendo CLOSED y cero callbacks al finalizar. No se
 ignora LockedException ni se desbloquea para terminar el test.
+
+43a96d1 inicio privado: connected debug/R8 PASS, incluidas recuperación y
+force-stop. El fallo siguiente era la precondición de red aplicada por error
+al flavor offline: después de los cambios de red anteriores no había dirección
+wlan0. Se limita esa preparación exclusivamente al recorrido HTTPS connected;
+offline debe funcionar sin una ruta de Internet y conserva todas sus pruebas
+UID/DNS/sensores, rechazo de connect y reinicio. No se omite ninguna suite ni
+se modifica el preflight UDP de los laboratorios multimedia connected.
