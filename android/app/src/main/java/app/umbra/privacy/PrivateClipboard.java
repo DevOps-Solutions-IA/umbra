@@ -5,7 +5,6 @@ import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.os.PersistableBundle;
 import app.umbra.crypto.Engine;
-import org.json.JSONObject;
 
 /** Deliberate export of an ordinary stored text message only; never accepts arbitrary object bytes. */
 public final class PrivateClipboard {
@@ -17,22 +16,19 @@ public final class PrivateClipboard {
         if(android.os.Looper.myLooper()!=android.os.Looper.getMainLooper() || !owner.hasWindowFocus())
             throw new PrivacyException(PrivacyException.Code.CONSENT_REQUIRED);
     }
-    public void copyMessage(Engine engine,String peer,String messageId,boolean confirmed) throws Exception {
+    /** Review before showing confirmation, never construct a new review in a delayed callback. */
+    public OrdinaryTextExport.Review reviewMessage(Engine engine,String peer,String messageId) throws Exception {
+        foreground();return OrdinaryTextExport.review(engine,peer,messageId);
+    }
+    public void copyMessage(OrdinaryTextExport.Review review,boolean confirmed) throws Exception {
         foreground();
-        if(!confirmed)throw new PrivacyException(PrivacyException.Code.CONSENT_REQUIRED);
-        var grant=engine.deliveryAuthorization(peer);
-        app.umbra.protocol.Wire.uuid(messageId);
-        JSONObject selected=engine.get("message",messageId);
-        if(selected==null)selected=engine.get("message",peer+":"+messageId);
-        if(selected==null || selected.optLong("expires")<=app.umbra.core.Bytes.now() || !peer.equals(selected.optString("peer")) || !"text".equals(selected.optString("kind")))
-            throw new PrivacyException(PrivacyException.Code.RESTRICTED_EXPORT);
-        String text=selected.getString("text");
-        if(app.umbra.core.Bytes.utf8(text).length>16000)throw new PrivacyException(PrivacyException.Code.LIMIT_EXCEEDED);
-        String next=java.util.UUID.randomUUID().toString();
-        ClipData clip=ClipData.newPlainText("UMBRA",text);PersistableBundle extras=new PersistableBundle();
-        extras.putBoolean("android.content.extra.IS_SENSITIVE",true);extras.putString(OWNER,next);
-        clip.getDescription().setExtras(extras);
-        grant.run();foreground();owner.getSystemService(ClipboardManager.class).setPrimaryClip(clip);token=next;
+        OrdinaryTextExport.export(review,confirmed,text->{
+            foreground();String next=java.util.UUID.randomUUID().toString();
+            ClipData clip=ClipData.newPlainText("UMBRA",text);PersistableBundle extras=new PersistableBundle();
+            extras.putBoolean("android.content.extra.IS_SENSITIVE",true);extras.putString(OWNER,next);
+            clip.getDescription().setExtras(extras);
+            owner.getSystemService(ClipboardManager.class).setPrimaryClip(clip);token=next;
+        });
     }
     /** Explicit foreground cleanup only, never a background global clear or claim of recall. */
     public void clearOwned() {
