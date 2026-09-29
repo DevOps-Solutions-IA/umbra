@@ -333,3 +333,15 @@ emergency-base parser against current real Signal plaintext with an ordinary-tex
 positive control. Its local connected/offline JVM receipts are in that audit;
 source presence or those local receipts do not validate a historical full APK or
 the next cumulative CI. No new public API or production dependency is introduced.
+
+
+## Cumulative receipt binding
+
+Contract revision `UI_SECURITY_CONTENT_API_V1` remains unchanged by the final
+laboratory coordination fixes. The exact technical HEAD, integration checkout,
+tree, ten-workflow results and artifact hashes are bound by PR16's cumulative
+receipt and its exported `claude-contracts/SOURCE.json`; a prior checkpoint's
+native pass does not validate a later SHA. Native encrypted-Vault concurrency and
+retention tests executed on34e0374 in both flavors/debug/R8; see
+`validation/2026-09-29-nearby-quiescent-shutdown.md` for the separate RFCOMM fixture
+failure and correction awaiting its own native acceptance. No UI source changed.

@@ -115,3 +115,15 @@ The additional object-TTL, encrypted Vault/WAL and historical-parser regressions
 change coverage, not the public API. Do not copy fixture key creation, isolated
 SQLite adapters or historical parser compilation into the application. Native
 fixtures and production hardware authentication remain explicitly different layers.
+
+
+## Cumulative receipt binding
+
+Contract revision `UI_SECURITY_CONTENT_API_V1` remains unchanged by the final
+laboratory coordination fixes. The exact technical HEAD, integration checkout,
+tree, ten-workflow results and artifact hashes are bound by PR16's cumulative
+receipt and its exported `claude-contracts/SOURCE.json`; a prior checkpoint's
+native pass does not validate a later SHA. Native encrypted-Vault concurrency and
+retention tests executed on34e0374 in both flavors/debug/R8; see
+`validation/2026-09-29-nearby-quiescent-shutdown.md` for the separate RFCOMM fixture
+failure and correction awaiting its own native acceptance. No UI source changed.

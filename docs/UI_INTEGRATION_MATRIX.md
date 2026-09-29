@@ -60,3 +60,15 @@ Use [the later content audit](validation/2026-09-29-content-acceptance-audit.md)
 for exact case11 Vault/WAL, case14 historical parser and case19 object-expiry
 coverage additions. Their final-SHA execution receipts supersede neither past
 failures nor the separate case16 graphical integration requirement.
+
+
+## Cumulative receipt binding
+
+Contract revision `UI_SECURITY_CONTENT_API_V1` remains unchanged by the final
+laboratory coordination fixes. The exact technical HEAD, integration checkout,
+tree, ten-workflow results and artifact hashes are bound by PR16's cumulative
+receipt and its exported `claude-contracts/SOURCE.json`; a prior checkpoint's
+native pass does not validate a later SHA. Native encrypted-Vault concurrency and
+retention tests executed on34e0374 in both flavors/debug/R8; see
+`validation/2026-09-29-nearby-quiescent-shutdown.md` for the separate RFCOMM fixture
+failure and correction awaiting its own native acceptance. No UI source changed.

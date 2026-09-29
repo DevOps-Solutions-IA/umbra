@@ -304,10 +304,17 @@ public final class NearbyFixtureListener extends RunListener {
                     }
                     status("nearbyStage", "drained"); drainedAnnounced=true;
                 }
-                // Continue pumping receipts until BOTH endpoints report a drained queue.
-                // A fixed sleep cannot flush a receipt queued after the previous snapshot.
-                if (complete && approval.exists() && "finish".equals(new String(Files.readAllBytes(approval.toPath()),java.nio.charset.StandardCharsets.UTF_8))) {
+                // Drained is a historical snapshot: a duplicate can regenerate an ACK
+                // after it. Finish this writer's pump before allowing either socket to
+                // close. All payloads and duplicate writes already completed above;
+                // only redundant receipt arrivals can remain after both writers stop.
+                if (complete && approval.exists() && "quiesce".equals(new String(Files.readAllBytes(approval.toPath()),java.nio.charset.StandardCharsets.UTF_8))) {
                     Files.delete(approval.toPath());
+                    status("nearbyStage", "quiescent");
+                    await(() -> approval.exists() && "finish".equals(new String(Files.readAllBytes(approval.toPath()),java.nio.charset.StandardCharsets.UTF_8)),
+                        Math.max(0,deadline-SystemClock.elapsedRealtime()), "Host quiescent barrier not released");
+                    Files.delete(approval.toPath());
+                    if(receiveFailure!=null) throw new AssertionError("Incoming processing failed during quiescence",receiveFailure);
                     if(emergency) {
                         require(emergencyActiveNanos>0,"Missing positive RFCOMM evidence");
                         var requested=engine.emergencyLock();
