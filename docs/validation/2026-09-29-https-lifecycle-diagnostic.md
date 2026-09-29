@@ -86,3 +86,36 @@ Three tooling regressions cover Wi-Fi-only restoration, failure with preserved
 diagnostics and rejection of physical targets before mutation. Full tooling total:
 214 PASS. This is orchestration evidence, not native Android acceptance. The native
 candidate requires its own CI and must not be described as a proven root-cause fix.
+
+## Subsequent278a572 native failure and correction of an early host deadline
+
+The candidate did not solve native recovery. Emergency36529583869 failed both
+lock lanes (media/Nearby passed); Startup36529584019 failed both lanes. Debug
+emergency artifact11015688031 SHA256
+61fe21fb9ee92a9586055a765d3d5d1d58b9d095f697af1d7184ccdec6efda98;
+startup debug11016366848 SHA256
+e471c49a3b4ba34157779f5c36500f9cecc2deb04ac8ac8b616f3923b035b9d3;
+startup R8 11016162362 SHA256
+e26f2837bb41efc551f0013b49906287367ce9447ead84e606bafbafcdf95cea.
+The host imposed route availability at five seconds; all24 observations showed
+no Wi-Fi IPv4 source/route. This does not establish whether the radio was disabled,
+associating or waiting for DHCP. No Wi-Fi service-state receipt existed yet.
+
+Code review demonstrated a separate regression introduced by278a572: the former
+host slept5s, observed quiet traffic5s, then released the Android barrier. Only
+then did Android start its existing15s default-network readiness assertion. The
+new mandatory host route deadline prematurely cut that established window. The
+correction preserves the original settling/quiet/native timing and assertions;
+it adds one route check with timeout0 AFTER the native locked checkpoint, which
+can only follow successful OS readiness and explicit reconnect. No new time is
+granted to readiness, no failed native proof is ignored, and the locked barrier
+is not released if the final route is absent. Original17564e2's failure remains
+causally open; this correction is not a claim to have solved Android Wi-Fi itself.
+
+Read-only Wi-Fi status and filtered service-state tokens are now observed before
+and after restoration. Commands are bounded3s each and limited to verified owned
+AVDs. No raw SSID, password, peer payload, packet dump or key is persisted. Unknown
+status remains unknown; diagnostic absence cannot count as successful networking.
+Three diagnostic regressions plus ordering/failure regressions run with the full
+218-tooling suite, PASS. Native execution of this corrected ordering is pending
+its own commit/CI. Phone settings and installations remain untouched.

@@ -10,6 +10,44 @@ import subprocess
 import time
 
 
+def wifi_control_summary(text):
+    """Keep service state tokens, never saved SSIDs, passphrases or packet dumps."""
+    fields = re.findall(
+        r"\b(curState|mWifiState|mWifiEnabled|mWifiToggleEnabled|mNetworkSelectionStatus|"
+        r"networkSelectionStatus|mNetworkSelectionDisableReason|mIsWifiEnabled|"
+        r"mIsInterfaceUp|mIsStopped|mTargetRole|mRole)\s*[:=]\s*([A-Za-z0-9_]+)", text)
+    fields += re.findall(r'\b(NetworkSelectionStatus|NetworkSelectionDisableReason)\s*[:=]?\s+(NETWORK_SELECTION_[A-Z_]+)',text)
+    return [{'field': key, 'value': value[:80]} for key, value in fields[:128]]
+
+
+def observe_owned_wifi(adb,serial,report=None):
+    """Read-only Wi-Fi service evidence, solely for the owned disposable AVD."""
+    if not serial.startswith('emulator-') or not serial[9:].isdigit():
+        raise ValueError('Owned emulator required')
+    qemu=subprocess.run([adb,'-s',serial,'shell','getprop','ro.kernel.qemu'],
+                        capture_output=True,text=True,timeout=3)
+    if qemu.returncode or qemu.stdout.strip()!='1':
+        raise ValueError('Disposable emulator required')
+    import json
+    evidence={'observedNanos':time.monotonic_ns()}
+    for name,command in (('status',('cmd','wifi','status')),('state',('dumpsys','wifi'))):
+        try:
+            result=subprocess.run([adb,'-s',serial,'shell',*command],
+                                  capture_output=True,text=True,timeout=3)
+            entry={'exit':result.returncode}
+            if name=='status':
+                entry.update(enabled=result.stdout.startswith('Wifi is enabled'),
+                             disabled=result.stdout.startswith('Wifi is disabled'),
+                             disconnected='Wifi is not connected' in result.stdout)
+            else:
+                entry['fields']=wifi_control_summary(result.stdout)
+            evidence[name]=entry
+        except subprocess.TimeoutExpired:
+            evidence[name]={'error':'diagnostic_timeout'}
+    if report is not None:report.write_text(json.dumps(evidence,indent=2)+'\n')
+    return evidence
+
+
 def observe_owned_network(adb: str, serial: str, report):
     """Read-only control-plane evidence around setup; never an acceptance result.
 
@@ -132,6 +170,7 @@ def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20):
                 failure_state[label]={'exit':captured.returncode,'stdout':captured.stdout[:65536],'stderr':captured.stderr[:1024]}
             except subprocess.TimeoutExpired:
                 failure_state[label]={'error':'diagnostic_timeout'}
+        failure_state['wifi_service']=observe_owned_wifi(adb,serial)
         raise
     finally:
         reports.write_text(json.dumps({'serial':serial,'attempts':attempts,'failureState':failure_state},indent=2)+'\n')

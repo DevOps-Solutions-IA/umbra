@@ -17,7 +17,8 @@ import sys
 import tempfile
 import time
 from voice_relay_lab import voice_relay
-from voice_direct_route import wait_wifi_ipv4, observe_owned_network
+from voice_direct_route import (wait_wifi_ipv4, observe_owned_network, wifi_control_summary,
+                                observe_owned_wifi as observe_startup_wifi)
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -25,16 +26,29 @@ ROOT=Path(__file__).resolve().parents[1]
 def restore_startup_wifi(adb,serial,reports):
     """Restore the declared Wi-Fi-only topology, without granting app consent.
 
-    Replace the old blind five-second delay with actual netlink readiness inside
-    that same budget. Do not introduce a cellular uplink absent at test startup.
+    Preserve the original five-second settling period. The Android fixture owns
+    the later 15-second default-network readiness assertion, after the quiet I/O
+    window. Do not impose a new earlier route deadline or add a cellular uplink.
     """
     observe_owned_network(adb,serial,reports/'network-before-restore.json')
+    observe_startup_wifi(adb,serial,reports/'wifi-before-restore.json')
     subprocess.run([adb,'-s',serial,'shell','svc','wifi','enable'],
                    check=True,capture_output=True,timeout=3)
     try:
-        return wait_wifi_ipv4(adb,serial,reports/'network-restored-route.json',timeout=5)
+        time.sleep(5)
     finally:
         observe_owned_network(adb,serial,reports/'network-after-restore.json')
+        observe_startup_wifi(adb,serial,reports/'wifi-after-restore.json')
+
+
+def confirm_startup_recovery(adb,serial,reports,read_checkpoint):
+    """The fixture first proves OS readiness, explicitly reconnects and locks.
+
+    Add a single netlink assertion after that proof, not an earlier five-second
+    deadline that cuts short the existing Android readiness window.
+    """
+    read_checkpoint('synthetic-startup-locked.json')
+    return wait_wifi_ipv4(adb,serial,reports/'network-restored-route.json',timeout=0)
 
 
 def valid_report(text):
@@ -179,7 +193,8 @@ def main():
                     # Domain remains denied during host observation and until explicit action.
                     reset();restore_startup_wifi(adb[0],args.serial,args.reports)
                     observe('network-return-no-reconnect',dns_log);go('network-lost')
-                    read('synthetic-startup-locked.json');time.sleep(1);reset();observe('vault-lock',dns_log);go('locked')
+                    confirm_startup_recovery(adb[0],args.serial,args.reports,read)
+                    time.sleep(1);reset();observe('vault-lock',dns_log);go('locked')
                 else:
                     read('synthetic-startup-offline.json');reset();observe('offline-flavor',dns_log);go('offline')
                 if args.emergency:
