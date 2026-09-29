@@ -79,6 +79,42 @@ def observe_owned_network(adb: str, serial: str, report):
     report.write_text(json.dumps(evidence, indent=2)+'\n')
 
 
+def select_owned_wifi(adb, serial, report):
+    """Explicitly associate to the disposable emulator's fixed virtual AP.
+
+    Enabling a radio does not select a saved network. This is host laboratory
+    setup, not application connectivity consent or proof of route readiness.
+    Runtime help must support the API; never select a physical/supplied SSID.
+    """
+    import json
+    if not serial.startswith('emulator-') or not serial[9:].isdigit():
+        raise ValueError('Owned emulator required')
+    def command(*args):
+        return subprocess.run([adb, '-s', serial, 'shell', *args],
+                              capture_output=True, text=True, timeout=3)
+    qemu = command('getprop', 'ro.kernel.qemu')
+    if qemu.returncode or qemu.stdout.strip() != '1':
+        raise ValueError('Disposable emulator required')
+    receipt = {'purpose': 'owned virtual AP selection, not network acceptance'}
+    try:
+        # API 35 exposes this administrative command to root on AOSP test images.
+        # Match the existing owned-AVD firewall context, never root a phone.
+        help_result = command('su', '0', 'cmd', 'wifi', 'help')
+        supported = help_result.returncode == 0 and re.search(
+            r'connect-network\s+<ssid>\s+open(?:\||\s)', help_result.stdout) is not None
+        receipt['supported'] = supported
+        if not supported:
+            raise RuntimeError('Installed AVD Wi-Fi CLI does not support explicit open AP selection')
+        result = command('su', '0', 'cmd', 'wifi', 'connect-network', 'AndroidWifi', 'open')
+        receipt['exit'] = result.returncode
+        receipt['reportedFailure'] = 'fail' in (result.stdout + result.stderr).lower()
+        if result.returncode or receipt['reportedFailure']:
+            raise RuntimeError('Owned AVD virtual AP selection failed')
+    finally:
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(json.dumps(receipt, indent=2)+'\n')
+
+
 def initialize_owned_wifi(adb: str, serial: str, report):
     """Preserve a routed association; initialize an inconsistent disposable AVD.
 
@@ -125,6 +161,7 @@ def initialize_owned_wifi(adb: str, serial: str, report):
             time.sleep(.2)
         result=command('svc','wifi','enable')
         if result.returncode:raise RuntimeError('Owned AVD Wi-Fi enable failed')
+        select_owned_wifi(adb,serial,report.with_name(report.stem+'-selection.json'))
     finally:
         report.parent.mkdir(parents=True,exist_ok=True)
         report.write_text(json.dumps({'action':action,'before':before,'observations':observations,
@@ -170,7 +207,10 @@ def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20):
                 failure_state[label]={'exit':captured.returncode,'stdout':captured.stdout[:65536],'stderr':captured.stderr[:1024]}
             except subprocess.TimeoutExpired:
                 failure_state[label]={'error':'diagnostic_timeout'}
-        failure_state['wifi_service']=observe_owned_wifi(adb,serial)
+        try:
+            failure_state['wifi_service']=observe_owned_wifi(adb,serial)
+        except (ValueError, OSError, subprocess.TimeoutExpired):
+            failure_state['wifi_service']={'error':'diagnostic_unavailable'}
         raise
     finally:
         reports.write_text(json.dumps({'serial':serial,'attempts':attempts,'failureState':failure_state},indent=2)+'\n')

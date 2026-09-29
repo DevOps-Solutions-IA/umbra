@@ -12,6 +12,7 @@ class StartupRestoreTest(unittest.TestCase):
     def test_restores_only_original_wifi_without_early_readiness_deadline(self):
         with tempfile.TemporaryDirectory() as d,patch('run_private_startup.observe_owned_network') as observe,\
                 patch('run_private_startup.observe_startup_wifi'),\
+                patch('run_private_startup.select_owned_wifi') as select,\
                 patch('run_private_startup.subprocess.run',return_value=subprocess.CompletedProcess([],0)) as run,\
                 patch('run_private_startup.time.sleep') as sleep,\
                 patch('run_private_startup.wait_wifi_ipv4') as ready:
@@ -19,6 +20,7 @@ class StartupRestoreTest(unittest.TestCase):
             self.assertIsNone(restore_startup_wifi('adb','emulator-5554',root))
             run.assert_called_once_with(['adb','-s','emulator-5554','shell','svc','wifi','enable'],
                                         check=True,capture_output=True,timeout=3)
+            select.assert_called_once_with('adb','emulator-5554',root/'wifi-selection.json')
             sleep.assert_called_once_with(5)
             ready.assert_not_called()
             self.assertEqual(2,observe.call_count)

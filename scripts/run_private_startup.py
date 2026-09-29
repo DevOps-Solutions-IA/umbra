@@ -17,7 +17,7 @@ import sys
 import tempfile
 import time
 from voice_relay_lab import voice_relay
-from voice_direct_route import (wait_wifi_ipv4, observe_owned_network, wifi_control_summary,
+from voice_direct_route import (wait_wifi_ipv4, observe_owned_network, wifi_control_summary, select_owned_wifi,
                                 observe_owned_wifi as observe_startup_wifi)
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -35,6 +35,7 @@ def restore_startup_wifi(adb,serial,reports):
     subprocess.run([adb,'-s',serial,'shell','svc','wifi','enable'],
                    check=True,capture_output=True,timeout=3)
     try:
+        select_owned_wifi(adb,serial,reports/'wifi-selection.json')
         time.sleep(5)
     finally:
         observe_owned_network(adb,serial,reports/'network-after-restore.json')

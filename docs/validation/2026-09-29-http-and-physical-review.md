@@ -126,3 +126,55 @@ AVD network initialization failure, not evidence of regression in modulation,
 Opus, TURN, libsignal, R8 execution or an HTTPS EOF. It also differs from the
 five-second premature startup assertion: this media preflight used its existing
 full twenty-second limit. No rerun or product alteration was made by this review.
+
+## Subsequent Wi-Fi service evidence and proposed deterministic selection
+
+The later `6093d03` startup-debug artifact `11016249690` was reviewed locally
+(`6093d03-ci/startup-debug.zip`), SHA-256:
+`4a5ddb5b45bcdcbd81686dec4ecd17247a67e1c0d513d035b5d690363874aa6f`.
+Its before-restoration receipt reports disabled Wi-Fi. After restoration, the
+service reports enabled Wi-Fi but not connected. Sanitized dumpsys tokens contain
+EnabledState, DisconnectedState and NETWORK_SELECTION_PERMANENTLY_DISABLED.
+They also contain historical/other-manager L3ConnectedState entries: the flattened
+safe summary does not associate each token with a particular current saved
+network. Therefore enabled-but-disconnected is demonstrated; the exact reason or
+network-specific permanent-disable cause is not established by that summary.
+
+A narrowly scoped laboratory change can explicitly select the runner's known
+virtual access point after enabling Wi-Fi, instead of assuming radio enablement
+also selects its saved network. AOSP WifiShellCommand `aac147fa40` documents
+`connect-network <ssid> open` and calls the service connection operation. Verify
+support with the actual image's CLI help; the command outcome does not replace
+existing native/default-network and address/policy-route checks. Use only the
+known disposable AVD network and qemu/target guards. Never apply this to a phone,
+an arbitrary saved network, or change validation policy, TLS, TURN-only, cellular
+fallback, app connectivity consent, or readiness deadlines. This paragraph records
+review of a proposed fix, not its execution or successful native acceptance.
+
+## Explicit owned-AVD association correction (candidate after 6093d03)
+
+The 6093d03 startup and emergency fixtures retain their original native 15-second
+readiness window and still fail with the radio enabled but disconnected. This
+establishes that `svc wifi enable` alone does not guarantee association. The
+flattened `PERMANENTLY_DISABLED` tokens do not establish why the particular saved
+AP was disabled; that causal detail remains unknown.
+
+The host now explicitly selects the fixed synthetic `AndroidWifi` open AP after
+radio restoration, and after conditional initialization of a missing media route.
+A healthy route is preserved (including its IPv6 state). `select_owned_wifi`
+requires an emulator serial plus `ro.kernel.qemu=1`, verifies installed CLI help,
+and invokes `su 0 cmd wifi connect-network AndroidWifi open` only in that disposable
+AOSP laboratory. API35 administration uses the same authorized root context as
+existing laboratory firewall rules; no command is permitted on the phone.
+The command's result is not acceptance: native default-network readiness,
+Wi-Fi policy route, UID/DNS quiet window, explicit app consent and direct UDP/media
+assertions remain required. No cellular fallback, route injection, global network
+validation change or increased readiness budget was added.
+
+Source reference: AOSP WifiShellCommand, revision aac147fa40, documents
+`connect-network <ssid> open|owe|wpa2|wpa3|wep`; runtime help is checked rather than
+assuming that every image implements it. Tool tests exercise unsupported CLI,
+failed selection, physical-target rejection, healthy-route preservation and
+retention of the original route failure when diagnostics themselves fail.
+Local Python tools: 221 tests PASS (4.987 s); focused route tests 15 PASS after
+using the API35 root context. Native success of this candidate is not yet claimed.
