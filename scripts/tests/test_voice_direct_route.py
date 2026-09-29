@@ -5,7 +5,7 @@ import sys
 import unittest
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from voice_direct_route import probe_udp, wifi_ipv4_route, wait_wifi_ipv4
+from voice_direct_route import probe_udp, wifi_ipv4_route, wait_wifi_ipv4, observe_owned_network
 
 class DirectRouteProbeTest(unittest.TestCase):
     def test_only_exact_challenge_from_bound_receiver_proves_delivery(self):
@@ -63,3 +63,29 @@ class DirectRouteProbeTest(unittest.TestCase):
             receipt=json.loads(report.read_text())
             self.assertEqual(2,receipt['attempts'][0]['routeExit'])
             self.assertEqual({'addresses','rules','routes','connectivity','network_stack'},set(receipt['failureState']))
+
+    def test_setup_observation_records_missing_route_without_repair_or_acceptance(self):
+        import tempfile,json
+        replies=[subprocess.CompletedProcess([],0,'1\n',''),
+                 subprocess.CompletedProcess([],2,'','Network unreachable'),
+                 *[subprocess.CompletedProcess([],0,'synthetic control plane','') for _ in range(3)]]
+        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',side_effect=replies) as run:
+            report=Path(d)/'new'/'before.json'
+            self.assertIsNone(observe_owned_network('adb','emulator-5554',report))
+            value=json.loads(report.read_text())
+            self.assertEqual(2,value['commands']['route']['exit'])
+            self.assertEqual(5,run.call_count)
+            for call in run.call_args_list:
+                self.assertEqual(3,call.kwargs['timeout'])
+                self.assertNotIn('svc',call.args[0])
+                self.assertNotIn('add',call.args[0])
+                self.assertNotIn('flush',call.args[0])
+
+    def test_setup_observation_rejects_physical_and_unverified_targets(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run') as run:
+            with self.assertRaises(ValueError):observe_owned_network('adb','physical',Path(d)/'x')
+            run.assert_not_called()
+            run.return_value=subprocess.CompletedProcess([],0,'0\n','')
+            with self.assertRaises(ValueError):observe_owned_network('adb','emulator-5554',Path(d)/'x')
+            self.assertEqual(1,run.call_count)

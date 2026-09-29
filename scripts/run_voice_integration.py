@@ -17,7 +17,7 @@ from turn_lab import TurnLab, docker
 from voice_relay_lab import voice_relay
 from android_apk_install import ensure_apk
 from admission_lab import reset_exchange
-from voice_direct_route import probe_udp, wait_wifi_ipv4
+from voice_direct_route import probe_udp, wait_wifi_ipv4, observe_owned_network
 from check_optimized_media import inspect as inspect_optimized_media
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -200,8 +200,11 @@ def main():
         run(serial,"shell","settings","put","global","captive_portal_mode","0")
         # One declared lab network: owned netsim Wi-Fi. Disable the AVD's separate
         # virtual cellular uplink so captures cover the entire enabled topology.
+        observe_owned_network(adb,serial,args.reports/f'network-before-data-disable-{serial}.json')
         run(serial,"shell","svc","data","disable")
+        observe_owned_network(adb,serial,args.reports/f'network-after-data-disable-{serial}.json')
         run(serial,"shell","svc","wifi","enable")
+        observe_owned_network(adb,serial,args.reports/f'network-after-wifi-enable-{serial}.json')
         variant="mediaLab" if args.optimized else "debug"
         for path in (f"connected/{variant}/app-connected-{variant}.apk",f"androidTest/connected/{variant}/app-connected-{variant}-androidTest.apk"):
             apk=ROOT/"android/app/build/outputs/apk"/path

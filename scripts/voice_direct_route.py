@@ -10,6 +10,37 @@ import subprocess
 import time
 
 
+def observe_owned_network(adb: str, serial: str, report):
+    """Read-only control-plane evidence around setup; never an acceptance result.
+
+    Only disposable AVDs are supported. No app logs, packet payloads, credentials,
+    DNS probes or route mutation. Each command is independently bounded.
+    """
+    if not serial.startswith('emulator-') or not serial[9:].isdigit():
+        raise ValueError('Owned emulator required')
+    import json
+    evidence = {'observedNanos': time.monotonic_ns(), 'commands': {}}
+    for label, arguments in (
+        ('qemu', ('getprop', 'ro.kernel.qemu')),
+        ('route', ('ip', '-4', 'route', 'get', '10.0.2.2')),
+        ('routes', ('ip', '-4', 'route', 'show', 'table', 'all')),
+        ('rules', ('ip', '-4', 'rule', 'show')),
+        ('addresses', ('ip', '-4', 'addr', 'show'))):
+        try:
+            result = subprocess.run([adb, '-s', serial, 'shell', *arguments],
+                                    capture_output=True, text=True, timeout=3)
+            evidence['commands'][label] = {'exit': result.returncode,
+                'stdout': result.stdout[:16384], 'stderr': result.stderr[:1024]}
+            if label == 'qemu' and (result.returncode != 0 or result.stdout.strip() != '1'):
+                raise ValueError('Selected target is not a disposable emulator')
+        except subprocess.TimeoutExpired:
+            evidence['commands'][label] = {'error': 'diagnostic_timeout'}
+            if label == 'qemu':
+                raise ValueError('Could not verify disposable emulator')
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(json.dumps(evidence, indent=2)+'\n')
+
+
 def wifi_ipv4_route(text: str, source: str) -> bool:
     """An address alone is insufficient: netd may not have populated policy routes."""
     return (re.search(r'(?:^|\s)dev wlan0(?:\s|$)',text) is not None

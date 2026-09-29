@@ -73,3 +73,30 @@ New cumulative commit requires its own complete CI. Resolve or preserve the
 network/dependency failures with bounded diagnostics, not repeated attempts until
 green. Hardware-authenticated vault, physical R8 (installation denied), two real
 peers and combined Claude UI remain unexecuted. Master A/B/C is still open.
+
+## Follow-up HEAD 663ca99, not final acceptance
+
+Own checkout 7802e2e971f14d9b9cd8dec19d1f3cae4d27ecc2 has parents exact
+ba75d329 and 663ca99d0a3e38ff1c0b207163248223ddc88cd8. Both published and tested
+trees are 5498ec9584aed4891183044af1df49929e0d53c8.
+Password36521397999, admission36521398007, startup36521397961,
+privacy36521397956 and modulation36521397982 completed SUCCESS.
+Privacy explicitly reports connected18/offline17, real HTTPS and four-format
+force-stop consumption in debug/R8. Not exact production APK or physical Vault.
+Privacy ZIP digests: debug af3b80216483a42d7be3af9728b583cafd4d176da2ef4c723e1738e3fdeb30f2;
+R8 ddba0e07dcffca5180f524c2e77aa7e609764b0c23114b8fb2324b76fbe48983.
+
+Emergency36521397953 FAILED: only emergency-media(false), job109254847831.
+Lock debug/R8, Nearby and the other multimedia lane passed. Artifact11012908355
+contains the repeated absent Wi-Fi policy route (87 samples over20s), before media.
+The remaining workflows were still running when this paragraph was written;
+query their final status, never infer it from this checkpoint.
+
+Add read-only, bounded control-plane snapshots before/after `svc data disable`
+and after `svc wifi enable` on disposable AVDs. This is DIAGNOSTIC ONLY, not a
+route repair. It does not change the readiness20s budget, inject routes, retry the
+scenario or accept missing UDP/media evidence. A future pass with extra sampling
+could be an observer/timing effect; it would not demonstrate a root-cause fix.
+Reject physical/unverified targets; capture no application payloads/logs/secrets.
+205 Python tooling regressions pass, including two for this diagnostic. KVM local
+still returns EACCES. CI on the diagnostic commit is required for new evidence.
