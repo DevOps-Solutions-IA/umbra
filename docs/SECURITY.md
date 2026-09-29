@@ -279,3 +279,17 @@ See [threat model and limits](VAULT_PASSWORD.md) and
 password material. Historical legacy copies and privileged full-state rollback
 are not retroactively prevented. AVD software-key fixtures do not prove physical
 hardware security, biometric interaction or protection against a compromised OS.
+
+
+### Restricted file-media implementation limits (master v4 checkpoint)
+
+File video uses the same consumed session and authorization as restricted notes,
+not call permissions. Caller-supplied surfaces must be protected before first frame
+and cleared on disposal; final Claude UI integration remains pending. Anonymous
+kernel-size-sealed memfd replaces the incompatible FUSE MP4 output descriptor;
+there is no named plaintext staging file or disk fallback. PDF parser process
+binding loss is not explicit cancellation; authenticated result and actual process
+Binder death are both required within the original deadline. AAC sanitation bounds
+retained EOS padding without changing duration/security test thresholds. Physical
+synthetic findings are scope-limited; no OS-compromise/forensic or physical-peer
+claims. See dated validation for exact tested bytes and outstanding cases.

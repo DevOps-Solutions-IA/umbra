@@ -279,3 +279,14 @@ Commit probado, fecha, sistema/runtimes, herramientas/imágenes exactas, comando
 salida, contadores reales, artefactos sin secretos, resultado esperado/observado, fallos y
 limitaciones. Separar resultados unitarios, integración criptográfica, instrumentación,
 emulación, hardware, carga, revisión estática y auditoría humana.
+
+
+### Master v4 continuation — 2026-09-28
+
+- Physical synthetic offline debug: corrected PDF finalization race and AAC EOS
+  padding; 10 selected cases pass with silent video presentation/lock.
+- File-video native prepare already passed a8e6f0d privacy debug/R8; new player,
+  HTTPS/RFCOMM/force-stop and audio-focus regression acceptance awaits own CI.
+- Physical R8 install requires normal owner confirmation (USER_RESTRICTED).
+- Complete A/B/C matrix and Claude API freeze remain open. No physical two-peer,
+  acoustic/hardware-authentication or combined UI acceptance inferred.

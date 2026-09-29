@@ -18,8 +18,8 @@ technical branch. Domain implementation and laboratory acceptance are distinct.
 | Ordinary text clipboard | PrivateClipboard | Explicit one-use review; not restricted content |
 | F01 photo once | RestrictedImages + RestrictedContentService | PNG Android/HTTPS and historical RFCOMM acceptance; final cumulative repeat pending |
 | F02 note once | RestrictedAudio + RestrictedPlayback | Native sanitized codec/capture/HTTPS debug-R8 at c808418; RFCOMM PNG/AAC at 126ac2f; cumulative repeat/lifecycle gaps pending |
-| F03 video once | None yet | BLOCKING technical gap, not videoconferencing |
-| F04 PDF once | RestrictedDocuments + common Session | Static raster copy; c7584ee debug acceptance, R8 and expanded lifecycle/transport pending |
+| F03 video once | RestrictedVideo.prepare + RestrictedPlayback with VideoOutput | Native preparation a8e6f0d debug/R8; physical silent presentation/lock tested locally, new transport/R8/cumulative acceptance pending |
+| F04 PDF once | RestrictedDocuments + common Session | Static raster copy; a8e6f0d debug/R8; physical process-death race fixed at a1a4a00; cumulative revalidation pending |
 | F05 only in UMBRA | Mode.UMBRA_ONLY | Common motor implemented; format-specific acceptance pending |
 | F06 expiry | Descriptor deadline + Session.check | Object vs active-session limits; no background resume |
 

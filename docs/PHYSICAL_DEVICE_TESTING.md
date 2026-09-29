@@ -1,8 +1,11 @@
 # Physical device laboratory (master v4)
 
 Status: a physical USB target passed read-only preflight on 2026-09-28.
-First installation was blocked; physical test results must be taken from dated
-receipts, not inferred from detection. Claude owns later combined UI validation.
+Initial installations were blocked by INSTALL_FAILED_USER_RESTRICTED. Attempt05
+then installed both offline debug packages and executed eight cases: five passed,
+three failed (AAC and two PDF cases). Attempt06 reproduced them. TEE was reported
+for the synthetic non-authenticated test key, not production Vault authentication.
+Physical results must be taken from dated receipts, not inferred from detection. Claude owns later combined UI validation.
 
 On this WSL2 host Windows port 5037 was owned by `wslrelay`, forwarding to Linux
 ADB without USB access. Windows ADB 36.0.0 on a separate localhost-only port 5038
@@ -38,10 +41,15 @@ For execution additionally provide `--execute --flavor connected|offline`,
 JDK 21 and the pinned Gradle first. The runner verifies signature, package,
 instrumentation target, existing APK policy/JNI/permission guards and ABI before
 installing either package. It installs only `.dev` or optimized `.vaultlab` isolated packages, without
-`-r`, downgrade or permission grants. Existing unowned packages block the run,
-even if signed alike. There is no uninstall/clear workaround. Its private local
-ownership receipt permits rerunning only the exact previously installed bytes;
-updating an existing lab installation requires a separately reviewed procedure.
+downgrade or permission grants. Existing unowned packages block the run, even if
+signed alike. There is no uninstall/clear workaround. Default runs require exact
+previously installed bytes. Explicit `--update-owned` allows `-r` ONLY after the
+currently installed hash matches this runner's private ownership receipt and the
+new app/test signatures, targets, ABI and policy pass. Record old/new hashes,
+retain app data, and accept the normal system installer confirmation. A changed
+or unowned installed package is never replaced. Inputs are copied and hashed to
+a new report-directory snapshot before inspection, so concurrent builds cannot
+change the APK being installed. No build is physical acceptance by itself.
 
 The eight selected tests are explicitly enumerated in `CASES`: three PNG/SQLite
 cases, two synthetic AAC codec cases and three isolated PDF cases. They use
@@ -91,3 +99,15 @@ If a later authorized USB bind is used, record its exact detach/unbind procedure
 
 References reviewed: Android official [ADB](https://developer.android.com/tools/adb)
 and [KeyInfo](https://developer.android.com/reference/android/security/keystore/KeyInfo).
+
+### Continued physical corrections and video subset
+
+Attempt07 diagnostic: PDF result/death arrived but onBindingDied cancelled its
+owner. Attempt08 removes that race: seven pass, AAC remains failed. Attempt09
+bounds extra AAC EOS padding: all original eight cases pass without changing
+assertions. The runner now additionally selects two silent file-video presentation
+cases; no camera/audio acquisition or audible output. Attempt10: nine pass, one
+ambiguous combined assertion failed; attempt11 requires native start callback AND
+decoded frames before lock and labels each assertion: ten pass. Reports retain
+every attempt, hashes, source dirty state and no serial. See dated validation.
+R8/connected physical and final CI are separate results, never inferred here.

@@ -66,7 +66,7 @@ class PhysicalRunnerTests(unittest.TestCase):
                 text += f'INSTRUMENTATION_STATUS: class={cls}\nINSTRUMENTATION_STATUS: test={method}\nINSTRUMENTATION_STATUS_CODE: {status}\n'
         text += f'OK ({len(runner.CASES)} tests)\nINSTRUMENTATION_CODE: -1\nINSTRUMENTATION_STATUS: physicalKeystoreLevel=TEE\nINSTRUMENTATION_STATUS_CODE: 0\n'
         self.assertTrue(runner.valid_receipt(text,0))
-        for bad in (text.replace('OK (8 tests)','OK (0 tests)'), text.replace('physicalKeystoreLevel=TEE','missing'),
+        for bad in (text.replace(f'OK ({len(runner.CASES)} tests)','OK (0 tests)'), text.replace('physicalKeystoreLevel=TEE','missing'),
                     text.replace('STATUS_CODE: 0','STATUS_CODE: -3',1),text+'Process crashed'):
             self.assertFalse(runner.valid_receipt(bad,0))
         self.assertFalse(runner.valid_receipt(text,1))
@@ -78,7 +78,7 @@ class PhysicalRunnerTests(unittest.TestCase):
         self.assertEqual(runner.apk_path_for_adb('/sdk/adb',Path('/synthetic/app.apk')),'/synthetic/app.apk')
 
     def test_only_reviewed_non_sensor_cases_and_isolated_packages(self):
-        self.assertEqual(len(set(runner.CASES)),8)
+        self.assertEqual(len(set(runner.CASES)),10)
         self.assertFalse(any('#nativeNotePlayback' in c or '.RestrictedRecordingAndroidTest#' in c or '.LocationAndroidTest#' in c for c in runner.CASES))
         self.assertEqual(runner.package('offline',False),'app.umbra.privatechat.offline.dev')
         with self.assertRaises(ValueError):runner.package('production',False)
@@ -121,3 +121,9 @@ class PhysicalRunnerTests(unittest.TestCase):
         self.assertNotIn('private',str(result))
         self.assertEqual(runner.install_outcome(0,'Success\n','')['result'],'SUCCESS')
         self.assertEqual(runner.install_outcome(1,'Success\n','')['result'],'FAILED')
+
+    def test_update_requires_exact_recorded_install_and_explicit_flag(self):
+        runner.assert_no_collision('a'*64,'a'*64,{'sha256':'b'*64},True)
+        for owned in (None,'c'*64):
+            with self.assertRaises(RuntimeError):runner.assert_no_collision('a'*64,owned,{'sha256':'b'*64},True)
+        with self.assertRaises(RuntimeError):runner.assert_no_collision('a'*64,'a'*64,{'sha256':'b'*64},False)

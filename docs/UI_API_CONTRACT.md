@@ -1,7 +1,7 @@
-# Technical API contract for Claude — evolving master v3 checkpoint
+# Technical API contract for Claude — evolving master v4 checkpoint
 
 This contract is NOT frozen for final integration. Base ba75d329; current published
-checkpoint c61abb8. Consult dated validation and PR #16 for exact subsequent SHA.
+checkpoint a8e6f0d; physical PDF/AAC correction a1a4a00. Consult dated validation and PR #16 for exact subsequent SHA.
 No Claude UI or production MainActivity was changed. All domain/storage/codec work
 runs on a worker; Android Window/View configuration runs on the UI thread before
 first presentation. Never render an async result from a stale screen/vault epoch.
@@ -54,7 +54,7 @@ ordinary text only. `clearOwned()` clears only the focused owner's marked clip;
 Android lacks atomic clipboard compare-and-clear, so no global-erasure promise.
 `OrdinaryTextExport.export` is not authorization for restricted content.
 
-## Restricted objects — implemented PNG; audio under native validation
+## Restricted objects — PNG, AAC, static PDF and bounded file-video
 
 `engine.restricted().reviewSend(String recipient, Mode mode, long ttlSeconds,
 long sessionSeconds)` binds one exact verified/admitted device and vault generation.
@@ -93,8 +93,9 @@ close it on pause/abandon. `RestrictedPlayback(Context,Session,AudioDeviceInfo)`
 worker-created and one-shot `start`; no seek/replay/external player. States READY,
 ROUTING, PLAYING, COMPLETED, INTERRUPTED, FAILED, CLOSED. It starts muted until
 selected native route is confirmed; focus/route loss closes, never auto-resumes.
-This adapter's playback/route behavior is not yet accepted on Android in this
-checkpoint; do not offer it as complete. Completion is not proof of human listening.
+Native routed AAC playback and lock closure have passed earlier privacy checkpoints.
+This does not cover physical acoustics or every route/focus-loss case. Completion
+is not proof of human listening; the cumulative final SHA still requires CI.
 
 Failures: `ContentException.Code` is INVALID, CONSENT_REQUIRED, CONSUMED, EXPIRED,
 BUSY, CAPACITY, EXPORT_FORBIDDEN. `OperationFailure.classify` maps them to
@@ -114,7 +115,8 @@ RECORD_AUDIO, INTERNET or ACCESS_NETWORK_STATE. `RestrictedRecording.record(Cont
 is connected-only, off-main-thread, <=8 seconds. It requires reviewed recipient,
 permission and a selected input. `RestrictedContentService.preparationAuthorization`
 revalidates that review; false consent/wrong owner/stale generation rejects.
-Native capture acceptance remains pending. Capture adapter is connected-only;
+Synthetic AVD native capture passed earlier privacy checkpoints; physical capture
+has NOT been executed. Capture adapter is connected-only;
 UI must request permission only on a real local action. No background exception.
 
 Runnable examples are existing regression methods in RestrictedContentTest,
@@ -133,7 +135,7 @@ Lock can legitimately produce INTERRUPTED with successfully confirmed closure.
 Creation/start/render belong on their documented threads with the original lease;
 new unlock cannot reuse those objects. Native failures remain generic to UI.
 
-### PDF static-copy preparation — provisional, Android acceptance pending
+### PDF static-copy preparation — accepted cases, incomplete lifecycle matrix
 
 `RestrictedDocuments.prepare(Context, Engine, RestrictedContentService.Review,
 byte[] pdf, boolean confirmed)` runs on a worker with the original send review.
@@ -145,5 +147,53 @@ not preservation of PDF text/forms/vector fidelity. No external viewer is used.
 `render(int, Canvas, Rect)`, and `close()`; no raw bitmap, URI, print or export.
 Claude must protect the surface before rendering and clear it at invalidation.
 Page navigation does not create another opening. See RESTRICTED_DOCUMENTS.md.
-This API is not a claim of completed C: native acceptance and file-video remain
-pending. Do not enable a finished-product control solely from this entry.
+Native preparation/Signal/render/lock tests passed in privacy checkpoints and the
+real RFCOMM fixture passed at fbb98a3. PNG/AAC/PDF force-stop consumption passed in
+the connected debug lane at 9f4b533; the entire privacy job still FAILED on video.
+These are synthetic SQLite/codec tests, not production hardware Vault tests.
+This API is not a claim of completed C or acceptance of the final cumulative SHA.
+
+### File-video — preparation accepted in bounded AVD cases, playback pending
+
+`RestrictedVideo.prepare(Context,Engine,Review,byte[],boolean)` is published,
+versioned as `AVC_MP4`. Native preparation/Signal/decode cases pass at a8e6f0d
+Privacy run36513584411, both flavors debug/R8: ten changing frames and 20480 audio
+samples. Profile: <=256KiB, <=320x240 even dimensions, AVC baseline, <=45 frames,
+<=3s, optional mono16k AAC-LC. No camera, WebRTC or new offline permission.
+The old proxy descriptor failed in framework muxer filesystem queries; anonymous
+kernel-bounded memory corrected this path. See RESTRICTED_VIDEO and dated evidence.
+Surface playback overload remains unpublished local work and is not yet a stable
+UI contract. Transport/lifecycle matrix and final cumulative acceptance remain.
+
+### Physical validation and connection ownership
+
+A single Xiaomi API36 device is detected by Windows ADB on localhost5038; the
+first isolated installation attempts returned INSTALL_FAILED_USER_RESTRICTED.
+Attempt05 subsequently installed offline debug and ran eight cases: five passed,
+three failed (AAC/PDF); attempt06 reproduced them. TEE applies only to the fixture
+key, not authenticated production Vault. Physical acceptance is incomplete. The safe runner
+never replaces an unowned package, clears data, changes global security settings,
+or captures personal media. This transport/installation limitation is distinct
+from the native codec failure reproduced on disposable AVDs.
+
+## File-video presentation contract (not final API freeze)
+
+`RestrictedPlayback(Context, Session, AudioDeviceInfo, VideoOutput)` accepts only
+AVC_MP4 sessions. `VideoOutput.surface()` must return one valid caller-owned
+Surface, protected before first presentation; `close()` releases/clears graphics
+on the domain cleanup worker (marshal UI cleanup safely without holding SQLite).
+Ownership transfers to the adapter, including constructor failure. A silent clip
+accepts a null audio device; audio requires an explicit available sink. One
+MediaPlayer supplies video/audio, no camera or WebRTC. `start()` is single-use;
+`state()` and `firstVideoFrameNanos()` are observations, not human-view receipts.
+The latter is zero until the authorized native rendering callback arrives.
+Session.closure confirms native/surface cleanup; a terminal playback state alone
+does not replace that future. Call close on pause/abandon. Lock invalidates old
+callbacks and requires a new, separately authorized object where policy allows.
+Do not reattach an old playback after recreation or create a second decoder.
+
+Physical synthetic offline debug delivered changing frames and confirmed lock
+closure in attempt11. New R8, HTTPS/RFCOMM video, focus-loss and cumulative CI
+must be checked against the final published SHA. The physical AAC/PDF failures
+were reproduced and corrected (validation/2026-09-28-physical-pdf-aac-corrections).
+This does not imply Claude has integrated a protected SurfaceView or controls.

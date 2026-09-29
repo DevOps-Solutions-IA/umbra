@@ -382,3 +382,16 @@ locks sin hashes siguen siendo deuda de cadena de suministro, no una garantía d
 Consultar `docs/HANDOFF_SOURCES.md`. Codex debe verificar versiones y capacidades actuales antes
 de instalar herramientas. No descargar scripts arbitrarios con `curl | sh` ni copiar secretos a
 mensajes, issues, artefactos de CI, capturas de pantalla o servicios de análisis.
+
+
+### 2026-09-28 master v4 continuation (not closure)
+
+Technical worktree `/tmp/umbra-security-content-completion`; PR16 stays draft against
+emergency-lock. Published a8e6f0d validated native MP4 preparation; a1a4a00 fixes
+physical PDF binding-death cancellation and AAC EOS padding. Ten safe physical
+offline debug cases now pass including silent file presentation and lock. R8
+physical install was rejected with INSTALL_FAILED_USER_RESTRICTED: not executed,
+normal owner installer interaction pending; no protection disabled. New video
+HTTPS/RFCOMM/restart and focus regression code requires its own cumulative CI.
+See 2026-09-28 physical/pdf-aac and file-video checkpoint evidence. Claude UI
+remains untouched; API freeze and full A/B/C closure are NOT declared.

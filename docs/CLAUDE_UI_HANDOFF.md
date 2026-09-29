@@ -1,11 +1,12 @@
-# Handoff preparation — master v3 still open
+# Handoff preparation — master v4 still open
 
 Do not begin a final integration on the assumption that A/B/C are accepted.
 Technical branch codex/security-content-completion, draft PR #16 against
 codex/emergency-lock. Exact base ba75d329bedb2a26cd2e70371d2369e2fb3ba7a1.
-Published checkpoint c61abb89725ae095e999aeb51f60ad8c0a460726 adds failed-decoder
-closure regressions. Its own CI is pending. The preceding 13c89ad native privacy
-run failed capture in debug/R8; do not select either as a final accepted SHA.
+Published checkpoint a8e6f0d31380cdc632d385074aa92b729ee01dfc accepted native MP4
+preparation in privacy debug/R8. Local a1a4a00 corrects physical PDF/AAC failures;
+new file playback/transport validation is in progress. None is the final A/B/C
+accepted SHA; consult current PR and dated evidence rather than historical green.
 
 Claude reference bundle ca2a706fd30c8194181588b19e72c69529f70335 was inspected
 without merge. Hash a8cb0eaddee9610cbc1c8ad931cec55cf718a79d84e419db825ed94c298bc9c1;
@@ -45,3 +46,10 @@ prepared copies and invalidates them on lock/consent expiry. Close abandoned
 copies; wait for `Prepared.closure()` to report cleanup, not merely the first
 visual invalidation. Recording and PDF return the same managed type. These
 changes are under validation; no Claude presentation file was changed.
+
+Current restore checkpoint: Windows Downloads/UMBRA_RESPALDOS_CODEX/
+umbra-security-content-a8e6f0d-physical-fixes-checkpoint.tar.gz,
+SHA256 5d9aba3083db50ea0007297fe1e0065224302ffffa12e17424f449da56f692be.
+Full bundle restored and pending patch applied in isolation; later changes must
+be preserved separately, not overwritten by this snapshot. Original Claude bundle
+and previous backups remain untouched.

@@ -1,7 +1,7 @@
-# Master v3 API gap register — technical checkpoint, not closure
+# Master v4 API gap register — technical checkpoint, not closure
 
 Compared with Claude bundle ca2a706 (not merged), including AdmissionFlow and
-VaultFlow. Technical base ba75d329; published checkpoint c61abb8. Later working
+VaultFlow. Technical base ba75d329; published checkpoint a8e6f0d. Later working
 changes require their own tests/commit. Do not treat this document as a UI patch.
 
 | Claude gap | Technical contract | Remaining validation/integration |
@@ -31,12 +31,16 @@ simplification remains Claude's responsibility and was not overwritten.
 - Android note HTTPS passed with real Signal/TLS and two SQLite stores in one AVD,
   not two independent devices. Real RFCOMM PNG/AAC passed in 126ac2f (historical),
   both flavors; final cumulative SHA must repeat it.
-- Process force-stop consumption passed for PNG with laboratory SQLite, not
-  hardware Keystore or death during commit. Audio/PDF lifecycle expansion remains.
-- PDF static-copy implementation published at c7584ee; Android CI pending.
-  File-video is still unimplemented. Neither is accepted by compiling classes.
-- Pending-preparation cleanup and domain-only authorization APIs are under local
-  regression now; they are not yet final native acceptance.
+- Process force-stop consumption passed for PNG, and connected debug AAC/PDF
+  expansion passed at 9f4b533 with laboratory SQLite. The job still failed on video.
+  This is not hardware Keystore or death during commit; other lifecycle cases remain.
+- PDF preparation/render cases passed in later privacy checkpoints; lifecycle
+  matrix remains incomplete. File-video preparation is implemented as a candidate
+  and native MP4 preparation/Signal/decode passes at a8e6f0d after the descriptor
+  correction; surface playback is locally tested on the phone and awaiting new CI. Physical AAC/PDF failures
+  are corrected with unchanged assertions at a1a4a00; new cumulative CI remains required.
+- Pending-preparation cleanup and domain-only authorization APIs have regressions;
+  full cumulative acceptance and unconfirmed native resource closure remain under review.
 - Final combined technical matrix, artifact hashes and final API freeze.
 - Actual Claude screen integration, screenshot/recents verification on that UI,
   accessibility and Android physical hardware remain separate integration work.

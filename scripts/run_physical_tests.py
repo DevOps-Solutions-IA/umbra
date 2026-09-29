@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import time
 import zipfile
@@ -28,6 +29,9 @@ CASES = tuple(CONTENT + method for method in (
     'isolatedPreparationSignalAndNavigationShareOnePersistentOpening',
     'malformedAndTooManyPagesFailWithoutPoisoningNextPreparation',
     'admissionConsentAndManifestIsolationAreRequired',
+)) + tuple('app.umbra.RestrictedVideoAndroidTest#' + method for method in (
+    'nativeFilePlaybackDeliversChangingFramesAndCannotReplay',
+    'lockAfterNativeVideoFramesClosesSurfaceAndRejectsOldSession',
 ))
 PROPERTIES = ('ro.product.manufacturer', 'ro.product.model', 'ro.build.version.release',
               'ro.build.version.sdk', 'ro.build.version.security_patch', 'ro.product.cpu.abilist',
@@ -172,9 +176,9 @@ def installed_digest(command, pkg):
     return text.split()[0]
 
 
-def assert_no_collision(installed, owned, info):
-    if installed and (owned != info['sha256'] or installed != info['sha256']):
-        raise RuntimeError('Existing package not owned at this exact hash; no update/uninstall permitted')
+def assert_no_collision(installed, owned, info, update_owned=False):
+    if installed and (installed != owned or (installed != info['sha256'] and not update_owned)):
+        raise RuntimeError('Existing package ownership/hash mismatch; replacement refused')
 
 
 def apk_path_for_adb(adb, apk):
@@ -224,7 +228,15 @@ def execute(args, profile, state_path, receipt):
     tools = Path(args.sdk) / 'build-tools' / '35.0.0'
     if not re.fullmatch(r'[a-f0-9]{64}', args.signer_sha256 or ''):
         raise ValueError('Pin the locally built lab signer SHA-256 before installation')
-    apks = [Path(args.app_apk).resolve(), Path(args.test_apk).resolve()]
+    sources = [Path(args.app_apk).resolve(), Path(args.test_apk).resolve()]
+    snapshot=args.reports/'artifacts';snapshot.mkdir(exist_ok=False)
+    apks=[]
+    for source in sources:
+        before=digest(source);destination=snapshot/source.name
+        if destination.exists():raise RuntimeError('Ambiguous artifact names')
+        shutil.copyfile(source,destination)
+        if digest(destination)!=before or digest(source)!=before:raise RuntimeError('Build changed while snapshotting APK')
+        destination.chmod(0o400);apks.append(destination.resolve())
     # Inspect both artifacts before touching either package.
     infos = [inspect_apk(apks[0], pkg, tools, args.signer_sha256),
              inspect_apk(apks[1], pkg + '.test', tools, args.signer_sha256, pkg)]
@@ -247,17 +259,18 @@ def execute(args, profile, state_path, receipt):
     installs = []
     for info, apk in zip(infos, apks):
         installed = installed_digest(command, info['package'])
-        assert_no_collision(installed, owned.get(info['package']), info)
-        if installed is None:
-            installs.append((info, apk))
-    for info, apk in installs:
+        assert_no_collision(installed, owned.get(info['package']), info, args.update_owned)
+        if installed != info['sha256']:
+            installs.append((info, apk, installed))
+    for info, apk, previous in installs:
         if digest(apk) != info['sha256']:
             raise RuntimeError('APK changed after inspection')
-        result = subprocess.run([*command, 'install', '-t', apk_path_for_adb(args.adb, apk)],
+        flags=['-t'] if previous is None else ['-t','-r']
+        result = subprocess.run([*command, 'install', *flags, apk_path_for_adb(args.adb, apk)],
                                 capture_output=True, text=True, timeout=180)
         # Only fixed Android error code, never arbitrary installer stderr or paths.
         outcome = install_outcome(result.returncode, result.stdout, result.stderr)
-        receipt.setdefault('installAttempts', []).append({'package': info['package'], **outcome})
+        receipt.setdefault('installAttempts', []).append({'package': info['package'], 'previousSha256': previous, **outcome})
         if outcome['result'] != 'SUCCESS':
             raise RuntimeError('Isolated APK install failed: ' + outcome['code'])
         if installed_digest(command, info['package']) != info['sha256']:
@@ -299,6 +312,7 @@ def main():
     parser.add_argument('--flavor', choices=('connected', 'offline'), default='offline')
     parser.add_argument('--reports', required=True, type=Path)
     parser.add_argument('--execute', action='store_true')
+    parser.add_argument('--update-owned', action='store_true', help='Explicitly replace ONLY a runner-owned exact installed hash; retain data, no downgrade')
     parser.add_argument('--optimized', action='store_true')
     parser.add_argument('--sdk', default=os.environ.get('ANDROID_HOME'))
     parser.add_argument('--app-apk')
