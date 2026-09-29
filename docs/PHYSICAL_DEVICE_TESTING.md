@@ -1,0 +1,79 @@
+# Physical device laboratory (master v4)
+
+Status: safe runner implemented; physical execution NOT EXECUTED until an explicit
+USB target is available. Claude owns the product UI and its later combined tests.
+This host runs WSL2. Official platform-tools 36.0.0-13206524 is present both in the
+Linux SDK and Windows. On 2026-09-28 both `devices -l` lists were empty. No server
+restart, USB bind, global setting change or package installation was performed.
+
+## First lane: no sensors, no external endpoints
+
+`scripts/run_physical_tests.py` defaults to read-only preflight. It requires
+`--adb PATH --serial SELECTED_USB_SERIAL --safe --reports NEW_DIRECTORY`.
+Never publish the serial. A Windows `adb.exe` route is supported explicitly;
+APK paths pass through `wslpath -w`. Its actual USB installation is not yet tested.
+Do not switch ADB servers during a case or run an AVD orchestration script here.
+
+The preflight rejects absent/unauthorized devices, network serials, emulators,
+API below 31, unknown battery readiness, battery below 20%, or temperature at
+least 40 °C. These are conservative lab scheduling limits, not product limits.
+It only reads model/API/ABI/patch, boot indicators and battery; boot properties
+are not hardware attestation. It never reads accounts, photos, IMEI or contacts.
+A local `flock` serializes this runner's operations per selected device. Other
+agents must use the same runner/lock convention; it cannot stop unrelated tools.
+
+For execution additionally provide `--execute --flavor connected|offline`,
+`--sdk` (Linux SDK for inspection), `--app-apk`, `--test-apk` and
+`--signer-sha256` from the exact locally built debug certificate. Build with
+JDK 21 and the pinned Gradle first. The runner verifies signature, package,
+instrumentation target, existing APK policy/JNI/permission guards and ABI before
+installing either package. It installs only `.dev` isolated packages, without
+`-r`, downgrade or permission grants. Existing unowned packages block the run,
+even if signed alike. There is no uninstall/clear workaround. Its private local
+ownership receipt permits rerunning only the exact previously installed bytes;
+updating an existing lab installation requires a separately reviewed procedure.
+
+The eight selected tests are explicitly enumerated in `CASES`: three PNG/SQLite
+cases, two synthetic AAC codec cases and three isolated PDF cases. They use
+real libsignal and Android codecs, in-process delivery and disposable synthetic
+SQLite records. No recording, audible playback, clipboard alteration, location
+provider changes, Bluetooth, relay or media network setup is selected.
+This does not validate production Vault authentication or two physical peers.
+The fixture also creates exactly one random non-authenticated AES-GCM Keystore
+key in the isolated UID, observes `KeyInfo.getSecurityLevel()`, tests authenticated
+encryption and tamper rejection, and deletes ONLY that call's alias. It never
+enumerates other aliases. SOFTWARE/TEE/STRONGBOX/UNKNOWN are observed results,
+not assumptions; this key does not stand in for production authenticated keys.
+
+Instrumentation must report every exact class/method and a Keystore receipt;
+empty, skipped, duplicate or different cases cannot pass. Each attempt gets a
+new directory, source HEAD/tree, runner hash, APK hashes/signers, properties,
+exit status and limited instrumentation output. No global logcat/bugreport is
+collected. The runner force-stops only its owned target on completion/failure;
+it leaves installations intact. USB loss and command deadlines fail the case.
+Raw instrumentation logs still require review before public upload.
+
+## Remaining lanes — not implied by a passing first lane
+
+- Authenticated Vault/password/biometric operations: MANUAL_PENDING; owner enters
+  credentials physically, never through chat. No software fallback.
+- Camera/microphone/location and audio route tests: MANUAL_PENDING, explicit
+  human consent and an audited per-case runner required. No ambient recording.
+- Force-stop/restart restricted consumption: existing AVD coverage retained;
+  physical dedicated lane pending. SQLite reopen is not death during commit.
+- R8 physical execution: explicitly refused by this first runner version;
+  existing AVD R8 suites remain. Debug is never reported as R8.
+- RFCOMM Android-to-Android and bidirectional physical media: NEEDS_SECOND_PEER.
+- No-network global packet absence on non-root phone: BLOCKED_OBSERVABILITY
+  where per-UID observation is unavailable; relay silence alone is insufficient.
+- UI screenshots/recents/product flow: Claude integration pending.
+
+Do not run root, emulator commands, `pm clear`, uninstall, reboot, host/phone
+network reconfiguration or changes to global security settings on this lane.
+No self-hosted public PR runner is registered. No background service is installed.
+When finished, the owner can revoke the selected host's USB debugging authorization
+on the phone after other work completes. No usbipd sharing was configured here.
+If a later authorized USB bind is used, record its exact detach/unbind procedure.
+
+References reviewed: Android official [ADB](https://developer.android.com/tools/adb)
+and [KeyInfo](https://developer.android.com/reference/android/security/keystore/KeyInfo).
