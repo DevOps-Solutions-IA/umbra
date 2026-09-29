@@ -1,3 +1,22 @@
+## 2026-09-28 master v4 continuation (not final acceptance)
+
+The governing local master is `UMBRA_MASTER_CODEX_v4_MOVIL_FISICO.md`, SHA-256
+59af8c3e3ff5d0291b7f1a244559c54dcbc693bcad64d0227000443a374187ed. Its original
+Windows copy was read, not overwritten. One physical phone is reported by the
+owner, but both Windows/Linux ADB lists were empty: physical tests NOT EXECUTED.
+See PHYSICAL_DEVICE_TESTING for the new safe runner and blocked/manual lanes.
+
+RFCOMM fixes: 5c40c24 supplies the required coordinator via the existing SQLite
+lab adapter and verifies all three restricted formats separately. fbb98a3 delays
+inbound fixture delivery until the deliberate duplicate writes complete, preserving
+Engine's rejection after ACK. Both historical failures and per-SHA CI are retained.
+Do not attribute the old memory-fixture storage claim to the new SQLite fixture.
+
+File-video now has a candidate bounded AVC/AAC import/re-encode adapter and real
+Android codec tests. Native acceptance, surface playback, file-video HTTPS/RFCOMM,
+cancellation observations and final contract freeze are NOT completed. See
+RESTRICTED_VIDEO and ADR-restricted-video. A/B/C remain open. Claude UI untouched.
+
 # Transferencia técnica a Codex
 
 ## Avance acumulativo — PDF y preparación, 2026-09-28

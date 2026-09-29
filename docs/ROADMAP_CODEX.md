@@ -1,3 +1,14 @@
+## Master v4 checkpoint — 2026-09-28
+
+- Physical safe preflight/runner implemented; no connected ADB device observed,
+  hence physical acceptance pending. Authenticated Vault and sensor lanes need
+  explicit human participation; no two-phone coverage inferred.
+- PDF RFCOMM fixtures corrected (coordinator, exact format inventory, ACK race).
+  Check the dated evidence and final revision's CI before reporting acceptance.
+- F03 restricted file-video: bounded AVC/AAC re-encoding implementation and codec
+  tests added for native validation. Playback adapter and transport acceptance
+  still pending. Video calls do not count as these tests. No final master closure.
+
 # Backlog de finalización verificable
 
 ## Avance acumulativo — PDF y preparación, 2026-09-28

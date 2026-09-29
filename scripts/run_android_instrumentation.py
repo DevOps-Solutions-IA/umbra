@@ -38,7 +38,7 @@ def main() -> None:
     output = args.log.read_text(encoding='utf-8')
     # Existing 48/46 plus three privacy, six restricted-content and one connected capture case.
     # Exact counts remain fail-closed: adding a class requires updating this contract.
-    expected=61 if args.flavor=='connected' else 58
+    expected=63 if args.flavor=='connected' else 60
     failed = result.returncode != 0 or not re.search(r'^OK \('+str(expected)+r' tests\)$', output, re.MULTILINE)
     failed |= 'INSTRUMENTATION_CODE: -1' not in output
     failed |= bool(re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', output))

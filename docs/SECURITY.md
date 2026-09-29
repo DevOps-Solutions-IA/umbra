@@ -1,3 +1,18 @@
+## 2026-09-28 restricted file-video candidate / physical laboratory
+
+The candidate AVC_MP4 profile uses the existing restricted policy and per-object
+Signal/AES-GCM delivery. It re-encodes bounded video/audio through Android codecs
+and a RAM-only muxer destination. This is not yet accepted file-video playback;
+see docs/protocol/RESTRICTED_VIDEO.md for limits and missing native validation.
+No camera/microphone/network permission is added to offline. No file/URI exporter
+or external viewer fallback is provided. A failed native cleanup invalidates
+access rather than silently opening another preparation.
+
+The physical runner uses isolated packages, explicit USB selection and fixed
+synthetic tests. Its non-authenticated test-key observation does not validate the
+production authenticated Vault/Keystore boundary. No phone has been observed by
+ADB in this checkpoint; no hardware level or physical success is claimed.
+
 # Seguridad y límites de UMBRA 0.2
 
 ## Avance acumulativo — PDF y preparación, 2026-09-28

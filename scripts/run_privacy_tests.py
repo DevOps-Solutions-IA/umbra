@@ -62,8 +62,8 @@ def consumption_restart(adb, package, reports):
         'postRestartDuplicateRejected': True}, indent=2) + '\n')
 
 
-def valid_report(text, code, expected=12):
-    return (expected in (12, 13) and code == 0 and re.search(r'^OK \('+str(expected)+r' tests\)$', text, re.M)
+def valid_report(text, code, expected=14):
+    return (expected in (14, 15) and code == 0 and re.search(r'^OK \('+str(expected)+r' tests\)$', text, re.M)
             and 'INSTRUMENTATION_CODE: -1' in text
             and not re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)
             and not any(x in text for x in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'Process crashed')))
@@ -80,7 +80,8 @@ def optimized_classes(mapping, configuration):
                  'app.umbra.content.RestrictedImages$Decoder',
                  'app.umbra.content.RestrictedAudio',
                  'app.umbra.content.RestrictedPlayback',
-                 'app.umbra.content.RestrictedDocuments$Decoder'):
+                 'app.umbra.content.RestrictedDocuments$Decoder',
+                 'app.umbra.content.RestrictedVideo'):
         match = re.search(r'^' + re.escape(name) + r' -> ([^:]+):$', mapping, re.M)
         if not match or match[1] == name:
             raise RuntimeError('Optimized privacy entry point missing or not obfuscated: ' + name)
@@ -122,8 +123,8 @@ def main():
         if args.optimized:
             command.append('--optimized')
         subprocess.run(command, check=True, timeout=180)
-    classes = 'app.umbra.PrivacyAdaptersAndroidTest,app.umbra.RestrictedContentAndroidTest,app.umbra.RestrictedDocumentAndroidTest'
-    expected = 13 if args.flavor == 'connected' else 12
+    classes = 'app.umbra.PrivacyAdaptersAndroidTest,app.umbra.RestrictedContentAndroidTest,app.umbra.RestrictedDocumentAndroidTest,app.umbra.RestrictedVideoAndroidTest'
+    expected = 15 if args.flavor == 'connected' else 14
     if args.flavor == 'connected':
         classes += ',app.umbra.RestrictedRecordingAndroidTest'
     log = args.reports / 'privacy-tests.log'
