@@ -16,13 +16,17 @@ technical branch. Domain implementation and laboratory acceptance are distinct.
 | Generic notification | PrivateAndroidSurface.notification | No payload/preview input |
 | Protected window/dialog/surface | PrivateAndroidSurface.protect | Before first frame; integrated screen test pending |
 | Ordinary text clipboard | PrivateClipboard | Explicit one-use review; not restricted content |
-| F01 photo once | RestrictedImages + RestrictedContentService | PNG Android/HTTPS and historical RFCOMM acceptance; final cumulative repeat pending |
-| F02 note once | RestrictedAudio + RestrictedPlayback | Native sanitized codec/capture/HTTPS debug-R8 at c808418; RFCOMM PNG/AAC at 126ac2f; cumulative repeat/lifecycle gaps pending |
-| F03 video once | RestrictedVideo.prepare + RestrictedPlayback with VideoOutput | Native preparation a8e6f0d debug/R8; physical silent presentation/lock tested locally, new transport/R8/cumulative acceptance pending |
-| F04 PDF once | RestrictedDocuments + common Session | Static raster copy; a8e6f0d debug/R8; physical process-death race fixed at a1a4a00; cumulative revalidation pending |
-| F05 only in UMBRA | Mode.UMBRA_ONLY | Common motor implemented; format-specific acceptance pending |
-| F06 expiry | Descriptor deadline + Session.check | Object vs active-session limits; no background resume |
+| F01 photo once | RestrictedImages + RestrictedContentService | Native Android/HTTPS/RFCOMM and force-stop passed at7425385; final cumulative matrix is separate |
+| F02 note once | RestrictedAudio + RestrictedPlayback | Native codec/capture/HTTPS/RFCOMM debug-R8 at7425385; physical capture/route removal remain unexecuted |
+| F03 video once | RestrictedVideo.prepare + RestrictedPlayback with VideoOutput | Native preparation/presentation/HTTPS/RFCOMM and restart at7425385; physical synthetic silent playback/lock historical attempt11 |
+| F04 PDF once | RestrictedDocuments + common Session | Static raster copy, isolated parser, HTTPS/RFCOMM and restart at7425385; no external viewer or original PDF export |
+| F05 only in UMBRA | Mode.UMBRA_ONLY | Common motor; four-format policy/reopen/export-denial JVM regressions; native format acceptance remains a distinct layer |
+| F06 expiry | Descriptor deadline + Session.check | Object vs active-session limits; all-format policy tamper/restart regressions; no background resume |
 
 No title/text/icon/navigation changes are prescribed. Preserve Claude's current
 Spanish simplification and C3 design. Do not use placeholder success for missing
 video/PDF or a generic share intent to bypass restricted access.
+
+References to7425385 are historical evidence for that tree, not a green claim for a
+later HEAD. Consult PR16 and the dated20-case matrix. Combined Claude screens,
+physical R8 and authenticated hardware Vault remain separate unexecuted work.

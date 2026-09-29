@@ -3,7 +3,7 @@
 Do not begin a final integration on the assumption that A/B/C are accepted.
 Technical branch codex/security-content-completion, draft PR #16 against
 codex/emergency-lock. Exact base ba75d329bedb2a26cd2e70371d2369e2fb3ba7a1.
-Published checkpoint 8c7d25d24991dacf0bfa23f250aadcb47e8d0f71 passes privacy
+Historical checkpoint 8c7d25d24991dacf0bfa23f250aadcb47e8d0f71 passed privacy
 debug/R8, file playback, HTTPS/four-format restart and focused RFCOMM. Its full
 Verify/password/video matrices failed as documented in the 2026-09-29 receipt. None is the final A/B/C
 accepted SHA; consult current PR and dated evidence rather than historical green.
@@ -53,3 +53,27 @@ SHA256 5d9aba3083db50ea0007297fe1e0065224302ffffa12e17424f449da56f692be.
 Full bundle restored and pending patch applied in isolation; later changes must
 be preserved separately, not overwritten by this snapshot. Original Claude bundle
 and previous backups remain untouched.
+
+
+## Cumulative acceptance receipt and integration boundary
+
+At74253858ed1e29e1bb9c7b8ee7519180a269fad5 the domain contracts and all four
+native restricted format adapters are present. Privacy debug/R8 executes19/18
+connected/offline tests, HTTPS and four-format force-stop; focalized RFCOMM executes
+six admitted and two unadmitted cases on the same tree. The new clipboard case
+executes Android ClipboardManager with optimized production classes and synthetic
+AVD content only. None authorizes reading the owner's physical clipboard.
+
+Video debug/R8, privacy, modulation, password, admission, startup and emergency
+passed on that checkpoint; focused video debug remained FAILED due to HTTPS EOF
+while video was already active. New safe server diagnostics are being validated;
+this is not a claimed correction of the EOF. See the2026-09-29 HTTP lifecycle report
+and current PR receipt before treating any SHA as accepted. The exact subsequent
+CI checkout/tree and artifact digests are kept in that receipt to avoid circular
+self-referential commit hashes in documentation.
+
+The exported Windows Downloads/UMBRA_RESPALDOS_CODEX contract package and full
+recoverable checkpoint preserve this boundary. Preview ca2a706 is separate and
+was NOT installed (USER_RESTRICTED, no prompt seen); no UI integration occurred.
+Claude should run its combined-screen matrix only after choosing an explicitly
+accepted technical SHA. No frozen accepted API version is implied by this checkpoint.

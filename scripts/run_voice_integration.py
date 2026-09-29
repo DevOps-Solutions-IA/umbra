@@ -256,7 +256,7 @@ def main():
             try: evidence['after']=topology()
             finally: (args.reports/f'direct-route-{probe_number}.json').write_text(json.dumps(evidence,indent=2)+'\n')
     processes={}; streams=[]
-    with voice_relay() as relay, TurnLab(alternate_port=3479 if args.scenario=="unauthorized-redirect" else None, allocation_lifetime=180,tls_mode=args.turn_tls,ipv6=args.turn_ipv6) as turn:
+    with voice_relay(args.reports/"https-lifecycle.json") as relay, TurnLab(alternate_port=3479 if args.scenario=="unauthorized-redirect" else None, allocation_lifetime=180,tls_mode=args.turn_tls,ipv6=args.turn_ipv6) as turn:
         capture_paths=[]; blocked_routes=[]; shaped=[]; shape_evidence=[]; allocation_evidence=None
         try:
             addresses=[];addresses6=[]

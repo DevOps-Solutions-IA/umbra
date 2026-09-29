@@ -1,7 +1,9 @@
 # Technical API contract for Claude — evolving master v4 checkpoint
 
-This contract is NOT frozen for final integration. Base ba75d329; current published
-checkpoint 8c7d25d; physical PDF/AAC correction a1a4a00. Consult dated validation and PR #16 for exact subsequent SHA.
+This contract describes the cumulative production domain/adapters on
+codex/security-content-completion, base ba75d329. Exact published/checked-out SHA
+and acceptance are recorded in PR16 and dated validation, not inferred from
+historical results below. Do not assume final acceptance while that matrix is red.
 No Claude UI or production MainActivity was changed. All domain/storage/codec work
 runs on a worker; Android Window/View configuration runs on the UI thread before
 first presentation. Never render an async result from a stale screen/vault epoch.
@@ -135,7 +137,7 @@ Lock can legitimately produce INTERRUPTED with successfully confirmed closure.
 Creation/start/render belong on their documented threads with the original lease;
 new unlock cannot reuse those objects. Native failures remain generic to UI.
 
-### PDF static-copy preparation — accepted cases, incomplete lifecycle matrix
+### PDF static-copy preparation — contract and laboratory limits
 
 `RestrictedDocuments.prepare(Context, Engine, RestrictedContentService.Review,
 byte[] pdf, boolean confirmed)` runs on a worker with the original send review.
@@ -172,7 +174,9 @@ A single Xiaomi API36 device is detected by Windows ADB on localhost5038; the
 first isolated installation attempts returned INSTALL_FAILED_USER_RESTRICTED.
 Attempt05 subsequently installed offline debug and ran eight cases: five passed,
 three failed (AAC/PDF); attempt06 reproduced them. TEE applies only to the fixture
-key, not authenticated production Vault. Physical acceptance is incomplete. The safe runner
+key, not authenticated production Vault. Those failures were reproduced and fixed at a1a4a00; physical attempt11 subsequently
+passed ten synthetic offline debug cases, including native video presentation.
+Hardware-authenticated production Vault and physical R8 remain unexecuted. The safe runner
 never replaces an unowned package, clears data, changes global security settings,
 or captures personal media. This transport/installation limitation is distinct
 from the native codec failure reproduced on disposable AVDs.

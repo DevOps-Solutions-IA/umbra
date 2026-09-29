@@ -1,8 +1,8 @@
 # Master v4 API gap register — technical checkpoint, not closure
 
 Compared with Claude bundle ca2a706 (not merged), including AdmissionFlow and
-VaultFlow. Technical base ba75d329; published checkpoint 8c7d25d. Later working
-changes require their own tests/commit. Do not treat this document as a UI patch.
+VaultFlow. Technical base ba75d329; current SHA and CI are recorded in PR16. Historical
+results below do not validate a later commit. Do not treat this document as a UI patch.
 
 | Claude gap | Technical contract | Remaining validation/integration |
 |---|---|---|

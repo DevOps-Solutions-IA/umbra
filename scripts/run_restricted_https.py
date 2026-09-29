@@ -54,7 +54,7 @@ def main():
     process = None
     from voice_relay_lab import voice_relay
     try:
-        with voice_relay() as relay, log.open('w') as stream:
+        with voice_relay(args.reports/'restricted-https-lifecycle.json') as relay, log.open('w') as stream:
             write('synthetic-restricted-https.json', {'base': relay['base'], 'certificate': relay['certificate'],
                 'realm': relay['admission'].realm.encode(), 'invitations': relay['invitations']})
             process = subprocess.Popen([*adb, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class',

@@ -7,6 +7,8 @@ import ssl
 import subprocess
 import sys
 import tempfile
+import json
+import time
 from test_relay_integration import stop, wait_healthy
 from admission_lab import AdmissionLab
 
@@ -14,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @contextmanager
-def voice_relay():
+def voice_relay(diagnostics=None):
     with tempfile.TemporaryDirectory(prefix="umbra-voice-https-") as folder:
         root=Path(folder)
         cert,key=root/"ca.pem",root/"server.key"
@@ -35,9 +37,10 @@ def voice_relay():
             environment["UMBRA_ADMISSION_ORIGIN"]=f"https://10.0.2.2:{port}"
             from umbra_relay.admission_store import AdmissionStore
             admission.store=AdmissionStore(database,admission.realm.encode(),environment["UMBRA_ADMISSION_ORIGIN"])
-            server=subprocess.Popen([sys.executable,"-m","uvicorn","umbra_relay.app:create_app","--factory",
-                "--fd",str(listener.fileno()),"--workers","1","--ssl-certfile",str(cert),"--ssl-keyfile",str(key),
-                "--no-access-log","--no-proxy-headers","--log-level","warning"],env=environment,
+            lifecycle=root/"http-lifecycle.json"
+            server=subprocess.Popen([sys.executable,str(ROOT/"scripts/voice_relay_server.py"),
+                "--fd",str(listener.fileno()),"--cert",str(cert),"--key",str(key),
+                "--diagnostics",str(lifecycle)],env=environment,
                 pass_fds=(listener.fileno(),),stdout=log,stderr=log)
             try:
                 wait_healthy(server,f"https://127.0.0.1:{port}",ssl.create_default_context(cafile=str(cert)))
@@ -45,4 +48,13 @@ def voice_relay():
                 if server.poll() is not None:
                     raise RuntimeError("Isolated voice HTTPS relay died during acceptance")
             finally:
+                scope_exit=time.monotonic_ns()
+                alive=server.poll() is None
                 stop(server)
+                if diagnostics is not None:
+                    diagnostics.parent.mkdir(parents=True,exist_ok=True)
+                    value=json.loads(lifecycle.read_text()) if lifecycle.is_file() else {"available":False}
+                    value["serverExit"]=server.returncode
+                    value["scopeExitNanos"]=scope_exit
+                    value["serverAliveAtScopeExit"]=alive
+                    diagnostics.write_text(json.dumps(value,indent=2)+'\n')
