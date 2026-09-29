@@ -100,7 +100,12 @@ def select_owned_wifi(adb, serial, report):
         # API 35 exposes this administrative command to root on AOSP test images.
         # Match the existing owned-AVD firewall context, never root a phone.
         help_result = command('su', '0', 'cmd', 'wifi', 'help')
-        supported = help_result.returncode == 0 and re.search(
+        # Android BasicShellCommandHandler prints help then returns -1 (ADB 255).
+        # Only this read-only help command may use that documented status.
+        receipt['helpExit'] = help_result.returncode
+        receipt['helpSyntax'] = [line.strip()[:240] for line in help_result.stdout.splitlines()
+                                 if line.strip().startswith('connect-network ')][:2]
+        supported = help_result.returncode in (0,255) and not help_result.stderr.strip() and re.search(
             r'connect-network\s+<ssid>\s+open(?:\||\s)', help_result.stdout) is not None
         receipt['supported'] = supported
         if not supported:

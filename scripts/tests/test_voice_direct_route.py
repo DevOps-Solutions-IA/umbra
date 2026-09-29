@@ -196,3 +196,14 @@ class DirectRouteProbeTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'radio is not enabled'):
                 select_owned_wifi('adb','emulator-5554',Path(d)/'selection.json')
             self.assertFalse(any('connect-network' in call.args[0] for call in run.call_args_list))
+
+    def test_android_help_minus_one_exit_with_exact_supported_syntax_is_not_a_failed_mutation(self):
+        import tempfile,json
+        from voice_direct_route import select_owned_wifi
+        ok=lambda text='':subprocess.CompletedProcess([],0,text,'')
+        help_result=subprocess.CompletedProcess([],255,'Wifi commands:\n  connect-network <ssid> open|owe|wpa2|wpa3 [<passphrase>]\n','')
+        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',
+                side_effect=[ok('1'),help_result,ok('Wifi is enabled'),ok('Connection initiated')]):
+            report=Path(d)/'selection.json'
+            select_owned_wifi('adb','emulator-5554',report)
+            self.assertEqual(255,json.loads(report.read_text())['helpExit'])
