@@ -81,7 +81,10 @@ jobs:
   android:
     needs: repository-guard
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    # Measured run36627792335 completed device checks and reached artifact
+    # hashing at35m05s. Keep all per-test deadlines; reserve bounded
+    # completion/upload headroom for this cumulative build+device job.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
         with:
