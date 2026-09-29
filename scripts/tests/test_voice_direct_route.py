@@ -94,11 +94,11 @@ class DirectRouteProbeTest(unittest.TestCase):
         import tempfile,json
         ok=lambda text='':subprocess.CompletedProcess([],0,text,'')
         with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',
-                side_effect=[ok('1'),ok(),ok('inet 10.0.2.16/24'),ok('wlan0 DOWN'),ok()]) as run,patch('voice_direct_route.time.sleep'):
+                side_effect=[ok('1'),ok('inet 10.0.2.16/24'),ok(''),ok(''),ok(),ok('inet 10.0.2.16/24'),ok('wlan0 DOWN'),ok()]) as run,patch('voice_direct_route.time.sleep'):
             report=Path(d)/'init.json'
             initialize_owned_wifi('adb','emulator-5554',report)
             calls=[c.args[0][4:] for c in run.call_args_list]
-            self.assertEqual(['svc','wifi','disable'],calls[1])
+            self.assertEqual(['svc','wifi','disable'],calls[4])
             self.assertEqual(['svc','wifi','enable'],calls[-1])
             self.assertEqual([False,True],[x['addressCleared'] for x in json.loads(report.read_text())['observations']])
 
@@ -106,10 +106,10 @@ class DirectRouteProbeTest(unittest.TestCase):
         import tempfile
         ok=lambda text='':subprocess.CompletedProcess([],0,text,'')
         with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',
-                side_effect=[ok('1'),ok(),ok('inet 10.0.2.16/24')]) as run,patch('voice_direct_route.time.monotonic',side_effect=[0,11,11]):
+                side_effect=[ok('1'),ok('inet 10.0.2.16/24'),ok(''),ok(''),ok(),ok('inet 10.0.2.16/24')]) as run,patch('voice_direct_route.time.monotonic',side_effect=[0,11,11]):
             with self.assertRaisesRegex(RuntimeError,'did not disconnect'):
                 initialize_owned_wifi('adb','emulator-5554',Path(d)/'init.json')
-            self.assertEqual(3,run.call_count)
+            self.assertEqual(6,run.call_count)
 
     def test_initialization_rejects_non_emulator_before_radio_mutation(self):
         import tempfile
@@ -119,3 +119,18 @@ class DirectRouteProbeTest(unittest.TestCase):
             run.assert_not_called()
             with self.assertRaises(ValueError):initialize_owned_wifi('adb','emulator-5554',Path(d)/'init.json')
             self.assertEqual(1,run.call_count)
+
+    def test_initialization_preserves_an_already_routed_interface(self):
+        import tempfile,json
+        def execute(command,**kwargs):
+            arguments=command[4:]
+            if arguments==['getprop','ro.kernel.qemu']: value='1'
+            elif arguments==['ip','-4','addr','show','wlan0']: value='inet 10.0.2.16/24'
+            elif arguments==['ip','-4','route','get','10.0.2.2']: value='10.0.2.2 dev wlan0 src 10.0.2.16'
+            elif arguments[:2]==['ip','-6']: value='inet6 fec0::16/64 scope global'
+            else: raise AssertionError('Healthy association must not be cycled: '+str(arguments))
+            return subprocess.CompletedProcess(command,0,value,'')
+        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',side_effect=execute):
+            report=Path(d)/'init.json'
+            initialize_owned_wifi('adb','emulator-5554',report)
+            self.assertEqual('preserved-existing-route',json.loads(report.read_text())['action'])

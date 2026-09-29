@@ -42,11 +42,13 @@ def observe_owned_network(adb: str, serial: str, report):
 
 
 def initialize_owned_wifi(adb: str, serial: str, report):
-    """Create a fresh Wi-Fi association before media on disposable AVDs only.
+    """Preserve a routed association; initialize an inconsistent disposable AVD.
 
     A booted first AVD can retain a DHCP address without netd policy routes at
     media setup. `wifi enable` on that already-enabled agent is
-    not initialization. Observe OFF before ON; never inject a route or retry a
+    not initialization. Do not cycle a healthy association: this discards IPv6
+    autoconfiguration used by later scenarios. Observe OFF before ON only when
+    the IPv4 address/route is missing; never inject a route or retry a
     failed media scenario. OFF has a separate bounded 10s setup deadline. Existing
     wait_wifi_ipv4 still requires real routes within its unchanged 20s budget.
     """
@@ -59,8 +61,18 @@ def initialize_owned_wifi(adb: str, serial: str, report):
     verified=command('getprop','ro.kernel.qemu')
     if verified.returncode != 0 or verified.stdout.strip() != '1':
         raise ValueError('Selected target is not a disposable emulator')
-    start=time.monotonic(); observations=[]
+    start=time.monotonic(); observations=[]; action='not-initialized'; before={}
     try:
+        address=command('ip','-4','addr','show','wlan0')
+        route=command('ip','-4','route','get','10.0.2.2')
+        ipv6=command('ip','-6','addr','show','wlan0')
+        for label,value in (('address',address),('route',route),('ipv6',ipv6)):
+            before[label]={'exit':value.returncode,'stdout':value.stdout[:8192],'stderr':value.stderr[:512]}
+        found=re.search(r'inet (10\.0\.2\.[0-9]+)/',address.stdout)
+        if address.returncode==0 and route.returncode==0 and found and wifi_ipv4_route(route.stdout,found[1]):
+            action='preserved-existing-route'
+            return
+        action='initialize-missing-route'
         result=command('svc','wifi','disable')
         if result.returncode:raise RuntimeError('Owned AVD Wi-Fi disable failed')
         while True:
@@ -77,7 +89,7 @@ def initialize_owned_wifi(adb: str, serial: str, report):
         if result.returncode:raise RuntimeError('Owned AVD Wi-Fi enable failed')
     finally:
         report.parent.mkdir(parents=True,exist_ok=True)
-        report.write_text(json.dumps({'observations':observations,
+        report.write_text(json.dumps({'action':action,'before':before,'observations':observations,
             'purpose':'initialization, not media acceptance'},indent=2)+'\n')
 
 

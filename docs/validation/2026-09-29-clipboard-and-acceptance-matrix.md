@@ -85,3 +85,26 @@ umbra-security-content-04d4e44-checkpoint.tar.gz, SHA256
 bc2e2c015bf4a803a187b769ecb280a0508f837cbb17a1294416ede9c4672083.
 Original bundle and older backups are preserved. A new checkpoint must preserve
 this additional regression separately and never overwrite the older archive.
+
+## Additional setup regression observed on parent04d4e44
+
+Video36523141987 failed IPv6-UDP in debug/R8 shard0 and IPv6-TLS R8 shard1.
+All three stopped before media: no non-link-local IPv6 address on wlan0.
+Artifacts11013878846 /11014482818 /11014177032 have respective ZIP SHA256:
+17fdfd58849015188c074f6ff77da1c3d883849f9d95bb00304e7918dcbdfe3f;
+f356bd419230190d537a519cbc35b8290b3e6bc1c9fdec2491b71ec0e659ab74;
+3d78c9b20986c1060afcdcfb68075ec242e2b04c27da4045e1d373183d12eba8.
+Each saved pre-reset snapshot shows both AVDs already had valid wlan0 IPv4 policy
+routes. Unconditional OFF/ON was unnecessary and discards interface address state;
+IPv4 readiness alone does not establish IPv6 autoconfiguration. Kernel reference:
+https://www.kernel.org/doc/html/v6.15/networking/ip-sysctl.html (IPv6 keep_addr_on_down,
+router solicitations and DAD). This explains the setup hazard, not every guest/netd
+failure or the exact historical RA timing, which was not recorded.
+
+Added a regression that rejects radio cycling of a healthy routed association:
+RED, AssertionError on svc wifi disable, 12 tooling cases/1failed before the fix.
+Initializer now preserves an existing matching IPv4 address/route and records
+IPv6 address state. Only the inconsistent missing-route state uses bounded OFF/ON.
+No IPv6/direct-route assertion removed, route/address injected, fallback enabled
+or timeout increased. 209 tool tests then PASS. Native IPv6 recovery still needs
+new-HEAD CI; simulated command tests are not packet-level validation.
