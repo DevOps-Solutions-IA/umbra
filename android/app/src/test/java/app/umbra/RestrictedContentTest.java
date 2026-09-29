@@ -95,6 +95,21 @@ public class RestrictedContentTest {
         assertTrue(p.a.e.outbox().isEmpty());
         var reopened=new Engine(p.b.db);assertThrows(ContentException.class,()->reopened.restricted().open(reopened.restricted().reviewOpen(id),true));
     }
+    @Test public void duplicateWritesBeforeAckAreIdempotentButAckCancelsFurtherWrites()throws Exception {
+        Pair p=new Pair();String id=p.send(RestrictedPayload.Mode.ONCE);
+        var queued=p.a.e.outbox().get(0).getJSONObject("envelope");
+        p.a.e.authorizeEnvelope(queued);
+        p.b.e.receive(new JSONObject(queued.toString()));
+        assertEquals(1,p.b.e.restricted().received(p.a.e.id()).size());
+        try(var session=p.b.e.restricted().open(p.b.e.restricted().reviewOpen(id),true)){session.check();}
+        p.b.e.receive(new JSONObject(queued.toString()));
+        assertTrue(p.b.e.restricted().status(id).consumed());
+        // Apply the real encrypted receipt before simulating a third transport write.
+        for(var ack:p.b.e.outbox())p.a.e.receive(ack.getJSONObject("envelope"));
+        assertTrue(p.a.e.outbox().isEmpty());
+        assertThrows(SecurityException.class,()->p.a.e.authorizeEnvelope(queued));
+        assertThrows(ContentException.class,()->p.b.e.restricted().open(p.b.e.restricted().reviewOpen(id),true));
+    }
     @Test public void failedConsumeCommitGrantsNoSessionAndLeavesObjectAvailable() throws Exception {
         Pair p=new Pair();String id=p.send(RestrictedPayload.Mode.ONCE);p.b.db.failBucket="restricted-state";
         assertThrows(IllegalStateException.class,()->p.b.e.restricted().open(p.b.e.restricted().reviewOpen(id),true));p.b.db.failBucket=null;

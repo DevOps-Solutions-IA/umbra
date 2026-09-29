@@ -21,6 +21,23 @@ public final class NearbyFixtureListener extends RunListener {
     private Bundle arguments;
     private final Object recordsLock = new Object();
     private Engine engine;
+    private boolean delayIncoming;
+    private final ArrayDeque<JSONObject> incomingDuringDuplicate=new ArrayDeque<>();
+    /** Test network scheduling only: apply ACKs after BOTH authenticated writes. */
+    private AutoCloseable duplicateWindow() {
+        synchronized(recordsLock) {
+            require(!delayIncoming && incomingDuringDuplicate.isEmpty(),"Overlapping duplicate windows");
+            delayIncoming=true;
+        }
+        return ()->{
+            synchronized(recordsLock) {
+                delayIncoming=false;
+                try {while(!incomingDuringDuplicate.isEmpty())engine.receive(incomingDuringDuplicate.removeFirst());}
+                catch(Exception failure){receiveFailure=failure;throw failure;}
+                finally{incomingDuringDuplicate.clear();}
+            }
+        };
+    }
     private BluetoothLink link;
     private volatile Throwable receiveFailure;
     private volatile boolean helloReceived, authenticated, closedOrRejected, admissionDenied;
@@ -93,7 +110,12 @@ public final class NearbyFixtureListener extends RunListener {
                 public void authorizeEnvelope(String peer, JSONObject envelope) throws Exception { synchronized(recordsLock) { engine.authorizeEnvelope(envelope); } }
                 public void receive(String peer, JSONObject envelope) throws Exception {
                     synchronized (recordsLock) {
-                        try { engine.receive(envelope); }
+                        try {
+                            if(delayIncoming) {
+                                require(incomingDuringDuplicate.size()<8,"Synthetic ingress delay capacity exceeded");
+                                incomingDuringDuplicate.addLast(new JSONObject(envelope.toString()));
+                            } else engine.receive(envelope);
+                        }
                         catch (Exception failure) { receiveFailure = failure; throw failure; }
                     }
                 }
@@ -187,11 +209,16 @@ public final class NearbyFixtureListener extends RunListener {
                     // A duplicate may regenerate an already transported receipt with the same ID.
                     // Send it again; a historical sent set is not the current outbox.
                     if (!sent.add(id) && !queued.optBoolean("receipt")) continue;
-                    link.sendAsync(peer, envelope).get(15, TimeUnit.SECONDS);
                     if (!queued.optBoolean("receipt") && !queued.has("locationSession")) {
-                        Thread.sleep(100); // Let the bounded write queue retire its completed entry.
-                        link.sendAsync(peer, new JSONObject(envelope.toString())).get(15, TimeUnit.SECONDS);
-                    }
+                        // A fast ACK legitimately removes restricted ciphertext from outbox.
+                        // Hold inbound application delivery (bounded, encrypted only), NOT the
+                        // Records monitor or socket writer, until both copies crossed RFCOMM.
+                        try(var delayed=duplicateWindow()) {
+                            link.sendAsync(peer, envelope).get(15, TimeUnit.SECONDS);
+                            Thread.sleep(100); // Existing bounded write retirement interval.
+                            link.sendAsync(peer, new JSONObject(envelope.toString())).get(15, TimeUnit.SECONDS);
+                        }
+                    } else link.sendAsync(peer,envelope).get(15,TimeUnit.SECONDS);
                     synchronized (recordsLock) { engine.transported(id, false); }
                 }
                 boolean complete;
