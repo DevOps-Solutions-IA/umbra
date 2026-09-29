@@ -36,6 +36,9 @@ public final class SyntheticRestrictedVideo {
         }finally{thread.quitSafely();thread.join(2000);if(thread.isAlive())throw new AssertionError("Synthetic proxy closure unconfirmed");}
     }
     public static byte[] clip(Context context,Runnable check)throws Exception {
+        return clip(context,check,true);
+    }
+    public static byte[] clip(Context context,Runnable check,boolean withAudio)throws Exception {
         try(var frames=new RestrictedVideo.Frames(64,48)) {
             for(int i=0;i<10;i++) {
                 byte[] frame=new byte[64*48*3/2];
@@ -48,10 +51,27 @@ public final class SyntheticRestrictedVideo {
             stage("SYNTHETIC_AVC_ENCODE_ENTER");
             try(var track=RestrictedVideo.encode(frames,check)) {
                 stage("SYNTHETIC_AVC_ENCODE_DONE");
-                audio=RestrictedAudio.encodeBytes(samples,check);stage("SYNTHETIC_AAC_ENCODE_DONE");
+                if(withAudio){audio=RestrictedAudio.encodeBytes(samples,check);stage("SYNTHETIC_AAC_ENCODE_DONE");}
                 byte[] result=RestrictedVideo.mux(context,track,audio,check);stage("SYNTHETIC_MUX_DONE");return result;
             }finally{Arrays.fill(samples,(short)0);if(audio!=null)Arrays.fill(audio,(byte)0);}
         }
+    }
+    public static RestrictedContentService.Prepared prepare(Context context,app.umbra.crypto.Engine engine,
+            RestrictedContentService.Review review)throws Exception {
+        var lease=engine.restricted().preparationAuthorization(review,true);
+        Runnable check=()->{try{lease.run();}catch(Exception denied){throw new SecurityException("Synthetic video lease expired");}};
+        byte[] input=clip(context,check);
+        try{return RestrictedVideo.prepare(context,engine,review,input,true);}
+        finally{Arrays.fill(input,(byte)0);}
+    }
+    public static void observeAndClose(RestrictedContentService.Session session)throws Exception {
+        try {
+            var observation=observe(session);
+            if(observation.frames()!=10 || observation.firstLuma()<30 || observation.firstLuma()>50 ||
+                observation.lastLuma()<190 || observation.lastLuma()>212 || observation.audioSamples()<16000 ||
+                observation.audioSamples()>26000 || observation.rms()<2000 || observation.rms()>6000)
+                throw new AssertionError("Native restricted video payload mismatch");
+        }finally{session.close();session.closure().toCompletableFuture().get(3,java.util.concurrent.TimeUnit.SECONDS);}
     }
     public record Observation(int frames,int firstLuma,int lastLuma,long lastTime,int audioSamples,double rms) {}
     public static Observation observe(RestrictedContentService.Session session)throws Exception {

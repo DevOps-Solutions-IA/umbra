@@ -58,4 +58,83 @@ public final class RestrictedVideoAndroidTest {
             assertTrue(a.outbox().isEmpty());
         }
     }
+
+    /** Silent synthetic video: no camera, microphone or audible output on a phone. */
+    @Test public void nativeFilePlaybackDeliversChangingFramesAndCannotReplay()throws Exception {
+        exercisePlayback(false);
+    }
+    @Test public void lockAfterNativeVideoFramesClosesSurfaceAndRejectsOldSession()throws Exception {
+        exercisePlayback(true);
+    }
+    private static void exercisePlayback(boolean lock)throws Exception {
+        var context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
+            Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
+            byte[] input=SyntheticRestrictedVideo.clip(context,ar.authorization(),false);
+            var review=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);String id;
+            try(var prepared=RestrictedVideo.prepare(context,a,review,input,true)) {
+                id=a.restricted().send(review,prepared,true);
+            }finally{Arrays.fill(input,(byte)0);}
+            for(var row:a.outbox())b.receive(row.getJSONObject("envelope"));
+            var session=b.restricted().open(b.restricted().reviewOpen(id),true);
+            try(var sink=new FrameSink();var playback=new RestrictedPlayback(context,session,null,sink)) {
+                playback.start();
+                long deadline=System.nanoTime()+2_000_000_000L;
+                while((sink.frames.get()<2 || playback.firstVideoFrameNanos()==0) && System.nanoTime()<deadline)Thread.sleep(5);
+                assertTrue("No positive native presentation",sink.frames.get()>=2);
+                assertTrue("Native rendering callback not delivered before cancellation",playback.firstVideoFrameNanos()>0);
+                long requested=System.nanoTime();
+                if(lock)br.gate.lock();
+                session.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);
+                long closed=System.nanoTime();int count=sink.frames.get();
+                assertNull("Native frame sink failed",sink.failure.get());
+                assertTrue("Surface ownership not released",sink.closed.get());
+                if(lock) {
+                    assertTrue("Local closure exceeded bound",closed-requested<1_000_000_000L);
+                    br.gate.unlock();assertThrows(Exception.class,playback::start);
+                }else {
+                    assertEquals(RestrictedPlayback.State.COMPLETED,playback.state());
+                    assertTrue("Missing changing decoded frames",count>=3 && sink.maximum.get()-sink.minimum.get()>100);
+                    assertThrows(Exception.class,playback::start);
+                }
+                Thread.sleep(200);assertEquals("Callbacks continued after closure",count,sink.frames.get());
+                assertTrue(sink.lastFrame.get()<=closed);
+                var report=new android.os.Bundle();report.putString("restrictedPlayback",
+                    "lock="+lock+",frames="+count+",minY="+sink.minimum.get()+",maxY="+sink.maximum.get()+
+                    ",requested="+requested+",lastFrame="+sink.lastFrame.get()+",closed="+closed+",observationNanos=200000000");
+                InstrumentationRegistry.getInstrumentation().sendStatus(0,report);
+            }finally{session.close();}
+            br.reopen();Engine restarted=new Engine(br);
+            assertEquals(ContentException.Code.CONSUMED,assertThrows(ContentException.class,
+                ()->restarted.restricted().open(restarted.restricted().reviewOpen(id),true)).code());
+        }
+    }
+    private static final class FrameSink implements RestrictedPlayback.VideoOutput {
+        final android.os.HandlerThread thread=new android.os.HandlerThread("synthetic-video-sink");
+        final android.media.ImageReader reader=android.media.ImageReader.newInstance(64,48,android.graphics.ImageFormat.YUV_420_888,3);
+        final java.util.concurrent.atomic.AtomicInteger frames=new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.atomic.AtomicInteger minimum=new java.util.concurrent.atomic.AtomicInteger(255),maximum=new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.atomic.AtomicLong lastFrame=new java.util.concurrent.atomic.AtomicLong();
+        final java.util.concurrent.atomic.AtomicBoolean closed=new java.util.concurrent.atomic.AtomicBoolean();
+        final java.util.concurrent.atomic.AtomicReference<Throwable> failure=new java.util.concurrent.atomic.AtomicReference<>();
+        FrameSink(){
+            thread.start();reader.setOnImageAvailableListener(source->{
+                synchronized(this) {
+                    if(closed.get())return;
+                    try(var frame=source.acquireLatestImage()) {
+                        if(frame==null)return;
+                        var plane=frame.getPlanes()[0];var data=plane.getBuffer();
+                        int y=data.get(data.position()+20*plane.getRowStride()+20*plane.getPixelStride())&255;
+                        minimum.accumulateAndGet(y,Math::min);maximum.accumulateAndGet(y,Math::max);
+                        frames.incrementAndGet();lastFrame.set(System.nanoTime());
+                    }catch(Throwable error){failure.compareAndSet(null,error);}
+                }
+            },new android.os.Handler(thread.getLooper()));
+        }
+        @Override public android.view.Surface surface(){return reader.getSurface();}
+        @Override public void close()throws Exception {
+            synchronized(this){if(!closed.compareAndSet(false,true))return;reader.setOnImageAvailableListener(null,null);reader.close();}
+            thread.quitSafely();thread.join(1000);if(thread.isAlive())throw new IllegalStateException("Synthetic sink closure unconfirmed");
+        }
+    }
 }

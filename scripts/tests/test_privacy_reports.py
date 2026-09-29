@@ -8,7 +8,7 @@ spec.loader.exec_module(runner)
 
 class PrivacyReportsTest(unittest.TestCase):
     def test_restart_requires_domain_receipt_and_completed_jni_suite(self):
-        good = 'restrictedRestart=PASS formats=PNG,AAC_ADTS,PDF_PAGES\nOK (3 tests)\nINSTRUMENTATION_CODE: -1\n'
+        good = 'restrictedRestart=PASS formats=PNG,AAC_ADTS,PDF_PAGES,AVC_MP4\nOK (3 tests)\nINSTRUMENTATION_CODE: -1\n'
         self.assertTrue(runner.valid_restart_report(good, 0))
         for bad in ('', good.replace('PASS', 'READY'), good.replace(',AAC_ADTS,PDF_PAGES', ''), good.replace('3 tests', '0 tests'),
                     good + 'Process crashed', good + 'INSTRUMENTATION_STATUS_CODE: -2'):
@@ -16,16 +16,16 @@ class PrivacyReportsTest(unittest.TestCase):
         self.assertFalse(runner.valid_restart_report(good, 1))
 
     def test_exact_completed_suite_required(self):
-        good = 'OK (14 tests)\nINSTRUMENTATION_CODE: -1\n'
+        good = 'OK (17 tests)\nINSTRUMENTATION_CODE: -1\n'
         self.assertTrue(runner.valid_report(good, 0))
         for bad in ('', 'OK (0 tests)\nINSTRUMENTATION_CODE: -1\n',
-                    'OK (14 tests)\n', good + 'Process crashed',
+                    'OK (17 tests)\n', good + 'Process crashed',
                     good + 'INSTRUMENTATION_STATUS_CODE: -3'):
             self.assertFalse(runner.valid_report(bad, 0))
         self.assertFalse(runner.valid_report(good, 1))
-        self.assertTrue(runner.valid_report(good.replace('14 tests', '15 tests'), 0, 15))
-        self.assertFalse(runner.valid_report(good, 0, 15))
-        self.assertFalse(runner.valid_report(good.replace('14 tests', '0 tests'), 0, 0))
+        self.assertTrue(runner.valid_report(good.replace('17 tests', '18 tests'), 0, 18))
+        self.assertFalse(runner.valid_report(good, 0, 18))
+        self.assertFalse(runner.valid_report(good.replace('17 tests', '0 tests'), 0, 0))
 
     def test_r8_requires_all_exercised_entry_points_and_optimization(self):
         names = ('app.umbra.privacy.ImagePreparation',

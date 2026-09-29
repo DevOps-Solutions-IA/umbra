@@ -248,6 +248,18 @@ public final class RestrictedVideo {
             check.run();success=true;return track;
         }finally{try{release(check,codec::release);}catch(Exception failure){success=false;throw failure;}finally{if(!success)track.close();}}
     }
+    /** Validate all compressed frames before handing the bounded source to MediaPlayer.
+     * No raw media or decoder handles leave the internal adapter. */
+    static boolean playbackAudio(byte[] input,Runnable check)throws Exception {
+        long started=System.nanoTime();
+        Runnable bounded=()->{check.run();if(System.nanoTime()-started>20_000_000_000L)throw RestrictedPayload.invalid();};
+        try(var frames=decode(input,bounded)) {
+            byte[] audio=extractAudio(input,bounded);
+            if(audio==null)return false;
+            try {short[] pcm=RestrictedAudio.decode(audio,bounded);Arrays.fill(pcm,(short)0);return true;}
+            finally{Arrays.fill(audio,(byte)0);}
+        }
+    }
     static byte[] extractAudio(byte[] input,Runnable check)throws Exception {
         var extractor=new MediaExtractor();byte[] encoded=new byte[RestrictedPayload.MAX_BYTES];int written=0,frames=0;long previous=-1;
         try(var source=new MemoryMediaSource(input,check)) {

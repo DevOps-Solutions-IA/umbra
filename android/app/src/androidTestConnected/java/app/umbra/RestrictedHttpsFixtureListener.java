@@ -48,6 +48,12 @@ public final class RestrictedHttpsFixtureListener extends RunListener {
         try{receiver.restricted().open(receiver.restricted().reviewOpen(id),true);throw new AssertionError("Consumed HTTPS document reopened");}
         catch(ContentException denied){if(denied.code()!=ContentException.Code.CONSUMED)throw denied;}
     }
+    private static void consumeVideo(Engine receiver,String peer,String id)throws Exception {
+        if(receiver.restricted().received(peer).size()!=3 || !receiver.messages(peer).isEmpty())throw new AssertionError("Video visibility/duplicate violation");
+        SyntheticRestrictedVideo.observeAndClose(receiver.restricted().open(receiver.restricted().reviewOpen(id),true));
+        try{receiver.restricted().open(receiver.restricted().reviewOpen(id),true);throw new AssertionError("Consumed HTTPS video reopened");}
+        catch(ContentException denied){if(denied.code()!=ContentException.Code.CONSUMED)throw denied;}
+    }
     @Override public void testRunStarted(Description description)throws Exception {
         var files=InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir().toPath();
         var path=files.resolve("synthetic-restricted-https.json");
@@ -88,10 +94,16 @@ public final class RestrictedHttpsFixtureListener extends RunListener {
                 send(ra,a);fetch(rb,b);send(rb,b);fetch(ra,a);send(ra,a);fetch(rb,b);
                 consumeDocument(b,a.id(),aDocument,android.graphics.Color.RED);
                 consumeDocument(a,b.id(),bDocument,android.graphics.Color.BLUE);
+                var av=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
+                var bv=b.restricted().reviewSend(a.id(),RestrictedPayload.Mode.ONCE,600,30);
+                String aVideo=a.restricted().send(av,SyntheticRestrictedVideo.prepare(context,a,av),true);
+                String bVideo=b.restricted().send(bv,SyntheticRestrictedVideo.prepare(context,b,bv),true);
+                send(ra,a);fetch(rb,b);send(rb,b);fetch(ra,a);send(ra,a);fetch(rb,b);
+                consumeVideo(b,a.id(),aVideo);consumeVideo(a,b.id(),bVideo);
                 a.connectivity().disconnect();
                 try {ra.poll(a.profile(),0);throw new AssertionError("Disconnected note transport reopened");}
                 catch(java.io.IOException|SecurityException denied){ /* Explicit gate rejection, never a success substitute. */ }
-                var receipt=new android.os.Bundle();receipt.putString("restrictedHttps","PASS real HTTPS admission Signal AAC and isolated PDF both directions and consumption");
+                var receipt=new android.os.Bundle();receipt.putString("restrictedHttps","PASS real HTTPS admission Signal AAC isolated PDF and AVC both directions and consumption");
                 InstrumentationRegistry.getInstrumentation().sendStatus(0,receipt);
             }
         }finally{HttpsURLConnection.setDefaultSSLSocketFactory(original);}

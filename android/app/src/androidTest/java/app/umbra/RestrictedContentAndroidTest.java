@@ -118,6 +118,12 @@ public class RestrictedContentAndroidTest {
         }
     }
     @Test public void nativeNotePlaybackConfirmsRouteThenLockClosesWithoutReplay() throws Exception {
+        exerciseRoutedPlayback(false);
+    }
+    @Test public void nativeNoteFocusLossClosesAndNeverResumes()throws Exception {
+        exerciseRoutedPlayback(true);
+    }
+    private static void exerciseRoutedPlayback(boolean focusLoss)throws Exception {
         var instrumentation=androidx.test.platform.app.InstrumentationRegistry.getInstrumentation();
         var context=instrumentation.getTargetContext();
         // Existing locked Activity is only a foreground host for Android audio-focus rules.
@@ -136,21 +142,31 @@ public class RestrictedContentAndroidTest {
                 if(device.getType()==android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER){selected=device;break;}
             assertNotNull("Disposable AVD synthetic output required",selected);
             var session=b.restricted().open(b.restricted().reviewOpen(id),true);
+            android.media.AudioFocusRequest competing=null;
             try(var player=new RestrictedPlayback(context,session,selected)) {
                 player.start();long until=System.nanoTime()+2_000_000_000L;
                 while(player.state()==RestrictedPlayback.State.ROUTING && System.nanoTime()<until)Thread.sleep(10);
                 assertEquals("Actual route confirmation before cancellation required",RestrictedPlayback.State.PLAYING,player.state());
-                long requested=System.nanoTime();br.gate.lock();long invalidated=System.nanoTime();
+                long requested=System.nanoTime();
+                if(focusLoss) {
+                    competing=new android.media.AudioFocusRequest.Builder(android.media.AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                        .setAudioAttributes(new android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).build())
+                        .setOnAudioFocusChangeListener(change->{},new android.os.Handler(android.os.Looper.getMainLooper())).build();
+                    assertEquals(android.media.AudioManager.AUDIOFOCUS_REQUEST_GRANTED,audio.requestAudioFocus(competing));
+                }else br.gate.lock();
+                long invalidated=System.nanoTime();
                 session.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);long closed=System.nanoTime();
                 var outcome=player.state();
                 assertTrue("Resource closure must leave a terminal outcome",outcome==RestrictedPlayback.State.CLOSED || outcome==RestrictedPlayback.State.INTERRUPTED);
+                if(competing!=null){audio.abandonAudioFocusRequest(competing);competing=null;}
                 Thread.sleep(100);assertEquals("Late callback changed terminal outcome",outcome,player.state());
-                br.gate.unlock();assertThrows(SecurityException.class,player::start);
+                if(!focusLoss)br.gate.unlock();
+                assertThrows(SecurityException.class,player::start);
                 assertEquals(ContentException.Code.CONSUMED,assertThrows(ContentException.class,
                     ()->b.restricted().open(b.restricted().reviewOpen(id),true)).code());
                 var status=new android.os.Bundle();status.putString("restrictedPlaybackLockNanos",requested+","+invalidated+","+closed);
                 instrumentation.sendStatus(0,status);
-            } finally {session.close();}
+            } finally {if(competing!=null)audio.abandonAudioFocusRequest(competing);session.close();}
         }
     }
 }

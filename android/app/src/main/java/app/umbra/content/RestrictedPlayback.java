@@ -11,6 +11,15 @@ public final class RestrictedPlayback implements AutoCloseable {
     private final RestrictedContentService.Session session;
     private final AudioManager audio;
     private final AudioDeviceInfo selected;
+    /** UI owns presentation and must protect it before construction and clear on close.
+     * Ownership transfers to this playback; cleanup runs off the UI thread. */
+    public interface VideoOutput extends AutoCloseable {
+        android.view.Surface surface();
+        @Override void close() throws Exception;
+    }
+    private final VideoOutput video;
+    private boolean hasAudio=true;
+    private final java.util.concurrent.atomic.AtomicLong firstVideoFrame=new java.util.concurrent.atomic.AtomicLong();
     private final Handler callbacks=new Handler(Looper.getMainLooper());
     private MediaPlayer player;
     private AudioFocusRequest focus;
@@ -22,32 +31,58 @@ public final class RestrictedPlayback implements AutoCloseable {
     private final java.util.concurrent.atomic.AtomicBoolean started=new java.util.concurrent.atomic.AtomicBoolean();
     private final AudioDeviceCallback routes=new AudioDeviceCallback() {
         @Override public void onAudioDevicesRemoved(AudioDeviceInfo[] devices) {
-            for(var device:devices)if(device.getId()==selected.getId())interrupt();
+            for(var device:devices)if(selected!=null && device.getId()==selected.getId())interrupt();
         }
     };
     /** Call off the UI thread after persistent consume; route choice never grants vault access. */
     public RestrictedPlayback(Context context,RestrictedContentService.Session session,AudioDeviceInfo selected)throws Exception {
-        this.session=session;this.selected=java.util.Objects.requireNonNull(selected);
+        this(context,session,selected,null);
+    }
+    /** File-video only, no camera/WebRTC. No UI or external viewer is created here.
+     * For a silent clip selected may be null; an audio track always requires an explicit route. */
+    public RestrictedPlayback(Context context,RestrictedContentService.Session session,AudioDeviceInfo selected,VideoOutput video)throws Exception {
+        this.session=java.util.Objects.requireNonNull(session);this.selected=selected;this.video=video;
         audio=context.getSystemService(AudioManager.class);
-        if(session.format()!=RestrictedPayload.Format.AAC_ADTS || !selected.isSink())throw RestrictedPayload.invalid();
-        boolean available=false;for(var device:audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS))if(device.getId()==selected.getId())available=true;
-        if(!available)throw RestrictedPayload.invalid();
         try {
+            if((video==null && session.format()!=RestrictedPayload.Format.AAC_ADTS) ||
+                    (video!=null && session.format()!=RestrictedPayload.Format.AVC_MP4))throw RestrictedPayload.invalid();
             session.decode(bytes->{
-                player=new MediaPlayer();
                 try {
+                    if(video!=null) {
+                        hasAudio=RestrictedVideo.playbackAudio(bytes,()->{try{session.check();}catch(Exception denied){throw RestrictedPayload.invalid();}});
+                        if(video.surface()==null || !video.surface().isValid())throw RestrictedPayload.invalid();
+                    }
+                    if(hasAudio) {
+                        if(selected==null || !selected.isSink())throw RestrictedPayload.invalid();
+                        boolean available=false;for(var device:audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS))if(device.getId()==selected.getId())available=true;
+                        if(!available)throw RestrictedPayload.invalid();
+                    }
+                    player=new MediaPlayer();
                     AudioAttributes attributes=new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA)
                             .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).setAllowedCapturePolicy(AudioAttributes.ALLOW_CAPTURE_BY_NONE).build();
                     player.setAudioAttributes(attributes);player.setLooping(false);player.setVolume(0f,0f);
+                    if(video!=null)player.setSurface(video.surface());
                     source=new MemoryMediaSource(bytes,()->{try{session.check();}catch(Exception failure){throw new ContentException(ContentException.Code.EXPIRED);}});
                     player.setDataSource(source);player.prepare();
                     // Native MediaPlayer has no underlying player/output before setDataSource.
                     // Select only after preparation, still muted and before start/focus.
-                    if(!player.setPreferredDevice(selected))throw RestrictedPayload.invalid();
-                    if(player.getDuration()<1 || player.getDuration()>10000)throw RestrictedPayload.invalid();
+                    if(hasAudio && !player.setPreferredDevice(selected))throw RestrictedPayload.invalid();
+                    if(player.getDuration()<1 || player.getDuration()>(video==null?10000:3000))throw RestrictedPayload.invalid();
+                    if(video!=null) {
+                        RestrictedVideo.dimensions(player.getVideoWidth(),player.getVideoHeight());
+                        player.setOnInfoListener((ignored,what,extra)->{
+                            if(what==MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+                                try {session.use(()->{
+                                    firstVideoFrame.compareAndSet(0,System.nanoTime());
+                                    if(!hasAudio && state.compareAndSet(State.ROUTING,State.PLAYING))callbacks.removeCallbacks(routingTimeout);
+                                });}catch(Exception denied){interrupt();}
+                            }
+                            return false;
+                        });
+                    }
                     player.setOnCompletionListener(ignored->{terminal(State.COMPLETED);session.close();});
                     player.setOnErrorListener((ignored,what,extra)->{terminal(State.FAILED);session.close();return true;});
-                    player.addOnRoutingChangedListener(route->{
+                    if(hasAudio)player.addOnRoutingChangedListener(route->{
                         try {session.use(()->{
                             AudioDeviceInfo actual=route.getRoutedDevice();
                             if(state.get()==State.ROUTING && actual!=null && actual.getId()==selected.getId()) {
@@ -57,25 +92,31 @@ public final class RestrictedPlayback implements AutoCloseable {
                             }
                         });} catch(Exception denied){interrupt();}
                     },callbacks);
-                    focus=new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+                    if(hasAudio)focus=new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
                             .setAudioAttributes(attributes).setAcceptsDelayedFocusGain(false)
                             .setOnAudioFocusChangeListener(change->{if(change!=AudioManager.AUDIOFOCUS_GAIN)interrupt();},callbacks).build();
-                    audio.registerAudioDeviceCallback(routes,callbacks);routesRegistered=true;return this;
+                    if(hasAudio){audio.registerAudioDeviceCallback(routes,callbacks);routesRegistered=true;}return this;
                 } catch(Exception | Error failure) {
                     try {release();}catch(RuntimeException cleanupFailure){session.cleanupFailed();}
                     throw failure;
                 }
             },RestrictedPlayback::release);
-        } catch(Exception | Error failure) {terminal(State.FAILED);session.close();throw failure;}
+        } catch(Exception | Error failure) {
+            terminal(State.FAILED);
+            try{release();}catch(RuntimeException cleanupFailure){session.cleanupFailed();}
+            session.close();throw failure;
+        }
     }
     public void start()throws Exception {
         if(!started.compareAndSet(false,true) || state.get()!=State.READY || released)throw RestrictedPayload.invalid();
         session.check();
-        if(audio.requestAudioFocus(focus)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {interrupt();throw new ContentException(ContentException.Code.CONSENT_REQUIRED);}
+        if(hasAudio && audio.requestAudioFocus(focus)!=AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {interrupt();throw new ContentException(ContentException.Code.CONSENT_REQUIRED);}
         try {session.use(()->{if(!state.compareAndSet(State.READY,State.ROUTING))throw RestrictedPayload.invalid();player.start();callbacks.postDelayed(routingTimeout,1000);});}
         catch(Exception failure){terminal(State.FAILED);session.close();throw failure;}
     }
     public State state(){return state.get();}
+    /** Zero means no native rendering-start callback; never an inferred visible frame. */
+    public long firstVideoFrameNanos(){return firstVideoFrame.get();}
     private void terminal(State outcome){state.updateAndGet(previous->switch(previous){
         case READY,ROUTING,PLAYING -> outcome; default -> previous;
     });}
@@ -84,6 +125,7 @@ public final class RestrictedPlayback implements AutoCloseable {
         if(released)return;released=true;
         boolean failed=false;
         try {if(player!=null)player.release();}catch(RuntimeException failure){failed=true;}
+        try {if(video!=null)video.close();}catch(Exception failure){failed=true;}
         try {callbacks.removeCallbacks(routingTimeout);}catch(RuntimeException failure){failed=true;}
         try {if(source!=null)source.close();}catch(RuntimeException failure){failed=true;}
         try {if(routesRegistered)audio.unregisterAudioDeviceCallback(routes);}catch(RuntimeException failure){failed=true;}

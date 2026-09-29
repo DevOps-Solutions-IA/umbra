@@ -167,7 +167,7 @@ public final class NearbyFixtureListener extends RunListener {
                 engine.sendText(peer, "Synthetic " + role + " text", 3600);
                 engine.sendFile(peer, "synthetic.bin", Bytes.utf8("Synthetic " + role + " attachment"), 3600);
             }
-            Set<String> sent = new HashSet<>(); boolean locationSent=false, imageSent=false, imageConsumed=false, noteSent=false, noteConsumed=false, documentSent=false, documentConsumed=false, drainedAnnounced=false;long emergencyActiveNanos=0;
+            Set<String> sent = new HashSet<>(); boolean locationSent=false, imageSent=false, imageConsumed=false, noteSent=false, noteConsumed=false, documentSent=false, documentConsumed=false, videoSent=false, videoConsumed=false, drainedAnnounced=false;long emergencyActiveNanos=0;
             long deadline = SystemClock.elapsedRealtime() + 45000;
             while (SystemClock.elapsedRealtime() < deadline) {
                 if (receiveFailure != null) throw new AssertionError("Incoming processing failed", receiveFailure);
@@ -203,6 +203,13 @@ public final class NearbyFixtureListener extends RunListener {
                         synchronized(recordsLock){engine.restricted().send(consent,prepared,true);documentSent=true;}
                     }
                 }
+                if(documentSent && !videoSent) {
+                    RestrictedContentService.Review consent;
+                    synchronized(recordsLock){consent=engine.restricted().reviewSend(peer,RestrictedPayload.Mode.ONCE,600,30);}
+                    try(var prepared=SyntheticRestrictedVideo.prepare(InstrumentationRegistry.getInstrumentation().getTargetContext(),engine,consent)) {
+                        synchronized(recordsLock){engine.restricted().send(consent,prepared,true);videoSent=true;}
+                    }
+                }
                 for (JSONObject queued : queue) {
                     JSONObject envelope = queued.getJSONObject("envelope");
                     String id = envelope.getString("id");
@@ -230,7 +237,7 @@ public final class NearbyFixtureListener extends RunListener {
                     var restricted=engine.restricted().received(peer);
                     var formats=new HashSet<RestrictedPayload.Format>();
                     for(var object:restricted) {
-                        require(Set.of(RestrictedPayload.Format.PNG,RestrictedPayload.Format.AAC_ADTS,RestrictedPayload.Format.PDF_PAGES).contains(object.format()),
+                        require(Set.of(RestrictedPayload.Format.PNG,RestrictedPayload.Format.AAC_ADTS,RestrictedPayload.Format.PDF_PAGES,RestrictedPayload.Format.AVC_MP4).contains(object.format()),
                             "Unexpected restricted RFCOMM format");
                         require(formats.add(object.format()),"Restricted RFCOMM duplicate created another object");
                     }
@@ -267,11 +274,17 @@ public final class NearbyFixtureListener extends RunListener {
                         catch(ContentException expected){require(expected.code()==ContentException.Code.CONSUMED,"Unexpected restricted rejection");}
                         documentConsumed=true;
                     }
+                    if(object.format()==RestrictedPayload.Format.AVC_MP4 && !videoConsumed) {
+                        SyntheticRestrictedVideo.observeAndClose(engine.restricted().open(engine.restricted().reviewOpen(object.id()),true));
+                        try{engine.restricted().open(engine.restricted().reviewOpen(object.id()),true);throw new AssertionError("Consumed RFCOMM video reopened");}
+                        catch(ContentException expected){require(expected.code()==ContentException.Code.CONSUMED,"Unexpected restricted rejection");}
+                        videoConsumed=true;
+                    }
                     if((object.format()==RestrictedPayload.Format.PNG && imageConsumed) || (object.format()==RestrictedPayload.Format.AAC_ADTS && noteConsumed)
-                            || (object.format()==RestrictedPayload.Format.PDF_PAGES && documentConsumed))
+                            || (object.format()==RestrictedPayload.Format.PDF_PAGES && documentConsumed) || (object.format()==RestrictedPayload.Format.AVC_MP4 && videoConsumed))
                         require(engine.restricted().status(object.id()).consumed(),"Duplicate reset restricted consumption");
                     }
-                    complete = formats.size()==3 && imageSent && imageConsumed && noteSent && noteConsumed && documentSent && documentConsumed && incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null && locationSent &&
+                    complete = formats.size()==4 && videoSent && videoConsumed && imageSent && imageConsumed && noteSent && noteConsumed && documentSent && documentConsumed && incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null && locationSent &&
                         engine.locations().received(peer).size()==1 && engine.outbox().isEmpty();
                     if(complete) require(engine.locations().received(peer).get(0).getJSONObject("lastPoint").getLong("latE7")==123456780,"Location content mismatch");
                     if (complete) {
@@ -307,7 +320,7 @@ public final class NearbyFixtureListener extends RunListener {
                         status("nearbyEmergency","PASS active="+emergencyActiveNanos+",request="+requested.requestedNanos()+",invalidated="+requested.invalidatedNanos()+
                             ",confirmed="+result.finishedNanos()+",observationMillis="+(SystemClock.elapsedRealtime()-observation));
                     }
-                    status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, encrypted location, restricted PNG, native AAC and isolated PDF decoded/consumed, duplicate, receipts");
+                    status("nearbyResult", "PASS: RFCOMM, challenge, host verification, authenticated device roster, bidirectional text/attachment, encrypted location, restricted PNG, native AAC, isolated PDF and AVC decoded/consumed, duplicate, receipts");
                     return;
                 }
                 Thread.sleep(100);

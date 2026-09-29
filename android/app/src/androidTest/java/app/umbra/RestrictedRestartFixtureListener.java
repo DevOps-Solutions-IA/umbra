@@ -52,6 +52,11 @@ public final class RestrictedRestartFixtureListener extends RunListener {
                 try(var prepared=SyntheticDocuments.prepare(InstrumentationRegistry.getInstrumentation().getTargetContext(),a,pdfReview,0xff447799)) {
                     pdfId=a.restricted().send(pdfReview,prepared,true);
                 }
+                var videoReview=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,60);
+                String videoId;
+                try(var prepared=SyntheticRestrictedVideo.prepare(InstrumentationRegistry.getInstrumentation().getTargetContext(),a,videoReview)) {
+                    videoId=a.restricted().send(videoReview,prepared,true);
+                }
                 for(var row:a.outbox()) {
                     var wire=row.getJSONObject("envelope");b.receive(wire);
                     br.transaction(()->{br.put("synthetic-restart",wire.getString("id"),Bytes.utf8(wire.toString()));return null;});
@@ -67,21 +72,23 @@ public final class RestrictedRestartFixtureListener extends RunListener {
                     pdfDecoder.render(0,new Canvas(page),new Rect(0,0,32,24));
                     if(page.getPixel(12,12)!=0xff447799)throw new AssertionError("No positive PDF render");
                 }finally{page.recycle();}
-                if(br.keys("restricted-state").size()!=3 || !br.keys("restricted-object").isEmpty())
-                    throw new AssertionError("Three consumed formats required before force-stop");
-                status("READY formats=PNG,AAC_ADTS,PDF_PAGES committed consumption and positive decode/render; awaiting host force-stop");
+                var videoSession=b.restricted().open(b.restricted().reviewOpen(videoId),true);
+                SyntheticRestrictedVideo.observeAndClose(videoSession);
+                if(br.keys("restricted-state").size()!=4 || !br.keys("restricted-object").isEmpty())
+                    throw new AssertionError("Four consumed formats required before force-stop");
+                status("READY formats=PNG,AAC_ADTS,PDF_PAGES,AVC_MP4 committed consumption and positive decode/render; awaiting host force-stop");
                 while(true)Thread.sleep(1000);
             }
         } else if(phase.equals("verify")) {
             // Synthetic SQLite adapter unlocks itself; this is NOT a production Keystore unlock test.
             try(var br=new SqliteDeviceRecords("restricted-restart",true)) {
                 var b=new Engine(br);
-                if(!b.initialized() || br.keys("restricted-state").size()!=3 || !br.keys("restricted-object").isEmpty())
+                if(!b.initialized() || br.keys("restricted-state").size()!=4 || !br.keys("restricted-object").isEmpty())
                     throw new AssertionError("Consumed record or removed payload did not survive");
                 var formats=java.util.EnumSet.noneOf(RestrictedPayload.Format.class);
                 for(String key:br.keys("synthetic-restart"))
                     b.receive(new JSONObject(Bytes.text(br.get("synthetic-restart",key))));
-                if(br.keys("restricted-state").size()!=3 || !br.keys("restricted-object").isEmpty())
+                if(br.keys("restricted-state").size()!=4 || !br.keys("restricted-object").isEmpty())
                     throw new AssertionError("Duplicate restored consumed payload");
                 for(String id:br.keys("restricted-state")) {
                     var item=b.restricted().status(id);formats.add(item.format());
@@ -89,9 +96,9 @@ public final class RestrictedRestartFixtureListener extends RunListener {
                     try {b.restricted().open(b.restricted().reviewOpen(id),true);throw new AssertionError("Consumed object reopened");}
                     catch(ContentException denied){if(denied.code()!=ContentException.Code.CONSUMED)throw denied;}
                 }
-                if(!formats.equals(java.util.EnumSet.of(RestrictedPayload.Format.PNG,RestrictedPayload.Format.AAC_ADTS,RestrictedPayload.Format.PDF_PAGES)))
+                if(!formats.equals(java.util.EnumSet.of(RestrictedPayload.Format.PNG,RestrictedPayload.Format.AAC_ADTS,RestrictedPayload.Format.PDF_PAGES,RestrictedPayload.Format.AVC_MP4)))
                     throw new AssertionError("Wrong durable format inventory");
-                status("PASS formats=PNG,AAC_ADTS,PDF_PAGES cannot reopen or revive after actual process force-stop");
+                status("PASS formats=PNG,AAC_ADTS,PDF_PAGES,AVC_MP4 cannot reopen or revive after actual process force-stop");
             }
         } else throw new SecurityException("Specify synthetic restart phase");
     }

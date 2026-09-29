@@ -1,4 +1,4 @@
-# Restricted file-video v1 — candidate, native acceptance pending
+# Restricted file-video v1 — implementation with layered acceptance
 
 The authenticated restricted descriptor v1 uses format `AVC_MP4`. Unknown-format
 clients reject it; no ordinary-file fallback. Object ID, sender/recipient device,
@@ -27,14 +27,21 @@ Video: real AOSP `c2.android.avc.decoder` YUV420 image planes, followed by
 `c2.android.avc.encoder`, baseline/no B frames, 160 kbit/s target. Actual compressed
 size is separately bounded. Audio: existing real AAC decode/re-encode primitive,
 not a copied ancillary stream. Fresh framework MP4 muxer, no original metadata;
-bounded seekable RAM proxy, 256KiB output and 2MiB write budget. At most 45 raw
+anonymous memfd with kernel growth seal, 256KiB output and 2MiB backing-size cap. At most 45 raw
 320×240 YUV frames (~5.2MB) plus bounded compressed/audio buffers. Plane strides
 and crop geometry are checked. Output timing and audio encoder delay require
 measurement; no lip-sync/quality claim yet. No plaintext file or disk staging.
 
 Receiver session, persistent consume, expiry, duplicate and export policies are
-unchanged. **Playback/surface adapter integration is still pending** on this
-checkpoint. The native test currently checks re-encoding, real Signal transfer
+unchanged. Playback uses `RestrictedPlayback(Context, Session, AudioDeviceInfo, VideoOutput)`.
+The Surface must already be protected before construction. Ownership transfers:
+player release precedes `VideoOutput.close`, which must clear/release the caller's
+last frame and graphics resources off the UI thread. A silent clip can pass null
+route; audio requires a selected sink and existing capture/focus policy. Start is
+one-shot, never seek/loop/replay. Lock/session expiry denies then asynchronously
+closes; await `Session.closure` before claiming resource release. Actual physical
+silent-file presentation and lock tests are recorded in the 2026-09-28 playback
+checkpoint; transport/R8 expansion requires its own CI. The native test currently checks re-encoding, real Signal transfer
 in-process, changing decoded luma and AAC samples, plus consume/reopen denial.
 That is not visible file playback, audible output, HTTPS/RFCOMM video acceptance,
 or physical hardware acceptance. Do not advertise F03 complete from this API.

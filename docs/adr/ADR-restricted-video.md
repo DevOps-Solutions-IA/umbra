@@ -17,8 +17,8 @@ needs a separately reviewed transport/resource profile.
 Decode video to bounded YUV420 planes and re-encode with the AOSP software AVC
 encoder; decode/re-encode admitted audio with the existing AAC primitive. Never
 copy input MP4 metadata, comments, location, track names or opaque ancillary
-payloads to output. Fresh MediaMuxer output goes through a bounded writable RAM
-proxy descriptor, never a plaintext file/URI. Codec-generated parameter sets
+payloads to output. Fresh MediaMuxer output goes through a kernel-size-sealed anonymous RAM
+memfd descriptor, never a plaintext file/URI. Codec-generated parameter sets
 are retained, not user container metadata. Frames/sound can reveal identifying
 content; this is not anonymization. Encoder delay must be measured, not assumed
 absent; audio/video synchronization acceptance remains pending native tests.
@@ -58,4 +58,4 @@ unchanged 256KiB content limit. Do not strip zeros or implement another MP4 muxe
 Close wipes existing bytes best-effort then closes the descriptor; no external
 pathname/URI is created. Native tests assert rejection of a write past the kernel
 cap and separately query the old proxy's filesystem capability without calling
-the crashing muxer. Compilation is not evidence of native correction.
+the crashing muxer. Native correction passed privacy run 36513584411 (a8e6f0d) debug/R8 both flavors; the separate new player/transport changes require new validation.
