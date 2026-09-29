@@ -20,3 +20,10 @@ class CrashDiagnosticTest(unittest.TestCase):
         self.assertEqual([],summarize(text,'app.umbra.privatechat.dev')['ownedCrashRecords'])
     def test_production_or_arbitrary_package_is_rejected(self):
         with self.assertRaises(ValueError):summarize('','app.umbra.privatechat')
+    def test_vaultlab_native_codec_crash_keeps_only_fixed_sites(self):
+        text='*** *** ***\npid: 9 >>> app.umbra.privatechat.offline.vaultlab <<<\nsignal 11 (SIGSEGV)\n#00 pc abc /system/lib64/libmedia_jni.so (MediaCodec::example+5)\nsecret-PCM-credentials\n'
+        result=summarize(text,'app.umbra.privatechat.offline.vaultlab')
+        self.assertEqual([11],result['ownedCrashRecords'][0]['signals'])
+        self.assertEqual(['libmedia_jni.so'],result['ownedCrashRecords'][0]['nativeModules'])
+        self.assertEqual(['MediaCodec'],result['ownedCrashRecords'][0]['nativeSites'])
+        self.assertNotIn('secret',json.dumps(result));self.assertNotIn('example',json.dumps(result))

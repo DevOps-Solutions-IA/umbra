@@ -5,6 +5,12 @@ import static org.junit.Assert.*;
 
 /** Codec-independent profile/ownership rejection. Actual decode remains Android acceptance. */
 public class RestrictedVideoProfileTest {
+    @Test public void decodedPixelsAreNotMistakenForCompressedAvc() {
+        RestrictedVideo.decodedFormat("video/raw",64,48);
+        for(String mime:new String[]{null,"video/avc","video/hevc","audio/raw"})
+            assertThrows(ContentException.class,()->RestrictedVideo.decodedFormat(mime,64,48));
+        assertThrows(ContentException.class,()->RestrictedVideo.decodedFormat("video/raw",640,480));
+    }
     @Test public void dimensionsTimelineCapacityAndCleanupAreEnforced() {
         for(int[] bounds:new int[][]{{0,48},{64,0},{321,240},{320,241},{63,48},{64,47}})
             assertThrows(ContentException.class,()->new RestrictedVideo.Frames(bounds[0],bounds[1]));

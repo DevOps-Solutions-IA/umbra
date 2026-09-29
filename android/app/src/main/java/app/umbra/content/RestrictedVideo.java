@@ -90,6 +90,11 @@ public final class RestrictedVideo {
                 format.getInteger(MediaFormat.KEY_ROTATION,0)!=0)throw RestrictedPayload.invalid();
         dimensions(format.getInteger(MediaFormat.KEY_WIDTH),format.getInteger(MediaFormat.KEY_HEIGHT));
     }
+    static void decodedFormat(String mime,int width,int height) {
+        // A decoder emits raw pixels, not an AVC compressed track. Encoder/extractor
+        // formats remain separately restricted to video/avc.
+        if(!"video/raw".equals(mime))throw RestrictedPayload.invalid();dimensions(width,height);
+    }
     private static int tracks(MediaExtractor extractor) {
         if(extractor.getTrackCount()<1 || extractor.getTrackCount()>2)throw RestrictedPayload.invalid();
         int video=-1,audio=-1;
@@ -133,7 +138,10 @@ public final class RestrictedVideo {
                     }
                 }
                 int i=codec.dequeueOutputBuffer(info,1000);
-                if(i==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED)videoFormat(codec.getOutputFormat());
+                if(i==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) {
+                    var output=codec.getOutputFormat();
+                    decodedFormat(output.getString(MediaFormat.KEY_MIME),output.getInteger(MediaFormat.KEY_WIDTH),output.getInteger(MediaFormat.KEY_HEIGHT));
+                }
                 else if(i>=0) {
                     try {
                         if(info.size>0) {

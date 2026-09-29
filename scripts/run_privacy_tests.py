@@ -133,6 +133,11 @@ def main():
             classes, '-e', 'syntheticNoHostAudio', 'true', package + '.test/androidx.test.runner.AndroidJUnitRunner'],
             stdout=stream, stderr=subprocess.STDOUT, timeout=180)
     if not valid_report(log.read_text(), result.returncode, expected):
+        from media_crash_diagnostic import summarize
+        diagnostic=subprocess.run([*adb,'logcat','-b','crash','-d','-t','300'],capture_output=True,text=True,timeout=15)
+        sanitized=summarize(diagnostic.stdout,package)
+        sanitized['collectionExitCode']=diagnostic.returncode
+        (args.reports/'owned-crash-summary.json').write_text(json.dumps(sanitized,indent=2)+'\n')
         raise RuntimeError(f'Privacy instrumentation did not pass all {expected} cases: {log}')
     evidence['result'] = 'PASS'
     (args.reports / 'receipt.json').write_text(json.dumps(evidence, indent=2) + '\n')

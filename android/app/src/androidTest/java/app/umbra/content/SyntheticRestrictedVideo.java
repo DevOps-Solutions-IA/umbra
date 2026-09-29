@@ -6,6 +6,10 @@ import java.util.Arrays;
 /** Test APK only. Patterns enter real AVC encoder; observations follow real remote decoder. */
 public final class SyntheticRestrictedVideo {
     private SyntheticRestrictedVideo() {}
+    public static void stage(String value) {
+        var status=new android.os.Bundle();status.putString("restrictedVideoStage",value);
+        androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
+    }
     public static byte[] clip(Context context,Runnable check)throws Exception {
         try(var frames=new RestrictedVideo.Frames(64,48)) {
             for(int i=0;i<10;i++) {
@@ -16,8 +20,11 @@ public final class SyntheticRestrictedVideo {
             short[] samples=new short[16000];
             for(int i=0;i<samples.length;i++)samples[i]=(short)(6000*Math.sin(2*Math.PI*440*i/16000.0));
             byte[] audio=null;
+            stage("SYNTHETIC_AVC_ENCODE_ENTER");
             try(var track=RestrictedVideo.encode(frames,check)) {
-                audio=RestrictedAudio.encodeBytes(samples,check);return RestrictedVideo.mux(context,track,audio,check);
+                stage("SYNTHETIC_AVC_ENCODE_DONE");
+                audio=RestrictedAudio.encodeBytes(samples,check);stage("SYNTHETIC_AAC_ENCODE_DONE");
+                byte[] result=RestrictedVideo.mux(context,track,audio,check);stage("SYNTHETIC_MUX_DONE");return result;
             }finally{Arrays.fill(samples,(short)0);if(audio!=null)Arrays.fill(audio,(byte)0);}
         }
     }

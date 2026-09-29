@@ -17,14 +17,17 @@ public final class RestrictedVideoAndroidTest {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
             byte[] input=SyntheticRestrictedVideo.clip(context,ar.authorization()),original=input.clone();
             var review=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);String id;
+            SyntheticRestrictedVideo.stage("PREPARATION_ENTER");
             try(var prepared=RestrictedVideo.prepare(context,a,review,input,true)) {
+                SyntheticRestrictedVideo.stage("PREPARATION_DONE");
                 assertArrayEquals(original,input);id=a.restricted().send(review,prepared,true);
             }finally{Arrays.fill(input,(byte)0);Arrays.fill(original,(byte)0);}
             for(var row:a.outbox()){b.receive(row.getJSONObject("envelope"));b.receive(row.getJSONObject("envelope"));}
             assertEquals(1,b.restricted().received(a.id()).size());assertTrue(b.messages(a.id()).isEmpty());
             var session=b.restricted().open(b.restricted().reviewOpen(id),true);
             try {
-                var observed=SyntheticRestrictedVideo.observe(session);
+                SyntheticRestrictedVideo.stage("RECIPIENT_DECODE_ENTER");
+                var observed=SyntheticRestrictedVideo.observe(session);SyntheticRestrictedVideo.stage("RECIPIENT_DECODE_DONE");
                 assertEquals(10,observed.frames());assertEquals(900000,observed.lastTime());
                 assertTrue(observed.firstLuma()>=30 && observed.firstLuma()<=50);
                 assertTrue(observed.lastLuma()>=190 && observed.lastLuma()<=212);
