@@ -2,7 +2,7 @@
 
 All presentation below remains owned by Claude. No screen has been merged into the
 technical branch. Domain implementation and laboratory acceptance are distinct. Inspected source:
-278a572d8840f0989b21a738efe7823437cf1844; final acceptance is bound by PR16 receipt.
+6093d0333a5616f6ebcd379929ba0958705bd4eb; final acceptance is bound by PR16 receipt.
 
 | Future action | Existing technical entry point | Status/constraint |
 |---|---|---|
@@ -53,3 +53,10 @@ Twenty-case acceptance references are in
 Case16's final optimized **combined graphical app** belongs to Claude's later
 integration. Technical R8 decoding/playback is complementary evidence, not a
 replacement. Physical constraints do not count as UI or API implementation gaps.
+
+The integration surface is documented as `UI_SECURITY_CONTENT_API_V1` in
+UI_API_CONTRACT; this is a documentation revision, not a protocol negotiation flag.
+Use [the later content audit](validation/2026-09-29-content-acceptance-audit.md)
+for exact case11 Vault/WAL, case14 historical parser and case19 object-expiry
+coverage additions. Their final-SHA execution receipts supersede neither past
+failures nor the separate case16 graphical integration requirement.

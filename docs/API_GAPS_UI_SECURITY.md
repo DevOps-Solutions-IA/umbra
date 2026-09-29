@@ -29,7 +29,7 @@ ONCE/UMBRA_ONLY, expiry, export denial and coordinated cleanup exist. File video
 and PDF are not placeholders. No authorization is delegated to a UI flag.
 
 This conclusion concerns available contracts, **not final acceptance**. It was
-checked against278a572d8840f0989b21a738efe7823437cf1844 and the source signatures
+checked against6093d0333a5616f6ebcd379929ba0958705bd4eb and the source signatures
 indexed in UI_API_CONTRACT. New findings may reopen a concrete gap; no API freeze
 or green final SHA is claimed while cumulative CI remains incomplete.
 
@@ -55,6 +55,9 @@ validate a subsequent SHA or permit reading the owner's physical clipboard.
 
 Preserve failure history in docs/validation/. Final acceptance must bind every
 remaining executable case to final HEAD/checkout/tree, artifact and limitation.
-See the twenty-case mapping in validation/2026-09-29-clipboard-and-acceptance-matrix.md.
+See the updated twenty-case mapping in
+validation/2026-09-29-content-acceptance-audit.md; the earlier clipboard matrix
+remains historical. Object TTL, encrypted Vault/WAL and exact historical-parser
+regressions add acceptance coverage without changing the public API.
 No gap here authorizes changing Claude's UI, production Keystore, Signal, TURN-only,
 format/resource limits or offline permissions.

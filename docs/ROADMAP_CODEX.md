@@ -1,3 +1,55 @@
+# Estado vigente del master v4 — 2026-09-29
+
+Rama técnica `codex/security-content-completion`, PR #16 en borrador contra
+`codex/emergency-lock`, base exacta
+`ba75d329bedb2a26cd2e70371d2369e2fb3ba7a1`.
+Fuente inspeccionada: `6093d0333a5616f6ebcd379929ba0958705bd4eb` más regresiones
+locales posteriores identificadas en el recibo de trabajo; no es un SHA final
+aceptado ni una instrucción de reset. Consultar siempre HEAD real y conservar
+avances posteriores. No modificar UI de Claude, main ni historia roja.
+
+El master vigente es `UMBRA_MASTER_CODEX_v4_MOVIL_FISICO.md`, SHA256
+`59af8c3e3ff5d0291b7f1a244559c54dcbc693bcad64d0227000443a374187ed`.
+La copia original del propietario se conserva. Las entradas fechadas bajo el
+apéndice histórico reflejan su momento, **no el estado actual de implementación**.
+
+| Bloque | Implementación actual | Aceptación pendiente o límite |
+|---|---|---|
+| A | Contraseña/Vault, admisión y G1–G7, inicio privado, emergencia, privacy adapters, clipboard/exportación ordinaria | CI acumulativa propia del último SHA; UI por pantalla y autenticación física separadas |
+| B | Motor común v1, PNG, AAC/notas, ONCE/UMBRA_ONLY, caducidad, deduplicación y cierre coordinado | Recibos finales de HTTPS/RFCOMM/debug/R8; captura/acústica física con consentimiento |
+| C | PDF estático aislado, AVC_MP4 de archivo con reproducción/superficie y audio opcional | Recibos finales de codec/reproducción/restart; integración gráfica optimizada de Claude posterior |
+
+No se debe volver a implementar PDF/video ni reconstruir emergencia. Las llamadas
+no sustituyen las notas o videos de archivo. El contrato documentado es
+`UI_SECURITY_CONTENT_API_V1`; ver [UI_API_CONTRACT](UI_API_CONTRACT.md),
+[UI_INTEGRATION_MATRIX](UI_INTEGRATION_MATRIX.md),
+[API_GAPS_UI_SECURITY](API_GAPS_UI_SECURITY.md) y
+[CLAUDE_UI_HANDOFF](CLAUDE_UI_HANDOFF.md). No se identifican APIs G1–G7 faltantes;
+no equivale a aceptación final ni elimina fallos de laboratorio.
+
+[La auditoría de contenido](validation/2026-09-29-content-acceptance-audit.md)
+reconcilia los veinte casos. Nuevas regresiones distinguen TTL real del objeto de
+caducidad de sesión, inspeccionan Vault/WAL cifrados con claves aisladas, y ejercitan
+el parser exacto anterior con Signal real. Cada una necesita su resultado por SHA;
+compilación, test JVM y Android físico no son intercambiables.
+
+El teléfono ya fue detectado y ejecutó históricamente diez casos sintéticos offline
+debug (intento11). TEE observado corresponde a una clave fixture sin autenticación,
+no a la bóveda productiva autenticada. R8 y preview Claude fueron rechazados por
+Android en intentos registrados; el propietario no vio aviso. No inferir cancelación
+humana ni instalar de nuevo sin el consentimiento específico requerido. Usar el
+runner seguro y paquete seleccionado; no cambiar protecciones/datos del teléfono.
+`NEEDS_SECOND_PEER`: RFCOMM/voz/video entre dos Android físicos. `MANUAL_PENDING`:
+autenticación y captura/acústica/rutas físicas. Un único teléfono no cubre dos radios.
+
+La matriz final requiere los diez workflows aplicables sobre el mismo HEAD/árbol.
+Preservar por separado EOF HTTPS tras video activo, restauración Wi-Fi de AVD y
+cualquier fallo de credenciales; diagnósticos o un pase posterior no demuestran
+una causa corregida. El recibo final de PR16 fijará HEAD, checkout, padres, árbol,
+runs, artefactos, APK/mapping y respaldo recuperable. No congelar aceptación antes.
+
+## Apéndice histórico — no usar como estado actual
+
 ## Master v4 checkpoint — 2026-09-28
 
 - Physical safe preflight/runner implemented; no connected ADB device observed,

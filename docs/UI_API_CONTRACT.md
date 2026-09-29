@@ -8,6 +8,17 @@ No Claude UI or production MainActivity was changed. All domain/storage/codec wo
 runs on a worker; Android Window/View configuration runs on the UI thread before
 first presentation. Never render an async result from a stale screen/vault epoch.
 
+## Contract revision: UI_SECURITY_CONTENT_API_V1
+
+This label versions the documented integration surface; it is not a new wire
+field, runtime bypass or final acceptance tag. It covers existing Vault/admission/
+connectivity/emergency/privacy APIs and restricted format v1. No domain signature
+changes were required by the latest expiry/storage/legacy-parser regressions.
+Consumers must use the exact accepted source SHA from the final PR receipt, not
+interpret this label as permission to mix arbitrary newer commits. Changes to
+ownership, authorization, format bounds or method signatures require coordinated
+contract revision plus compatibility/rejection tests.
+
 ## Existing security layers
 
 `Vault.getVaultState()` exposes UNINITIALIZED/LOCKED/UNLOCKING/UNLOCKED/LOCKING/
@@ -279,7 +290,7 @@ failure or unknown exception is not permission to use an external player/export.
 ## Acceptance binding, examples and compatibility
 
 These contracts were reconciled against checkpoint
-`278a572d8840f0989b21a738efe7823437cf1844`; this identifies the inspected source,
+`6093d0333a5616f6ebcd379929ba0958705bd4eb`; this identifies the inspected source,
 not an accepted final build. PR16's final receipt must bind **published HEAD, base,
 integration checkout, both parents, tree, runs, APK hashes and mappings**. A later
 SHA needs its own applicable CI. Do not freeze an accepted SHA from this paragraph.
@@ -304,3 +315,19 @@ time relative to that session start rejects. The persisted object deadline is an
 epoch timestamp; privileged clock/snapshot rollback across process restart is not
 an anti-rollback guarantee. No automatic restore or recovery for restricted content.
 No new content dependency or UI permission is required by these adapters.
+
+### Coverage additions after the earlier clipboard matrix
+
+[The content acceptance audit](validation/2026-09-29-content-acceptance-audit.md)
+is the current twenty-case technical index. `6093d03` adds an actual sixty-second
+object-expiry/restart/redelivery test for every format/mode; it does not reuse the
+one-second session-expiry test as object-expiry evidence. It also adds production
+Vault database/WAL inspection under isolated no-auth fixture keys; native execution
+must be checked in the final SHA's privacy debug/R8 receipts. Fixture storage
+inspection is not authenticated production-key or global-cache/forensic acceptance.
+
+The separately prepared `LegacyWireCompatibilityTest` executes the hash-pinned
+emergency-base parser against current real Signal plaintext with an ordinary-text
+positive control. Its local connected/offline JVM receipts are in that audit;
+source presence or those local receipts do not validate a historical full APK or
+the next cumulative CI. No new public API or production dependency is introduced.

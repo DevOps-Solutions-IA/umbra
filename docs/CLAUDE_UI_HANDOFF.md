@@ -4,7 +4,7 @@ Technical line: `codex/security-content-completion`, draft
 [PR16](https://github.com/DevOps-Solutions-IA/umbra/pull/16), against
 `codex/emergency-lock`. Exact base:
 `ba75d329bedb2a26cd2e70371d2369e2fb3ba7a1`.
-Contracts reconciled against `278a572d8840f0989b21a738efe7823437cf1844`.
+Contracts reconciled against `6093d0333a5616f6ebcd379929ba0958705bd4eb`.
 This is an inspected checkpoint, **not a final accepted SHA**. PR16's cumulative
 receipt supplies the eventual published HEAD, integration checkout/parents, tree,
 CI runs, artifacts/APK hashes and restore backup. Do not infer a final freeze from
@@ -33,7 +33,8 @@ uncommitted work. Create the authorized isolated integration branch from the
 with explicit history reconciliation. Do not reset either source, modify main,
 auto-merge, force-push or install an APK without the required device consent.
 
-Use [UI_API_CONTRACT](UI_API_CONTRACT.md) for methods, ownership, threads, limits,
+Use revision `UI_SECURITY_CONTENT_API_V1` of
+[UI_API_CONTRACT](UI_API_CONTRACT.md) for methods, ownership, threads, limits,
 errors and lifecycle, [UI_INTEGRATION_MATRIX](UI_INTEGRATION_MATRIX.md) for actions,
 and [API_GAPS_UI_SECURITY](API_GAPS_UI_SECURITY.md) for acceptance constraints.
 Required G1–G7 APIs are implemented; no UI-side cryptographic or authorization
@@ -80,7 +81,7 @@ method and test; do not silently grant access in presentation.
 
 ## Evidence and limits carried into integration
 
-[The twenty-case matrix](validation/2026-09-29-clipboard-and-acceptance-matrix.md)
+[The updated twenty-case matrix](validation/2026-09-29-content-acceptance-audit.md)
 links current test names to layers. Historical7425385 privacy debug/R8 executed
 19connected/18offline tests, native clipboard, all four native formats, real Signal/
 HTTPS and force-stop after persistent consumption. RFCOMM executed admitted and
@@ -108,3 +109,8 @@ the final receipt's SHA/tree. Subsequent integration must record that exact base
 No additional feature/API changes during Claude integration without a coordinated
 correction and regressions. The remaining graphical integration is Claude's task;
 this document does not claim it executed or that master acceptance is already green.
+
+The additional object-TTL, encrypted Vault/WAL and historical-parser regressions
+change coverage, not the public API. Do not copy fixture key creation, isolated
+SQLite adapters or historical parser compilation into the application. Native
+fixtures and production hardware authentication remain explicitly different layers.
