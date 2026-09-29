@@ -49,18 +49,20 @@ failure leaves closure incomplete. No exported URI, FileProvider, share intent,
 clipboard, seek/repeat API or external viewer for restricted objects. Network,
 Nearby, location and capture consent remain independent.
 
-Session-integrated PNG and AAC adapters have scoped Android and transport
-acceptance recorded in the dated evidence. PDF-derived pages are under native
-validation; restricted video files remain unimplemented. PDF requires a seekable
-read-only in-memory/proxy descriptor; plaintext disk staging is forbidden. Codecs
-must have duration/resolution/output bounds and stop on route/focus loss. No
-claims of acceptance until real Android debug/R8 and transport tests execute.
+Session-integrated PNG, AAC, static PDF-derived pages and bounded AVC_MP4 file
+video are implemented. Native Android debug/R8, HTTPS and RFCOMM evidence is
+tracked per SHA in dated validation; this living ADR is not a current CI receipt.
+PDF preparation uses an OS-isolated parser and a bounded static raster copy,
+not an external viewer. File-video uses bounded decode/re-encode and anonymous
+memory, not WebRTC or plaintext disk staging. Decoder and playback authorization
+remain tied to the original session. Route/focus loss stops strict audio playback.
+See ADR-restricted-audio, RESTRICTED_DOCUMENTS and RESTRICTED_VIDEO for profiles.
 
-## Initial implementation checkpoint limits
+## Current implementation limits
 
-The original implementation accepted PNG only. The current parser additionally
-accepts AAC_ADTS and the pending-validation PDF_PAGES static document profile.
-Video files remain unimplemented and must not be advertised. Tombstones are currently retained
+The parser accepts PNG, AAC_ADTS, PDF_PAGES and AVC_MP4. Unknown formats/versions
+fail closed. PDF and video are implemented within their narrow documented bounds,
+not general document/container support. Tombstones are currently retained
 indefinitely with a 4096 total cap (fail closed on exhaustion); only expired
 payloads are purged. No early tombstone eviction or silent reset. At most four
 persistent busy reservations may overlap; repeatable objects require waiting
@@ -74,5 +76,5 @@ the emergency coordinator retains its existing incomplete/timeout semantics.
 Periodic 250ms checks and all decoder boundaries revalidate local authorization;
 this is a design bound to measure, not an observed cancellation guarantee.
 Ordinary clipboard export deliberately accepts only a stored, unexpired text
-message and never arbitrary restricted bytes. Full cumulative media/PDF acceptance remains outstanding; consult per-SHA
-evidence rather than treating all formats as validated.
+message and never arbitrary restricted bytes. Final cumulative acceptance is determined by the exact-HEAD CI receipt; consult
+per-SHA evidence rather than treating implementation as validation of a later tree.

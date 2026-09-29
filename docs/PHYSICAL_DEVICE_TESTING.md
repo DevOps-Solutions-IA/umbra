@@ -1,11 +1,15 @@
 # Physical device laboratory (master v4)
 
-Status: a physical USB target passed read-only preflight on 2026-09-28.
-Initial installations were blocked by INSTALL_FAILED_USER_RESTRICTED. Attempt05
-then installed both offline debug packages and executed eight cases: five passed,
-three failed (AAC and two PDF cases). Attempt06 reproduced them. TEE was reported
-for the synthetic non-authenticated test key, not production Vault authentication.
-Physical results must be taken from dated receipts, not inferred from detection. Claude owns later combined UI validation.
+Status reconciled on 2026-09-29: the selected physical USB target passed
+read-only preflight and isolated offline debug installation. Historical attempt11
+executed ten synthetic cases: 10 PASS / 0 FAIL, including silent native file-video
+playback. Earlier failures remain preserved in dated validation reports; this is
+not a new execution or validation of the latest source HEAD. TEE was reported for
+the synthetic non-authenticated test key, not production Vault authentication.
+Physical R8 and the separate Claude preview installation remain blocked by
+INSTALL_FAILED_USER_RESTRICTED; no prompt appeared in the owner-reported attempts.
+That error does not establish intentional human cancellation or a specific cause.
+Claude owns later combined UI validation.
 
 On this WSL2 host Windows port 5037 was owned by `wslrelay`, forwarding to Linux
 ADB without USB access. Windows ADB 36.0.0 on a separate localhost-only port 5038
@@ -24,7 +28,8 @@ informational, not attestation. Serial is kept privately outside repository.
 `scripts/run_physical_tests.py` defaults to read-only preflight. It requires
 `--adb PATH --serial SELECTED_USB_SERIAL --safe --reports NEW_DIRECTORY`.
 Never publish the serial. A Windows `adb.exe` route is supported explicitly;
-APK paths pass through `wslpath -w`. Its actual USB installation is not yet tested.
+APK paths pass through `wslpath -w`. This Windows route installed the historical
+offline debug app/test pair; it does not imply approval for a new installation.
 Do not switch ADB servers during a case or run an AVD orchestration script here.
 
 The preflight rejects absent/unauthorized devices, network serials, emulators,
@@ -51,8 +56,9 @@ or unowned installed package is never replaced. Inputs are copied and hashed to
 a new report-directory snapshot before inspection, so concurrent builds cannot
 change the APK being installed. No build is physical acceptance by itself.
 
-The eight selected tests are explicitly enumerated in `CASES`: three PNG/SQLite
-cases, two synthetic AAC codec cases and three isolated PDF cases. They use
+The ten selected tests are explicitly enumerated in `CASES`: three PNG/SQLite
+cases, two synthetic AAC codec cases, three isolated PDF cases and two silent
+native file-video playback/cancellation cases. They use
 real libsignal and Android codecs, in-process delivery and disposable synthetic
 SQLite records. No recording, audible playback, clipboard alteration, location
 provider changes, Bluetooth, relay or media network setup is selected.
@@ -77,8 +83,10 @@ Raw instrumentation logs still require review before public upload.
   credentials physically, never through chat. No software fallback.
 - Camera/microphone/location and audio route tests: MANUAL_PENDING, explicit
   human consent and an audited per-case runner required. No ambient recording.
-- Force-stop/restart restricted consumption: existing AVD coverage retained;
-  physical dedicated lane pending. SQLite reopen is not death during commit.
+- Force-stop/restart restricted consumption: the explicit `--restart-content`
+  lane is implemented for four formats and remains NOT EXECUTED physically;
+  existing AVD coverage is separate. It force-stops after persistent consumption,
+  not during commit. SQLite reopen is not process death.
 - R8 physical execution: the runner supports `--optimized` using the existing
   non-debuggable vaultLab flavor, exact mapping/configuration hashes and native
   APK/JNI/permission guards. Only the package name differs in the manifest policy
@@ -125,3 +133,20 @@ or willingness to accept a system dialog. Existing installed identical bytes can
 be inspected/tested within the already authorized synthetic scope without install.
 No installer-policy workaround is authorized. The four-format physical force-stop
 expansion and R8 physical remain pending where their APK is not installed.
+
+### Current installation boundary
+
+There is no new installation authorization in a historical successful install or
+a general instruction to continue testing. Before a new attempt, obtain approval
+for the exact package/build/SHA-256 of each app/test APK. The owner then keeps the
+phone unlocked and may accept the normal system installer prompt if it appears.
+If it again fails without a prompt, preserve the fixed error and stop that attempt;
+identify the actual installer-policy cause through narrowly scoped diagnostics
+before proposing any setting change. No specific setting is demonstrated as the
+cause yet. Do not disable Play Protect, weaken device policy, or repeatedly retry.
+
+The already installed, runner-owned exact bytes can be tested without installing
+again under the approved synthetic scope. Report their historical APK hash, not
+the latest repository HEAD, as the installed code identity. Current-head physical
+acceptance requires matching new bytes and a separately authorized successful
+installation. See `validation/2026-09-29-http-and-physical-review.md`.

@@ -20,37 +20,41 @@ approval uses `approveAndInstallOwnAdmission(review, confirmed, ttl)`. Do not pu
 storage orchestration or private-key handling into UI. The existing Spanish text
 simplification remains Claude's responsibility and was not overwritten.
 
-## Acceptance still open; no placeholder security delegated to UI
+## Required technical API gaps: none identified in this reconciliation
 
-The required G1–G7 domain contracts above are implemented. Initial online provisioning
-is deliberately forbidden, not an unimplemented bypass. Native PNG, AAC, static PDF
-and AVC preparation/presentation, managed pending objects, ONCE/UMBRA_ONLY, expiry,
-export denial and coordinated cleanup are implemented. No new UI is part of this
-branch. See UI_API_CONTRACT for actual entry points and ownership.
+G1–G7 have concrete production methods and regressions. G6 is a deliberate
+PRIVATE_STARTUP_STRICT prohibition, not an unfinished network endpoint. Native
+PNG/AAC/static-PDF/AVC preparation, playback, managed pending objects,
+ONCE/UMBRA_ONLY, expiry, export denial and coordinated cleanup exist. File video
+and PDF are not placeholders. No authorization is delegated to a UI flag.
 
-- Cumulative checkpoint 04d4e44 privacy run36523141967 passed debug/R8, including
-  native formats, selected audio route/focus loss, real Signal/HTTPS and force-stop
-  after persistent consumption of all four formats. Replayed delivery/reopening
-  after restart was rejected. This is not death during commit or hardware Vault.
-- Candidate native clipboard regression now exercises the Android service on a
-  disposable AVD only: explicit consent, sensitive clip, one-use review, own-only
-  cleanup, foreign synthetic clip preservation and old-vault-generation rejection.
-  Its build is not execution evidence; the new commit needs its own laboratory CI.
-- Audio output physically disconnected/changed, physical acoustics, authenticated
-  production Vault and physical R8 remain NOT EXECUTED. The phone rejected the R8
-  installation. No extra install or settings change is implied by this document.
-- Simulated SQLite write failures and force-stop AFTER commit are executed cases;
-  process death DURING commit and arbitrary privileged snapshots remain unverified.
-- New cumulative Verify, real RFCOMM, media and security suites must pass on the
-  actual final SHA. Earlier successful checkpoints are historical only. Preserved
-  failures include Wi-Fi route initialization, HTTPS ConnectionResetException and
-  one credential-expiry scenario interrupted during video renegotiation. A later
-  pass does not establish each original cause is fixed.
-- Final Claude screen integration, screenshot/recents/accessibility and combined
-  optimized application acceptance require Claude's separate integration. The
-  exported ca2a706 preview was NOT installed: Android rejected the authorized
-  attempt without presenting the owner an installation prompt.
+This conclusion concerns available contracts, **not final acceptance**. It was
+checked against278a572d8840f0989b21a738efe7823437cf1844 and the source signatures
+indexed in UI_API_CONTRACT. New findings may reopen a concrete gap; no API freeze
+or green final SHA is claimed while cumulative CI remains incomplete.
 
-The exact executable coverage and limitations are recorded in the dated validation
-matrix and PR16. Do not report master closure or a frozen accepted SHA before the
-cumulative acceptance is reviewed. Do not turn unexecuted physical tests into passes.
+## Acceptance constraints kept separate from missing APIs
+
+| Constraint | Classification / action |
+|---|---|
+| All ten workflows on final cumulative SHA | Acceptance prerequisite; inspect PR16's exact-HEAD receipt, never reuse earlier green |
+| Historical HTTPS EOF after active video | Causal investigation still open; lifecycle diagnostics alone are not a fix |
+| Android Wi-Fi restoration fixture failure | Distinct laboratory issue; preserve failure and verify the resulting correction on its own SHA |
+| Physical authenticated production Vault | MANUAL_PENDING; fixture TEE is not authenticated production-key acceptance |
+| Physical R8 installation/execution | BLOCKED by Android USER_RESTRICTED on recorded attempts; no protection bypass or implied new install consent |
+| Physical microphone/acoustics/route removal | MANUAL_PENDING with explicit consent; codec tests do not cover room audio or physical routing |
+| Two physical Android endpoints | NEEDS_SECOND_PEER for RFCOMM/radio/voice/video; does not block single-device safe tests |
+| Death during SQLite commit / privileged snapshot | Not established by injected failure or force-stop after commit; no forensic or rollback-resistance claim |
+| Claude combined screens and optimized app | Pending separate graphical integration; domain/R8 hosts are not the combined UI |
+
+Historical7425385 privacy debug/R8 passed native ClipboardManager consent,
+sensitive marker, owned-only cleanup and stale-lease rejection (19connected /
+18offline). Four-format HTTPS/SQLite/force-stop and native RFCOMM also ran at that
+checkpoint. These are executed laboratory results, not a mere build; they do not
+validate a subsequent SHA or permit reading the owner's physical clipboard.
+
+Preserve failure history in docs/validation/. Final acceptance must bind every
+remaining executable case to final HEAD/checkout/tree, artifact and limitation.
+See the twenty-case mapping in validation/2026-09-29-clipboard-and-acceptance-matrix.md.
+No gap here authorizes changing Claude's UI, production Keystore, Signal, TURN-only,
+format/resource limits or offline permissions.

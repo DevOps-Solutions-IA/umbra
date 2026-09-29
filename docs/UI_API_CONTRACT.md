@@ -15,7 +15,9 @@ CORRUPT/KEY_UNAVAILABLE. `isPasswordConfigured`, `createPassword(byte[])`,
 `unlock(byte[])`, `changePassword(byte[],byte[])`, `lock`, `getAutoLockPolicy`,
 `setAutoLockPolicy(long)` remain the existing password contract. See VAULT_PASSWORD.
 Create/change finish locked. Keep platform authentication and hardware requirements.
-Input is UTF-8, no silent normalization; caller wipes password arrays in finally.
+Input is caller-owned UTF-8, 12–1024 bytes, no silent normalization; caller wipes
+password arrays in finally. Autolock is process-local, configured only while locked,
+1..240000 ms (default 240000); existing background lock remains immediate.
 Do not use a presentation boolean to grant access. No recovery/reset endpoint.
 
 Use `engine.admission()` for public realm/request/credential operations. Read
@@ -149,37 +151,32 @@ not preservation of PDF text/forms/vector fidelity. No external viewer is used.
 `render(int, Canvas, Rect)`, and `close()`; no raw bitmap, URI, print or export.
 Claude must protect the surface before rendering and clear it at invalidation.
 Page navigation does not create another opening. See RESTRICTED_DOCUMENTS.md.
-Native preparation/Signal/render/lock tests passed in privacy checkpoints and the
-real RFCOMM fixture passed at fbb98a3. PNG/AAC/PDF force-stop consumption passed in
-the connected debug lane at 9f4b533; the entire privacy job still FAILED on video.
-These are synthetic SQLite/codec tests, not production hardware Vault tests.
-This API is not a claim of completed C or acceptance of the final cumulative SHA.
+Native receipts and their exact source SHA are indexed in the acceptance section
+below. This adapter is implemented; isolated renderer tests do not establish
+protection of a future Claude screen or authenticated hardware Vault.
 
 ### File-video — bounded preparation and playback
 
-`RestrictedVideo.prepare(Context,Engine,Review,byte[],boolean)` is published,
-versioned as `AVC_MP4`. Native preparation/Signal/decode cases pass at a8e6f0d
-Privacy run36513584411, both flavors debug/R8: ten changing frames and 20480 audio
-samples. Profile: <=256KiB, <=320x240 even dimensions, AVC baseline, <=45 frames,
-<=3s, optional mono16k AAC-LC. No camera, WebRTC or new offline permission.
-The old proxy descriptor failed in framework muxer filesystem queries; anonymous
-kernel-bounded memory corrected this path. See RESTRICTED_VIDEO and dated evidence.
-Surface playback overload is published in 01dee5a and described below. Privacy
-debug/R8 passed on 8c7d25d (36516445305), including HTTPS and force-stop for all
-four formats. Final cumulative acceptance remains blocked by the recorded CI failures.
+`RestrictedVideo.prepare(Context,Engine,Review,byte[],boolean)` returns managed
+`Prepared`, format `AVC_MP4`. Profile: <=256 KiB, 16..320 x 16..240 even dimensions,
+AVC baseline, <=45 frames, <=3 seconds, optional mono 16 kHz AAC-LC. Preparation
+uses bounded decode/re-encode and anonymous memory, not plaintext disk files.
+No camera, WebRTC or new offline permission. See RESTRICTED_VIDEO for rejected
+containers/tracks; do not advertise support for arbitrary MP4 or general video.
+The surface playback overload is described below. Implemented is not equivalent
+to acceptance of a new cumulative SHA.
 
 ### Physical validation and connection ownership
 
-A single Xiaomi API36 device is detected by Windows ADB on localhost5038; the
-first isolated installation attempts returned INSTALL_FAILED_USER_RESTRICTED.
-Attempt05 subsequently installed offline debug and ran eight cases: five passed,
-three failed (AAC/PDF); attempt06 reproduced them. TEE applies only to the fixture
-key, not authenticated production Vault. Those failures were reproduced and fixed at a1a4a00; physical attempt11 subsequently
-passed ten synthetic offline debug cases, including native video presentation.
-Hardware-authenticated production Vault and physical R8 remain unexecuted. The safe runner
-never replaces an unowned package, clears data, changes global security settings,
-or captures personal media. This transport/installation limitation is distinct
-from the native codec failure reproduced on disposable AVDs.
+Historical physical attempt11 passed ten synthetic offline debug cases, including
+native video presentation, on the selected Xiaomi API36 phone. TEE was observed
+for a fixture key, not authenticated production Vault. Hardware-authenticated
+Vault, physical capture, physical R8 and two-peer physical media are separate
+unexecuted cases. Android rejected the authorized Claude preview install without
+showing the owner a prompt; the preview is not the combined application.
+Use PHYSICAL_DEVICE_TESTING and the explicit selected-device runner. Never clear
+unowned data or change global security to obtain a pass; installation consent and
+sensor/authentication interaction remain specific to the proposed action.
 
 ## File-video presentation contract (not final API freeze)
 
@@ -197,9 +194,113 @@ does not replace that future. Call close on pause/abandon. Lock invalidates old
 callbacks and requires a new, separately authorized object where policy allows.
 Do not reattach an old playback after recreation or create a second decoder.
 
-Physical synthetic offline debug delivered changing frames and confirmed lock
-closure in attempt11. Privacy debug/R8, HTTPS/four-format force-stop and focus loss passed on 8c7d25d;
-focused RFCOMM passed on that SHA. Full Verify stopped after successful connected
-instrumentation because of its stale count; cumulative CI remains incomplete. The physical AAC/PDF failures
-were reproduced and corrected (validation/2026-09-28-physical-pdf-aac-corrections).
-This does not imply Claude has integrated a protected SurfaceView or controls.
+## Public admission signatures and result semantics
+
+All operations below are instance methods on `AdmissionService`, obtained from
+`engine.admission()`, run on a worker and declare `throws Exception`. Import wire
+is a bounded signed public provisioning payload; never log it or seed material.
+
+| Signature | Result / constraint |
+|---|---|
+| `RealmConfig getRealmInfo()` | Pinned public realm; import never grants membership |
+| `RealmConfig createAdmissionRealm(boolean confirmed)` | Explicit local authority bootstrap, protected signing key; not a relay action |
+| `void installRealmConfig(String wire, boolean confirmed)` | Pins reviewed public authority; unexpected replacement rejects |
+| `AdmissionRequest createAdmissionRequest()` | Generates local signed request; export its public wire only |
+| `boolean isAdmissionAuthority()` | Snapshot, not a grant; missing authority false, invalid/locked fails closed |
+| `Status status()` | `State state`, nullable `Long requestExpiresAt`, `Long credentialExpiresAt`, epoch seconds |
+| `List<IssuedCredential> issuedCredentials()` | Authority-only; max4096; credential/device IDs, issue/expiry and local revoked flag |
+| `AdmissionRequest pendingRequest()` | Current local request, or null; its ID is the cancellation precondition |
+| `void cancelPendingRequest(String expectedRequestId)` | Atomic local abandonment, not remote recall or credential revocation |
+| `Review reviewAdmissionRequest(String wire)` | Lease-bound device/identity fingerprints, realm and expiry |
+| `AdmissionCredential approveAdmission(Review, boolean confirmed, long ttl)` | Explicit authority decision; does not install on another device |
+| `AdmissionCredential approveAndInstallOwnAdmission(Review, boolean confirmed, long ttl)` | Atomic authority self-approval + install, not UI transaction orchestration |
+| `AdmissionRejection rejectAdmission(Review, boolean confirmed)` | Signed rejection; install with `installRejection(String wire)` |
+| `void installAdmissionCredential(String wire)` | Requires matching local pending request and pinned authority |
+| `Renewal renewAdmission(Review, String oldCredential, boolean confirmed, long ttl)` | Signed replacement credential and revocation pair |
+| `void installRenewal(String credentialWire, String revocationWire)` | Atomic pair import; never split into two UI transactions |
+| `AdmissionRevocation revokeAdmission(String credential, boolean confirmed, String reason)` | Fixed protocol reason, not arbitrary security-sensitive free text |
+| `void applyRevocation(String wire)` | Authenticated revocation persistence; does not erase received data |
+| `PeerStatus peerStatus(String deviceId)` | `PeerState`, `PeerSource`, nullable observedAt/expiresAt; local evidence only |
+
+Credential approval/renewal `ttl` is60..604800 seconds (seven-day maximum).
+Revocation reason is one of `owner_request`, `device_lost`, `policy`. Do not use a
+UI alias as the device binding, or manufacture timestamps/credential internals.
+
+States are UNCONFIGURED, NOT_ADMITTED, REQUEST_PENDING, REJECTED, ADMITTED,
+EXPIRED, REVOKED, INVALID. An authority mismatch is a typed import failure, not a
+replacement pinned realm or invented persisted state. `PeerState` is UNKNOWN,
+VALID_LOCALLY, EXPIRED, REVOKED, INVALID; `PeerSource` is UNKNOWN_LEGACY,
+PUBLIC_CREDENTIAL, CHALLENGE_PROOF, NEARBY_PROOF. Admission does not imply VERIFIED
+contact trust, group membership or another linked device's admission.
+
+## Limits and integration ordering
+
+| Format / operation | Current bound |
+|---|---|
+| Image import | JPEG/PNG <=4 MiB input; <=2048 edge and <=4 Mi pixels; sanitized PNG <=256 KiB |
+| Note import | AAC-LC ADTS, mono16 kHz, <=156 frames; decoded/re-encoded, <=256 KiB |
+| Note capture | Connected only, selected input + RECORD_AUDIO + consent; <=8s, no restart/background capture |
+| PDF | Static raster copy, <=4 pages, <=768 edge per page, aggregate <=256 KiB; no text/forms fidelity |
+| File video | Profile above; one native player/session, no seek/loop/replay |
+| Common object | One exact verified/admitted recipient; TTL60..86400s, session1..60s; no fanout |
+| Common resources | Four pending prepared copies, four busy sessions,128 objects,4096 tombstones |
+
+A successful send returns `String` object ID and means committed encrypted outbox,
+not delivered, viewed, played or acknowledged. Do not automatically repeat a
+failed send with a new review/object: it could create a second independent object.
+A consumed Prepared cannot be reused. Query persisted state and obtain a fresh
+explicit decision when needed. Concurrent open is arbitrated by the domain;
+UI double-tap guards only improve usability and never grant rights.
+
+1. Obtain local authentication, use worker-owned password buffers, then unlock.
+2. Explicitly connect online or Nearby independently when delivery is requested.
+3. Capture the current screen epoch and obtain the appropriate review. Perform
+   preparation on a worker; close an abandoned Prepared even after UI destruction.
+4. For receive, protect window/dialog/surface on the UI thread **before** requesting
+   presentation. Open with fresh consent on the worker; no raw restricted URI.
+5. Construct the matching decoder/player with that Session; route UI drawing safely.
+   Do not perform codec/storage work on the UI thread or hold SQLite during UI waits.
+6. On pause, lock, emergency, abandoned screen or permission loss: invalidate the
+   screen epoch, clear visual references immediately, close handles. Closure futures
+   confirm cleanup separately; a failure remains denied, never auto-reopens.
+7. Recreate UI from public metadata only. No session/player/review/consent restoration.
+
+`engine.emergency().status()` returns immutable `Status(state, requestedNanos,
+invalidatedNanos, finishedNanos, results)`; results include subsystem/outcome and
+confirmedNanos. READY is normal, not a closed receipt. CLOSED follows confirmed
+cleanup; INCOMPLETE includes FAILED/TIMED_OUT (existing5s bound) and prevents
+reauthentication. See EMERGENCY_LOCK for the new platform authentication ticket.
+
+`OperationFailure.classify(Throwable)` lives in `app.umbra.privacy`; its enum
+covers admission, connectivity, privacy and content failures. Use the actual enum
+and a generic UNAVAILABLE fallback, never exception message/cause parsing. Native
+failure or unknown exception is not permission to use an external player/export.
+
+## Acceptance binding, examples and compatibility
+
+These contracts were reconciled against checkpoint
+`278a572d8840f0989b21a738efe7823437cf1844`; this identifies the inspected source,
+not an accepted final build. PR16's final receipt must bind **published HEAD, base,
+integration checkout, both parents, tree, runs, APK hashes and mappings**. A later
+SHA needs its own applicable CI. Do not freeze an accepted SHA from this paragraph.
+
+The twenty cases and exact test names are indexed in
+[the dated matrix](validation/2026-09-29-clipboard-and-acceptance-matrix.md).
+Historical7425385 privacy debug/R8 executed19connected/18offline cases including
+native clipboard, all four formats, HTTPS and actual force-stop after consumption;
+RFCOMM passed admitted and unadmitted cases. That checkpoint's focused debug EOF
+remained FAILED. HTTP diagnostics are not a demonstrated EOF correction. Current
+cumulative acceptance is recorded separately; historical reports stay immutable.
+
+Compiled usage/regressions: `RestrictedContentTest`, `RestrictedContentAndroidTest`,
+`RestrictedHttpsFixtureListener`, `RestrictedRestartFixtureListener`,
+`PrivacyAdaptersAndroidTest`, `AdmissionFailureContractTest`. They exercise domain
+and adapters, not Claude's combined screens. Existing production records remain
+Vault-encrypted; laboratory SQLite is not evidence of production hardware security.
+Unknown content kind/version/format rejects rather than becoming an ordinary file.
+Legacy password migration is explicit/transactional; password change preserves
+identity and ratchets. Active-session expiry uses a monotonic limit plus wall-clock checks; backward wall
+time relative to that session start rejects. The persisted object deadline is an
+epoch timestamp; privileged clock/snapshot rollback across process restart is not
+an anti-rollback guarantee. No automatic restore or recovery for restricted content.
+No new content dependency or UI permission is required by these adapters.
