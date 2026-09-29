@@ -17,9 +17,24 @@ import sys
 import tempfile
 import time
 from voice_relay_lab import voice_relay
-from voice_direct_route import wait_wifi_ipv4
+from voice_direct_route import wait_wifi_ipv4, observe_owned_network
 
 ROOT=Path(__file__).resolve().parents[1]
+
+
+def restore_startup_wifi(adb,serial,reports):
+    """Restore the declared Wi-Fi-only topology, without granting app consent.
+
+    Replace the old blind five-second delay with actual netlink readiness inside
+    that same budget. Do not introduce a cellular uplink absent at test startup.
+    """
+    observe_owned_network(adb,serial,reports/'network-before-restore.json')
+    subprocess.run([adb,'-s',serial,'shell','svc','wifi','enable'],
+                   check=True,capture_output=True,timeout=3)
+    try:
+        return wait_wifi_ipv4(adb,serial,reports/'network-restored-route.json',timeout=5)
+    finally:
+        observe_owned_network(adb,serial,reports/'network-after-restore.json')
 
 
 def valid_report(text):
@@ -160,9 +175,9 @@ def main():
                     read('synthetic-startup-loss-ready.json')
                     run('shell','svc','wifi','disable');run('shell','svc','data','disable');go('loss-ready')
                     read('synthetic-startup-network-lost.json')
-                    # Restore both original OS paths; the Android fixture observes actual
-                    # default-network readiness before the new explicit connect action.
-                    reset();run('shell','svc','wifi','enable');run('shell','svc','data','enable');time.sleep(5)
+                    # Startup disabled cellular; restore only that original Wi-Fi topology.
+                    # Domain remains denied during host observation and until explicit action.
+                    reset();restore_startup_wifi(adb[0],args.serial,args.reports)
                     observe('network-return-no-reconnect',dns_log);go('network-lost')
                     read('synthetic-startup-locked.json');time.sleep(1);reset();observe('vault-lock',dns_log);go('locked')
                 else:

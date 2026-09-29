@@ -63,3 +63,26 @@ Repository guard485 source files PASS. Existing Starlette TestClient/httpx depre
 warning remains visible; dependencies were not changed or warnings suppressed.
 Android/new native CI is still required on the diagnostic commit. No physical APK
 was installed and no Claude screen/MainActivity changed. Preserve all prior receipts.
+
+## Separate private-startup recovery failure on17564e2
+
+Emergency36528074109 failed only emergency-lock debug job109275395061. R8,
+Nearby and both multimedia lanes passed. Artifact11015557510 SHA256
+e518259e3ab4664df748533921fd8358b15455596fd30533af3a306ff7725021:
+PrivateStartupFixtureListener rejected `Lab network did not return before explicit
+action` at its unchanged15s default-network readiness assertion. This occurred in
+the connected restart fixture, not native media or HTTPS EOF.
+
+Code inspection establishes a topology inconsistency: startup explicitly disables
+cellular and requires Wi-Fi, whereas restoration enabled both Wi-Fi and cellular.
+Whether that mismatch caused the historical Android/netd failure is not yet proven.
+The candidate restores only the original Wi-Fi path, records before/after netlink
+state and replaces the existing blind5s sleep with a route-readiness check within
+that same5s budget. App consent stays denied; the existing OS/default-network,
+UID packet/DNS observation and explicit reconnect checks are unchanged. No radio
+operation is available to physical targets; no assertions or cases are removed.
+
+Three tooling regressions cover Wi-Fi-only restoration, failure with preserved
+diagnostics and rejection of physical targets before mutation. Full tooling total:
+214 PASS. This is orchestration evidence, not native Android acceptance. The native
+candidate requires its own CI and must not be described as a proven root-cause fix.
