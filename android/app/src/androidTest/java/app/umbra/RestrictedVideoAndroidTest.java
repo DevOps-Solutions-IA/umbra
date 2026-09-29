@@ -15,6 +15,7 @@ public final class RestrictedVideoAndroidTest {
         var context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
+            SyntheticRestrictedVideo.memoryDescriptorBounds(context,ar.authorization());
             byte[] input=SyntheticRestrictedVideo.clip(context,ar.authorization()),original=input.clone();
             var review=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);String id;
             SyntheticRestrictedVideo.stage("PREPARATION_ENTER");

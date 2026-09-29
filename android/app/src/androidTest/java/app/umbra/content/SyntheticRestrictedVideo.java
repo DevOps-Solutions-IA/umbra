@@ -10,6 +10,31 @@ public final class SyntheticRestrictedVideo {
         var status=new android.os.Bundle();status.putString("restrictedVideoStage",value);
         androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
     }
+    /** Real kernel cap and filesystem query, without starting a camera or muxer. */
+    public static void memoryDescriptorBounds(android.content.Context context,Runnable authorization)throws Exception {
+        try(var memory=new MemoryMuxerDescriptor(context,authorization)) {
+            android.system.Os.fstatvfs(memory.descriptor());
+            org.junit.Assert.assertThrows(android.system.ErrnoException.class,
+                ()->android.system.Os.pwrite(memory.descriptor(),new byte[]{1},0,1,MemoryMuxerDescriptor.WORK_LIMIT));
+            org.junit.Assert.assertEquals(MemoryMuxerDescriptor.WORK_LIMIT,android.system.Os.fstat(memory.descriptor()).st_size);
+        }
+        stage("MEMORY_MUXER_KERNEL_BOUND_CONFIRMED");
+        // Diagnose the previous destination without invoking the crashing native muxer.
+        var thread=new android.os.HandlerThread("synthetic-proxy-filesystem");thread.start();
+        try(var proxy=context.getSystemService(android.os.storage.StorageManager.class).openProxyFileDescriptor(
+                android.os.ParcelFileDescriptor.MODE_READ_WRITE,new android.os.ProxyFileDescriptorCallback(){
+                    @Override public long onGetSize(){return 0;}
+                    @Override public int onRead(long offset,int size,byte[] data){return 0;}
+                    @Override public int onWrite(long offset,int size,byte[] data){return size;}
+                    @Override public void onRelease(){}
+                },new android.os.Handler(thread.getLooper()))) {
+            String capability;
+            try {android.system.Os.fstatvfs(proxy.getFileDescriptor());capability="SUPPORTED";}
+            catch(android.system.ErrnoException unavailable){capability="ERRNO_"+unavailable.errno;}
+            var report=new android.os.Bundle();report.putString("previousProxyFilesystemQuery",capability);
+            androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendStatus(0,report);
+        }finally{thread.quitSafely();thread.join(2000);if(thread.isAlive())throw new AssertionError("Synthetic proxy closure unconfirmed");}
+    }
     public static byte[] clip(Context context,Runnable check)throws Exception {
         try(var frames=new RestrictedVideo.Frames(64,48)) {
             for(int i=0;i<10;i++) {

@@ -44,3 +44,18 @@ consumption/duplicates/restart/storage failure; lock/focus/route and late-callba
 closure with positive activity; debug and R8 in both flavors; existing HTTPS and
 RFCOMM fixtures extended without replacing Bluetooth. None is inferred from a
 successful compile or a previously tested video call.
+
+## Native muxer compatibility correction candidate (2026-09-28)
+
+The app FUSE proxy destination reproducibly aborts at MPEG4Writer::start with a
+UBSan report in API35 CI. Exact unsafe expression remains under diagnosis.
+Use Android Os.memfd_create (API30, below minSdk31) for an anonymous descriptor
+supporting filesystem queries; kernel F_SEAL_GROW caps backing file length at
+2MiB, including framework preallocation. Seal constants use Linux UAPI values
+and are checked back at runtime; absent support rejects, never falls back to disk.
+Successful muxer stop must trim preallocation and final fstat length must fit the
+unchanged 256KiB content limit. Do not strip zeros or implement another MP4 muxer.
+Close wipes existing bytes best-effort then closes the descriptor; no external
+pathname/URI is created. Native tests assert rejection of a write past the kernel
+cap and separately query the old proxy's filesystem capability without calling
+the crashing muxer. Compilation is not evidence of native correction.
