@@ -242,6 +242,71 @@ public class RestrictedContentTest {
             }
         }
     }
+    @Test(timeout=75000) public void realObjectExpirySurvivesRestartAndImmutableRedeliveryForEveryFormat()throws Exception {
+        // Keep the real production minimum TTL. This is a bounded one-minute policy
+        // integration, not decoder/SQLite/process-death acceptance or a fake clock.
+        Pair pair=new Pair();var receiver=pair.b.e.restricted();
+        var ids=new ArrayList<String>();var envelopes=new ArrayList<JSONObject>();
+        long lastExpiry=0;
+        for(var format:RestrictedPayload.Format.values())for(var mode:RestrictedPayload.Mode.values()) {
+            String id=pair.a.e.restricted().send(pair.a.e.restricted().reviewSend(pair.b.e.id(),mode,60,1),
+                synthetic(format,pair.a.db.authorization()),true);
+            ids.add(id);
+        }
+        for(var row:pair.a.e.outbox()) {
+            var immutable=new JSONObject(row.getJSONObject("envelope").toString());
+            pair.b.e.receive(immutable);envelopes.add(immutable);
+        }
+        for(String id:ids) {
+            var status=receiver.status(id);assertFalse(status.expired());assertFalse(status.consumed());
+            lastExpiry=Math.max(lastExpiry,status.expires());
+            // Positive access for repeatable objects; leave ONCE objects unopened so
+            // later rejection proves expiry rather than prior consumption.
+            if(status.mode()==RestrictedPayload.Mode.UMBRA_ONLY) {
+                try(var session=receiver.open(receiver.reviewOpen(id),true)){session.check();}
+            }
+        }
+        long deadline=System.nanoTime()+65_000_000_000L;
+        while(Bytes.now()<lastExpiry && System.nanoTime()<deadline)Thread.sleep(100);
+        assertTrue("The actual object deadline must pass",Bytes.now()>=lastExpiry);
+        var restarted=new Engine(pair.b.db);
+        for(String id:ids) {
+            var status=restarted.restricted().status(id);
+            assertTrue(status.expired());assertFalse("Expiry is not consumption",status.consumed());
+            assertEquals(ContentException.Code.EXPIRED,assertThrows(ContentException.class,
+                ()->restarted.restricted().open(restarted.restricted().reviewOpen(id),true)).code());
+        }
+        for(var envelope:envelopes)
+            assertThrows(SecurityException.class,()->restarted.receive(new JSONObject(envelope.toString())));
+        // Listing may purge expired payloads, but retains denial metadata. Neither a
+        // duplicate nor reopening Engine creates another usable presentation session.
+        assertEquals(ids.size(),restarted.restricted().received(pair.a.e.id()).size());
+        var reopenedAgain=new Engine(pair.b.db);
+        for(String id:ids) {
+            assertTrue(reopenedAgain.restricted().status(id).expired());
+            assertEquals(ContentException.Code.EXPIRED,assertThrows(ContentException.class,
+                ()->reopenedAgain.restricted().open(reopenedAgain.restricted().reviewOpen(id),true)).code());
+        }
+    }
+
+    @Test public void unknownRestrictedVersionFormatModeAndCriticalFieldNeverDowngrade()throws Exception {
+        Pair pair=new Pair();String id=pair.send(RestrictedPayload.Mode.ONCE);
+        String original=Bytes.text(pair.b.db.get("restricted-object",id));
+        for(String field:new String[]{"v","format","mode","unknownCritical"}) {
+            var altered=new JSONObject(original);
+            switch(field) {
+                case "v" -> altered.put(field,2);
+                case "format" -> altered.put(field,"UNSUPPORTED");
+                case "mode" -> altered.put(field,"ORDINARY");
+                default -> altered.put(field,true);
+            }
+            assertThrows(SecurityException.class,()->RestrictedPayload.descriptor(altered,Bytes.now()));
+        }
+        assertTrue(pair.b.e.messages(pair.a.e.id()).isEmpty());
+        assertFalse(pair.b.e.restricted().status(id).consumed());
+        try(var session=pair.b.e.restricted().open(pair.b.e.restricted().reviewOpen(id),true)){session.check();}
+    }
+
     @Test public void alteredAuthenticatedPolicyCannotBecomeRepeatableOrChangeFormat()throws Exception {
         for(String field:new String[]{"mode","format","expires","sessionSeconds"}) {
             Pair p=new Pair();String id=p.send(RestrictedPayload.Mode.ONCE);

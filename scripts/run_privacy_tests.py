@@ -62,8 +62,8 @@ def consumption_restart(adb, package, reports):
         'postRestartDuplicateRejected': True}, indent=2) + '\n')
 
 
-def valid_report(text, code, expected=18):
-    return (expected in (18, 19) and code == 0 and re.search(r'^OK \('+str(expected)+r' tests\)$', text, re.M)
+def valid_report(text, code, expected=19):
+    return (expected in (19, 20) and code == 0 and re.search(r'^OK \('+str(expected)+r' tests\)$', text, re.M)
             and 'INSTRUMENTATION_CODE: -1' in text
             and not re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)
             and not any(x in text for x in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'Process crashed')))
@@ -124,7 +124,7 @@ def main():
             command.append('--optimized')
         subprocess.run(command, check=True, timeout=180)
     classes = 'app.umbra.PrivacyAdaptersAndroidTest,app.umbra.RestrictedContentAndroidTest,app.umbra.RestrictedDocumentAndroidTest,app.umbra.RestrictedVideoAndroidTest'
-    expected = 19 if args.flavor == 'connected' else 18
+    expected = 20 if args.flavor == 'connected' else 19
     if args.flavor == 'connected':
         classes += ',app.umbra.RestrictedRecordingAndroidTest'
     log = args.reports / 'privacy-tests.log'

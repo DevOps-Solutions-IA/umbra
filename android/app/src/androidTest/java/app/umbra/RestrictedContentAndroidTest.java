@@ -41,6 +41,92 @@ public class RestrictedContentAndroidTest {
             assertTrue(reopened.messages(a.id()).isEmpty());
         }
     }
+    @Test public void encryptedVaultDatabaseAndWalDoNotPersistSyntheticContentOrObjectKeys()throws Exception {
+        // Actual production Vault/SQLite encryption and password profile, with owned
+        // AndroidKeyStore no-auth fixture keys only. This is not hardware-auth proof.
+        var fixture=new DeviceVaultPasswordTest();
+        byte[] source=null,encodedObjectKey=null;
+        byte[] ordinary=app.umbra.core.Bytes.utf8("SYNTHETIC-VAULT-RETENTION-MARKER-ONLY-29-09-2026");
+        try {
+            fixture.before();
+            fixture.vault.transaction(()->{
+                fixture.vault.remove("meta","identity");fixture.vault.remove("session","ratchet");return null;
+            });
+            try(var senderRecords=new SqliteDeviceRecords()) {
+                Engine a=new Engine(senderRecords),b=new Engine(fixture.vault);
+                a.initialize("Synthetic retention sender");b.initialize("Synthetic retention receiver");
+                AdmissionFixture.enroll(a);AdmissionFixture.enroll(b);
+                a.importCard(b.createCard());b.importCard(a.createCard());
+                a.verify(b.id(),app.umbra.core.Bytes.safetyCode(a.id(),b.id()));
+                b.verify(a.id(),app.umbra.core.Bytes.safetyCode(a.id(),b.id()));
+                fixture.vault.createPassword(app.umbra.core.Bytes.utf8("synthetic password alpha"));
+                fixture.gate.unlock();fixture.vault.unlock(app.umbra.core.Bytes.utf8("synthetic password alpha"));
+                var database=fixture.vault.getWritableDatabase();assertTrue(database.enableWriteAheadLogging());
+                try(var setting=database.rawQuery("PRAGMA wal_autocheckpoint=0",null)){assertTrue(setting.moveToFirst());}
+                // A known plaintext ordinary record checks the Vault layer independently
+                // of restricted content's inner object encryption (avoid a tautology).
+                b.sendText(a.id(),app.umbra.core.Bytes.text(ordinary),600);
+                assertEquals(app.umbra.core.Bytes.text(ordinary),b.messages(a.id()).get(0).getString("text"));
+                source=png();byte[] unchanged=source.clone();
+                var consent=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
+                String id=a.restricted().send(consent,RestrictedImages.prepare(a,consent,source,true),true);
+                assertArrayEquals(unchanged,source);java.util.Arrays.fill(unchanged,(byte)0);
+                for(var row:a.outbox())b.receive(row.getJSONObject("envelope"));
+                byte[] object=fixture.vault.get("restricted-object",id);
+                try {
+                    var parsed=new org.json.JSONObject(app.umbra.core.Bytes.text(object));
+                    encodedObjectKey=app.umbra.core.Bytes.utf8(parsed.getString("key"));
+                } finally {java.util.Arrays.fill(object,(byte)0);}
+                byte[][] markers={source,ordinary,encodedObjectKey};
+                assertTrue("WAL evidence must actually exist before scanning",new java.io.File(fixture.file+"-wal").length()>0);
+                int scans=scanOwnedVaultFiles(fixture.file,markers);
+                var session=b.restricted().open(b.restricted().reviewOpen(id),true);
+                Bitmap output=Bitmap.createBitmap(24,16,Bitmap.Config.ARGB_8888);
+                try(var decoder=new RestrictedImages.Decoder(session)) {
+                    decoder.render(new Canvas(output),new Rect(0,0,24,16));assertEquals(0xff336699,output.getPixel(8,8));
+                } finally {output.recycle();session.close();}
+                session.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);
+                assertTrue(b.restricted().status(id).consumed());assertNull(fixture.vault.get("restricted-object",id));
+                scans+=scanOwnedVaultFiles(fixture.file,markers);
+                fixture.vault.close();scans+=scanOwnedVaultFiles(fixture.file,markers);
+                fixture.gate.unlock();fixture.vault.unlock(app.umbra.core.Bytes.utf8("synthetic password alpha"));
+                Engine reopened=new Engine(fixture.vault);assertTrue(reopened.restricted().status(id).consumed());
+                assertEquals(ContentException.Code.CONSUMED,assertThrows(ContentException.class,
+                    ()->reopened.restricted().open(reopened.restricted().reviewOpen(id),true)).code());
+                scans+=scanOwnedVaultFiles(fixture.file,markers);
+                var report=new android.os.Bundle();report.putString("restrictedEncryptedRetention",
+                    "PASS ownedDatabaseAndSidecarsScanned="+scans+",positiveDecoded=true,passwordVault=true,fixtureNoAuthKeys=true");
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendStatus(0,report);
+            }
+        } finally {
+            if(source!=null)java.util.Arrays.fill(source,(byte)0);
+            if(encodedObjectKey!=null)java.util.Arrays.fill(encodedObjectKey,(byte)0);
+            java.util.Arrays.fill(ordinary,(byte)0);fixture.after();
+        }
+    }
+    private static int scanOwnedVaultFiles(java.io.File database,byte[][] markers)throws Exception {
+        int scanned=0;
+        for(String suffix:new String[]{"","-wal","-shm","-journal"}) {
+            java.io.File file=new java.io.File(database.getPath()+suffix);
+            if(!file.exists())continue;
+            assertTrue("Fixture storage exceeded bounded scan",file.length()<=16L*1024*1024);
+            byte[] stored=java.nio.file.Files.readAllBytes(file.toPath());
+            try {
+                for(byte[] marker:markers) {
+                    assertTrue(marker.length>=32);boolean found=false;
+                    for(int offset=0;offset<=stored.length-marker.length && !found;offset++) {
+                        if(stored[offset]!=marker[0])continue;
+                        int n=1;while(n<marker.length && stored[offset+n]==marker[n])n++;
+                        found=n==marker.length;
+                    }
+                    assertFalse("Synthetic plaintext/object key persisted in owned Vault storage",found);
+                }
+            } finally {java.util.Arrays.fill(stored,(byte)0);}
+            scanned++;
+        }
+        assertTrue("No actual Vault file scanned",scanned>0);return scanned;
+    }
+
     @Test public void sqliteConsumeFailureDoesNotDeliverDecoderSession() throws Exception {
         try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
