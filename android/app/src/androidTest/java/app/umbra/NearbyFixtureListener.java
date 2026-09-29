@@ -16,7 +16,7 @@ import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-/** Explicit two-device fixture: real RFCOMM + libsignal, synthetic test-only memory storage. */
+/** Explicit two-device fixture: real RFCOMM + libsignal, isolated test-only SQLite storage. */
 public final class NearbyFixtureListener extends RunListener {
     private Bundle arguments;
     private final Object recordsLock = new Object();
@@ -37,7 +37,7 @@ public final class NearbyFixtureListener extends RunListener {
     @Override public void testRunStarted(Description description) throws Exception {
         arguments = InstrumentationRegistry.getArguments();
         File approval = new File(InstrumentationRegistry.getInstrumentation().getTargetContext().getFilesDir(), "nearby-synthetic-approval");
-        app.umbra.lab.SqliteDeviceRecords emergencyRecords=null;
+        app.umbra.lab.SqliteDeviceRecords fixtureRecords=null;
         try {
             require(BuildConfig.DEBUG, "Only synthetic debug APKs may run this fixture");
             require(!InstrumentationRegistry.getInstrumentation().getTargetContext().getDatabasePath("umbra.db").exists(), "Refuse existing vault data");
@@ -52,8 +52,10 @@ public final class NearbyFixtureListener extends RunListener {
             BluetoothDevice device = adapter.getRemoteDevice(arguments.getString("address", ""));
             require(device.getBondState() == BluetoothDevice.BOND_BONDED, "Pair the synthetic devices in Android first");
             boolean emergency="true".equals(arguments.getString("emergency","false"));
-            if(emergency)emergencyRecords=new app.umbra.lab.SqliteDeviceRecords();
-            app.umbra.data.Records records=emergency?emergencyRecords:new DeviceMemoryRecords();
+            // PDF preparation requires the same cancellation coordinator as production.
+            // Both paths use the existing disposable SQLite lab adapter, never a Vault fallback.
+            fixtureRecords=new app.umbra.lab.SqliteDeviceRecords();
+            app.umbra.data.Records records=fixtureRecords;
             engine = new Engine(records); engine.initialize("Synthetic " + role);
             if(negative && dialer) engine.admission().installRealmConfig(arguments.getString("admissionRealm",""),true);
             else AdmissionLab.provision(engine,approval.getParentFile().toPath(),"synthetic-admission",arguments.getString("admissionRealm",""));
@@ -199,7 +201,12 @@ public final class NearbyFixtureListener extends RunListener {
                     long delivered = messages.stream().filter(m -> m.optBoolean("outgoing") && "Entregado".equals(m.optString("status"))).count();
                     require(incoming <= 2, "Duplicate displayed more than once");
                     var restricted=engine.restricted().received(peer);
-                    require(restricted.size()<=2,"Restricted RFCOMM duplicate created another object");
+                    var formats=new HashSet<RestrictedPayload.Format>();
+                    for(var object:restricted) {
+                        require(Set.of(RestrictedPayload.Format.PNG,RestrictedPayload.Format.AAC_ADTS,RestrictedPayload.Format.PDF_PAGES).contains(object.format()),
+                            "Unexpected restricted RFCOMM format");
+                        require(formats.add(object.format()),"Restricted RFCOMM duplicate created another object");
+                    }
                     for(var object:restricted) {
                     if(object.format()==RestrictedPayload.Format.PNG && !imageConsumed) {
                         var session=engine.restricted().open(engine.restricted().reviewOpen(object.id()),true);
@@ -237,7 +244,7 @@ public final class NearbyFixtureListener extends RunListener {
                             || (object.format()==RestrictedPayload.Format.PDF_PAGES && documentConsumed))
                         require(engine.restricted().status(object.id()).consumed(),"Duplicate reset restricted consumption");
                     }
-                    complete = imageSent && imageConsumed && noteSent && noteConsumed && documentSent && documentConsumed && incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null && locationSent &&
+                    complete = formats.size()==3 && imageSent && imageConsumed && noteSent && noteConsumed && documentSent && documentConsumed && incoming == 2 && delivered == 2 && engine.get("device-roster", peer) != null && locationSent &&
                         engine.locations().received(peer).size()==1 && engine.outbox().isEmpty();
                     if(complete) require(engine.locations().received(peer).get(0).getJSONObject("lastPoint").getLong("latE7")==123456780,"Location content mismatch");
                     if (complete) {
@@ -284,7 +291,7 @@ public final class NearbyFixtureListener extends RunListener {
             throw failure;
         } finally {
             if (link != null) link.close();
-            if (emergencyRecords!=null) emergencyRecords.close();
+            if (fixtureRecords!=null) fixtureRecords.close();
             approval.delete();
         }
     }
