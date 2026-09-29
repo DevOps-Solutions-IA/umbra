@@ -27,3 +27,9 @@ class CrashDiagnosticTest(unittest.TestCase):
         self.assertEqual(['libmedia_jni.so'],result['ownedCrashRecords'][0]['nativeModules'])
         self.assertEqual(['MediaCodec'],result['ownedCrashRecords'][0]['nativeSites'])
         self.assertNotIn('secret',json.dumps(result));self.assertNotIn('example',json.dumps(result))
+
+    def test_native_abort_reason_is_classified_not_copied(self):
+        text='*** *** ***\npid: 9 >>> app.umbra.privatechat.vaultlab <<<\nsignal 6 (SIGABRT)\nAbort message: synthetic-sensitive-value shift exponent -1 is negative ubsan fileSizeBits\n'
+        result=summarize(text,'app.umbra.privatechat.vaultlab')
+        self.assertEqual(['undefined-behavior','invalid-shift','file-size-bits'],result['ownedCrashRecords'][0]['nativeFailureKinds'])
+        self.assertNotIn('synthetic-sensitive',json.dumps(result))
