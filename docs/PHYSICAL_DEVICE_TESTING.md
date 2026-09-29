@@ -111,3 +111,17 @@ ambiguous combined assertion failed; attempt11 requires native start callback AN
 decoded frames before lock and labels each assertion: ten pass. Reports retain
 every attempt, hashes, source dirty state and no serial. See dated validation.
 R8/connected physical and final CI are separate results, never inferred here.
+
+### Owner decision: fresh consent before every installation (2026-09-28)
+
+No APK installation or update is authorized by earlier general execution consent.
+Before EACH app/test installation, present the exact isolated package, build and
+APK hash, and obtain the owner's specific approval. No installation was running
+when this restriction arrived. The runner now refuses pending installs unless
+`--approved-install-sha256` explicitly pins every approved APK for that invocation.
+The operator must NOT supply these flags without the owner's decision. Approval
+is not persisted or inferred from `--execute`, `--update-owned`, a previous run,
+or willingness to accept a system dialog. Existing installed identical bytes can
+be inspected/tested within the already authorized synthetic scope without install.
+No installer-policy workaround is authorized. The four-format physical force-stop
+expansion and R8 physical remain pending where their APK is not installed.

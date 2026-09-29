@@ -3,9 +3,9 @@
 Do not begin a final integration on the assumption that A/B/C are accepted.
 Technical branch codex/security-content-completion, draft PR #16 against
 codex/emergency-lock. Exact base ba75d329bedb2a26cd2e70371d2369e2fb3ba7a1.
-Published checkpoint a8e6f0d31380cdc632d385074aa92b729ee01dfc accepted native MP4
-preparation in privacy debug/R8. Local a1a4a00 corrects physical PDF/AAC failures;
-new file playback/transport validation is in progress. None is the final A/B/C
+Published checkpoint 8c7d25d24991dacf0bfa23f250aadcb47e8d0f71 passes privacy
+debug/R8, file playback, HTTPS/four-format restart and focused RFCOMM. Its full
+Verify/password/video matrices failed as documented in the 2026-09-29 receipt. None is the final A/B/C
 accepted SHA; consult current PR and dated evidence rather than historical green.
 
 Claude reference bundle ca2a706fd30c8194181588b19e72c69529f70335 was inspected

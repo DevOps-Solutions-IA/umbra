@@ -1,7 +1,7 @@
 # Technical API contract for Claude — evolving master v4 checkpoint
 
 This contract is NOT frozen for final integration. Base ba75d329; current published
-checkpoint a8e6f0d; physical PDF/AAC correction a1a4a00. Consult dated validation and PR #16 for exact subsequent SHA.
+checkpoint 8c7d25d; physical PDF/AAC correction a1a4a00. Consult dated validation and PR #16 for exact subsequent SHA.
 No Claude UI or production MainActivity was changed. All domain/storage/codec work
 runs on a worker; Android Window/View configuration runs on the UI thread before
 first presentation. Never render an async result from a stale screen/vault epoch.
@@ -153,7 +153,7 @@ the connected debug lane at 9f4b533; the entire privacy job still FAILED on vide
 These are synthetic SQLite/codec tests, not production hardware Vault tests.
 This API is not a claim of completed C or acceptance of the final cumulative SHA.
 
-### File-video — preparation accepted in bounded AVD cases, playback pending
+### File-video — bounded preparation and playback
 
 `RestrictedVideo.prepare(Context,Engine,Review,byte[],boolean)` is published,
 versioned as `AVC_MP4`. Native preparation/Signal/decode cases pass at a8e6f0d
@@ -162,8 +162,9 @@ samples. Profile: <=256KiB, <=320x240 even dimensions, AVC baseline, <=45 frames
 <=3s, optional mono16k AAC-LC. No camera, WebRTC or new offline permission.
 The old proxy descriptor failed in framework muxer filesystem queries; anonymous
 kernel-bounded memory corrected this path. See RESTRICTED_VIDEO and dated evidence.
-Surface playback overload remains unpublished local work and is not yet a stable
-UI contract. Transport/lifecycle matrix and final cumulative acceptance remain.
+Surface playback overload is published in 01dee5a and described below. Privacy
+debug/R8 passed on 8c7d25d (36516445305), including HTTPS and force-stop for all
+four formats. Final cumulative acceptance remains blocked by the recorded CI failures.
 
 ### Physical validation and connection ownership
 
@@ -193,7 +194,8 @@ callbacks and requires a new, separately authorized object where policy allows.
 Do not reattach an old playback after recreation or create a second decoder.
 
 Physical synthetic offline debug delivered changing frames and confirmed lock
-closure in attempt11. New R8, HTTPS/RFCOMM video, focus-loss and cumulative CI
-must be checked against the final published SHA. The physical AAC/PDF failures
+closure in attempt11. Privacy debug/R8, HTTPS/four-format force-stop and focus loss passed on 8c7d25d;
+focused RFCOMM passed on that SHA. Full Verify stopped after successful connected
+instrumentation because of its stale count; cumulative CI remains incomplete. The physical AAC/PDF failures
 were reproduced and corrected (validation/2026-09-28-physical-pdf-aac-corrections).
 This does not imply Claude has integrated a protected SurfaceView or controls.

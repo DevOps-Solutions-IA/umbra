@@ -181,6 +181,16 @@ def assert_no_collision(installed, owned, info, update_owned=False):
         raise RuntimeError('Existing package ownership/hash mismatch; replacement refused')
 
 
+def assert_install_consent(installs, approved):
+    """Owner approval is per exact APK for this invocation, never persisted/reused."""
+    approved=set(approved or ())
+    if any(not re.fullmatch(r'[a-f0-9]{64}', value) for value in approved):
+        raise ValueError('Installation approval must pin exact APK SHA-256')
+    required={info['sha256'] for info, _apk, _previous in installs}
+    if not required.issubset(approved):
+        raise RuntimeError('Installation blocked: ask owner for specific consent for each pending APK before rerunning with its approved SHA-256')
+
+
 def apk_path_for_adb(adb, apk):
     if adb.lower().endswith('.exe'):
         return run(['wslpath', '-w', str(apk.resolve())]).strip()
@@ -262,6 +272,7 @@ def execute(args, profile, state_path, receipt):
         assert_no_collision(installed, owned.get(info['package']), info, args.update_owned)
         if installed != info['sha256']:
             installs.append((info, apk, installed))
+    assert_install_consent(installs, args.approved_install_sha256)
     for info, apk, previous in installs:
         if digest(apk) != info['sha256']:
             raise RuntimeError('APK changed after inspection')
@@ -290,6 +301,12 @@ def execute(args, profile, state_path, receipt):
         receipt.update(exitCode=result.returncode, elapsedNanos=time.monotonic_ns() - started)
         if not valid_receipt(text, result.returncode):
             raise RuntimeError('Physical instrumentation did not pass every selected case')
+        if args.restart_content:
+            # Audited shared orchestration: selected/owned package only, no root,
+            # wipe, network, settings or emulator commands. Positive decode before kill.
+            from run_privacy_tests import consumption_restart
+            consumption_restart(command, pkg, args.reports)
+            receipt['restrictedProcessRestart'] = 'PASS four formats; after commit, not during commit'
         receipt['result'] = 'PASS'
     except subprocess.TimeoutExpired as expired:
         def printable(value):
@@ -312,8 +329,10 @@ def main():
     parser.add_argument('--flavor', choices=('connected', 'offline'), default='offline')
     parser.add_argument('--reports', required=True, type=Path)
     parser.add_argument('--execute', action='store_true')
+    parser.add_argument('--approved-install-sha256', action='append', default=[], help='Only after owner explicitly approves this APK installation; repeat separately for app/test, never infer from earlier approval')
     parser.add_argument('--update-owned', action='store_true', help='Explicitly replace ONLY a runner-owned exact installed hash; retain data, no downgrade')
     parser.add_argument('--optimized', action='store_true')
+    parser.add_argument('--restart-content', action='store_true', help='Explicit safe force-stop of owned package after synthetic four-format consumption; never during commit')
     parser.add_argument('--sdk', default=os.environ.get('ANDROID_HOME'))
     parser.add_argument('--app-apk')
     parser.add_argument('--test-apk')

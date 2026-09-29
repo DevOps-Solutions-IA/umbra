@@ -395,3 +395,10 @@ normal owner installer interaction pending; no protection disabled. New video
 HTTPS/RFCOMM/restart and focus regression code requires its own cumulative CI.
 See 2026-09-28 physical/pdf-aac and file-video checkpoint evidence. Claude UI
 remains untouched; API freeze and full A/B/C closure are NOT declared.
+
+
+USER_DECISION 2026-09-28: No more phone APK installs/updates without specific
+owner consent before EACH installation (including separate app/test packages).
+No installation was in progress when instructed. Physical runner now requires
+per-invocation exact approved APK hashes; never populate flags by inference.
+Continue local/CI work; R8 installer rejection and next physical APK remain blocked.

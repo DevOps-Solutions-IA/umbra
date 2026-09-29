@@ -12,10 +12,13 @@ import static org.junit.Assert.*;
 /** Real Signal/JCA with memory transactions; not Android format/codec or durability acceptance. */
 public class RestrictedContentTest {
     private static RestrictedContentService.Prepared synthetic(Runnable authorization) throws Exception {
+        return synthetic(RestrictedPayload.Format.PNG,authorization);
+    }
+    private static RestrictedContentService.Prepared synthetic(RestrictedPayload.Format format,Runnable authorization)throws Exception {
         // Test-only access to internal preparation; production callers must use format adapters.
         var constructor=RestrictedContentService.Prepared.class.getDeclaredConstructor(RestrictedPayload.Format.class,byte[].class,Runnable.class);
         constructor.setAccessible(true);
-        return constructor.newInstance(RestrictedPayload.Format.PNG,new byte[]{1,2,3,4},authorization);
+        return constructor.newInstance(format,new byte[]{1,2,3,4},authorization);
     }
     private static RestrictedContentService.Prepared retain(RestrictedContentService service,
             RestrictedContentService.Review review,RestrictedContentService.Prepared prepared)throws Exception {
@@ -215,4 +218,45 @@ public class RestrictedContentTest {
         assertTrue(p.b.e.restricted().status(id).consumed());
     }
 
+
+    @Test public void everyFormatRetainsOnlyInUmbraExpiryAndExportDenialAfterRestart()throws Exception {
+        // Protocol/persistence policy only: native format validity is separately instrumented.
+        for(var format:RestrictedPayload.Format.values()) {
+            Pair p=new Pair();
+            String id=p.a.e.restricted().send(p.a.e.restricted().reviewSend(p.b.e.id(),RestrictedPayload.Mode.UMBRA_ONLY,60,1),
+                synthetic(format,p.a.db.authorization()),true);
+            for(var row:p.a.e.outbox())p.b.e.receive(row.getJSONObject("envelope"));
+            var first=p.b.e.restricted().open(p.b.e.restricted().reviewOpen(id),true);
+            assertEquals(format,first.format());assertFalse(p.b.e.restricted().status(id).consumed());
+            assertEquals(ContentException.Code.BUSY,assertThrows(ContentException.class,
+                ()->p.b.e.restricted().open(p.b.e.restricted().reviewOpen(id),true)).code());
+            first.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);
+            assertThrows(ContentException.class,first::check);
+            var restarted=new Engine(p.b.db);
+            try(var second=restarted.restricted().open(restarted.restricted().reviewOpen(id),true)) {
+                second.check();assertEquals(format,second.format());
+                assertFalse(restarted.restricted().status(id).consumed());
+                assertThrows(ContentException.class,()->restarted.get("restricted-object",id));
+                assertThrows(app.umbra.privacy.PrivacyException.class,
+                    ()->app.umbra.privacy.OrdinaryTextExport.review(restarted,p.a.e.id(),id));
+            }
+        }
+    }
+    @Test public void alteredAuthenticatedPolicyCannotBecomeRepeatableOrChangeFormat()throws Exception {
+        for(String field:new String[]{"mode","format","expires","sessionSeconds"}) {
+            Pair p=new Pair();String id=p.send(RestrictedPayload.Mode.ONCE);
+            p.b.db.transaction(()->{
+                var state=new JSONObject(Bytes.text(p.b.db.get("restricted-state",id)));
+                var object=new JSONObject(Bytes.text(p.b.db.get("restricted-object",id)));
+                Object changed=switch(field){case "mode"->"UMBRA_ONLY";case "format"->"AVC_MP4";
+                    case "expires"->object.getLong("expires")+1;default->31;};
+                state.getJSONObject("descriptor").put(field,changed);object.put(field,changed);
+                p.b.db.put("restricted-state",id,Bytes.utf8(state.toString()));
+                p.b.db.put("restricted-object",id,Bytes.utf8(object.toString()));return null;
+            });
+            assertThrows(java.security.GeneralSecurityException.class,
+                ()->p.b.e.restricted().open(p.b.e.restricted().reviewOpen(id),true));
+            assertFalse(p.b.e.restricted().status(id).consumed());
+        }
+    }
 }

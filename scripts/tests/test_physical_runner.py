@@ -51,6 +51,15 @@ class PhysicalRunnerTests(unittest.TestCase):
             with patch.object(runner,'run',side_effect=changed), self.assertRaises(RuntimeError):
                 runner.physical_profile('owned-adb','synthetic-one')
 
+    def test_installation_requires_fresh_explicit_approval_of_every_exact_apk(self):
+        app={'sha256':'a'*64};test={'sha256':'b'*64}
+        pending=[(app,Path('app.apk'),None),(test,Path('test.apk'),'c'*64)]
+        for approved in ([],['a'*64],['b'*64],['c'*64]):
+            with self.assertRaises(RuntimeError):runner.assert_install_consent(pending,approved)
+        runner.assert_install_consent(pending,['a'*64,'b'*64])
+        runner.assert_install_consent([],[])  # Already installed bytes require no installation.
+        with self.assertRaises(ValueError):runner.assert_install_consent(pending,['yes'])
+
     def test_collision_never_updates_existing_user_data(self):
         info={'sha256':'a'*64}
         runner.assert_no_collision(None,None,info)

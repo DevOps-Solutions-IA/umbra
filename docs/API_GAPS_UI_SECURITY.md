@@ -1,7 +1,7 @@
 # Master v4 API gap register — technical checkpoint, not closure
 
 Compared with Claude bundle ca2a706 (not merged), including AdmissionFlow and
-VaultFlow. Technical base ba75d329; published checkpoint a8e6f0d. Later working
+VaultFlow. Technical base ba75d329; published checkpoint 8c7d25d. Later working
 changes require their own tests/commit. Do not treat this document as a UI patch.
 
 | Claude gap | Technical contract | Remaining validation/integration |
@@ -26,7 +26,7 @@ simplification remains Claude's responsibility and was not overwritten.
   exact-zero assumption was disproved by pre-codec AVD sample statistics; a
   controlled zero-PCM codec reference remains exact zero. This is not a physical
   microphone result and the precise HAL/resampling source remains unknown.
-- Routed playback and lock closure passed. Route/focus loss and remaining lifecycle
+- Routed playback and lock closure passed. Focus loss passed in 8c7d25d privacy debug/R8; route-removal and remaining lifecycle
   cases still require explicit acceptance; no claim of physical acoustics.
 - Android note HTTPS passed with real Signal/TLS and two SQLite stores in one AVD,
   not two independent devices. Real RFCOMM PNG/AAC passed in 126ac2f (historical),
@@ -37,7 +37,7 @@ simplification remains Claude's responsibility and was not overwritten.
 - PDF preparation/render cases passed in later privacy checkpoints; lifecycle
   matrix remains incomplete. File-video preparation is implemented as a candidate
   and native MP4 preparation/Signal/decode passes at a8e6f0d after the descriptor
-  correction; surface playback is locally tested on the phone and awaiting new CI. Physical AAC/PDF failures
+  correction; surface playback passed on the phone and in 8c7d25d privacy debug/R8. Physical AAC/PDF failures
   are corrected with unchanged assertions at a1a4a00; new cumulative CI remains required.
 - Pending-preparation cleanup and domain-only authorization APIs have regressions;
   full cumulative acceptance and unconfirmed native resource closure remain under review.
