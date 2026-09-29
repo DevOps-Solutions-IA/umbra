@@ -100,3 +100,24 @@ could be an observer/timing effect; it would not demonstrate a root-cause fix.
 Reject physical/unverified targets; capture no application payloads/logs/secrets.
 205 Python tooling regressions pass, including two for this diagnostic. KVM local
 still returns EACCES. CI on the diagnostic commit is required for new evidence.
+
+## Setup diagnosis 3ecfc8b and candidate deterministic initialization
+
+Emergency run36522524777, failed media R8 job109258310139, artifact11012824155:
+first AVD had ONLY eth0 policy routes before `svc data disable`; wlan0 had a
+kernel DHCP address but no netd policy routes. After disabling data there was
+no usable route. The second AVD already had valid wlan0 routes and retained them.
+Thus this run disproves the hypothesis that our data-disable command removed
+previously valid Wi-Fi routes. The precise guest/netd bootstrap defect remains
+unknown. Merely asking an already-enabled Wi-Fi agent to enable again is not
+fresh initialization and did not cure this inconsistent setup.
+
+Candidate change initializes the disposable AVD Wi-Fi association explicitly:
+disable, observe previous IPv4 address removed, enable. This runs before fixtures,
+not as a retry after failed acceptance. A separate10s OFF-transition bound prevents
+hanging setup; the original20s route budget and UDP/media assertions are unchanged.
+No route injection, cellular fallback, TURN change, physical-phone setting change
+or enlarged product/media timeout. New observations and previous failures remain.
+208 tooling tests pass, including bounded OFF transition/target rejection. These
+are orchestration regressions, NOT proof that native media or the cause is fixed.
+The candidate requires its own Actions result; no green claim yet.

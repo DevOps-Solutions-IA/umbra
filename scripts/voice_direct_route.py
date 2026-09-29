@@ -41,6 +41,46 @@ def observe_owned_network(adb: str, serial: str, report):
     report.write_text(json.dumps(evidence, indent=2)+'\n')
 
 
+def initialize_owned_wifi(adb: str, serial: str, report):
+    """Create a fresh Wi-Fi association before media on disposable AVDs only.
+
+    A booted first AVD can retain a DHCP address without netd policy routes at
+    media setup. `wifi enable` on that already-enabled agent is
+    not initialization. Observe OFF before ON; never inject a route or retry a
+    failed media scenario. OFF has a separate bounded 10s setup deadline. Existing
+    wait_wifi_ipv4 still requires real routes within its unchanged 20s budget.
+    """
+    if not serial.startswith('emulator-') or not serial[9:].isdigit():
+        raise ValueError('Owned emulator required')
+    import json
+    def command(*arguments):
+        return subprocess.run([adb,'-s',serial,'shell',*arguments],
+                              capture_output=True,text=True,timeout=3)
+    verified=command('getprop','ro.kernel.qemu')
+    if verified.returncode != 0 or verified.stdout.strip() != '1':
+        raise ValueError('Selected target is not a disposable emulator')
+    start=time.monotonic(); observations=[]
+    try:
+        result=command('svc','wifi','disable')
+        if result.returncode:raise RuntimeError('Owned AVD Wi-Fi disable failed')
+        while True:
+            state=command('ip','-4','addr','show','wlan0')
+            absent=(state.returncode==1 and 'does not exist' in state.stderr)
+            cleared=(state.returncode==0 and re.search(r'\binet\s',state.stdout) is None)
+            observations.append({'elapsedMillis':round((time.monotonic()-start)*1000),
+                'exit':state.returncode,'addressCleared':absent or cleared})
+            if absent or cleared:break
+            if time.monotonic()-start>=10:
+                raise RuntimeError('Owned AVD Wi-Fi did not disconnect within setup budget')
+            time.sleep(.2)
+        result=command('svc','wifi','enable')
+        if result.returncode:raise RuntimeError('Owned AVD Wi-Fi enable failed')
+    finally:
+        report.parent.mkdir(parents=True,exist_ok=True)
+        report.write_text(json.dumps({'observations':observations,
+            'purpose':'initialization, not media acceptance'},indent=2)+'\n')
+
+
 def wifi_ipv4_route(text: str, source: str) -> bool:
     """An address alone is insufficient: netd may not have populated policy routes."""
     return (re.search(r'(?:^|\s)dev wlan0(?:\s|$)',text) is not None

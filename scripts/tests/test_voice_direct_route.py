@@ -5,7 +5,7 @@ import sys
 import unittest
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from voice_direct_route import probe_udp, wifi_ipv4_route, wait_wifi_ipv4, observe_owned_network
+from voice_direct_route import probe_udp, wifi_ipv4_route, wait_wifi_ipv4, observe_owned_network, initialize_owned_wifi
 
 class DirectRouteProbeTest(unittest.TestCase):
     def test_only_exact_challenge_from_bound_receiver_proves_delivery(self):
@@ -88,4 +88,34 @@ class DirectRouteProbeTest(unittest.TestCase):
             run.assert_not_called()
             run.return_value=subprocess.CompletedProcess([],0,'0\n','')
             with self.assertRaises(ValueError):observe_owned_network('adb','emulator-5554',Path(d)/'x')
+            self.assertEqual(1,run.call_count)
+
+    def test_initialization_waits_for_old_address_removal_before_enabling(self):
+        import tempfile,json
+        ok=lambda text='':subprocess.CompletedProcess([],0,text,'')
+        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',
+                side_effect=[ok('1'),ok(),ok('inet 10.0.2.16/24'),ok('wlan0 DOWN'),ok()]) as run,patch('voice_direct_route.time.sleep'):
+            report=Path(d)/'init.json'
+            initialize_owned_wifi('adb','emulator-5554',report)
+            calls=[c.args[0][4:] for c in run.call_args_list]
+            self.assertEqual(['svc','wifi','disable'],calls[1])
+            self.assertEqual(['svc','wifi','enable'],calls[-1])
+            self.assertEqual([False,True],[x['addressCleared'] for x in json.loads(report.read_text())['observations']])
+
+    def test_initialization_timeout_never_claims_ready_or_enables_over_old_state(self):
+        import tempfile
+        ok=lambda text='':subprocess.CompletedProcess([],0,text,'')
+        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',
+                side_effect=[ok('1'),ok(),ok('inet 10.0.2.16/24')]) as run,patch('voice_direct_route.time.monotonic',side_effect=[0,11,11]):
+            with self.assertRaisesRegex(RuntimeError,'did not disconnect'):
+                initialize_owned_wifi('adb','emulator-5554',Path(d)/'init.json')
+            self.assertEqual(3,run.call_count)
+
+    def test_initialization_rejects_non_emulator_before_radio_mutation(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',
+                return_value=subprocess.CompletedProcess([],0,'0','')) as run:
+            with self.assertRaises(ValueError):initialize_owned_wifi('adb','physical',Path(d)/'init.json')
+            run.assert_not_called()
+            with self.assertRaises(ValueError):initialize_owned_wifi('adb','emulator-5554',Path(d)/'init.json')
             self.assertEqual(1,run.call_count)

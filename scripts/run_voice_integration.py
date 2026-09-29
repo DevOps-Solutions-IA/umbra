@@ -17,7 +17,7 @@ from turn_lab import TurnLab, docker
 from voice_relay_lab import voice_relay
 from android_apk_install import ensure_apk
 from admission_lab import reset_exchange
-from voice_direct_route import probe_udp, wait_wifi_ipv4, observe_owned_network
+from voice_direct_route import probe_udp, wait_wifi_ipv4, observe_owned_network, initialize_owned_wifi
 from check_optimized_media import inspect as inspect_optimized_media
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -203,7 +203,7 @@ def main():
         observe_owned_network(adb,serial,args.reports/f'network-before-data-disable-{serial}.json')
         run(serial,"shell","svc","data","disable")
         observe_owned_network(adb,serial,args.reports/f'network-after-data-disable-{serial}.json')
-        run(serial,"shell","svc","wifi","enable")
+        initialize_owned_wifi(adb,serial,args.reports/f'network-wifi-initialization-{serial}.json')
         observe_owned_network(adb,serial,args.reports/f'network-after-wifi-enable-{serial}.json')
         variant="mediaLab" if args.optimized else "debug"
         for path in (f"connected/{variant}/app-connected-{variant}.apk",f"androidTest/connected/{variant}/app-connected-{variant}-androidTest.apk"):
