@@ -17,7 +17,7 @@ import sys
 import tempfile
 import time
 from voice_relay_lab import voice_relay
-from voice_direct_route import (wait_wifi_ipv4, observe_owned_network, wifi_control_summary, select_owned_wifi,
+from voice_direct_route import (wait_wifi_ipv4, observe_owned_network, wifi_control_summary, select_owned_wifi, initialize_owned_wifi,
                                 observe_owned_wifi as observe_startup_wifi)
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -40,6 +40,12 @@ def restore_startup_wifi(adb,serial,reports):
     finally:
         observe_owned_network(adb,serial,reports/'network-after-restore.json')
         observe_startup_wifi(adb,serial,reports/'wifi-after-restore.json')
+
+
+def prepare_startup_wifi(adb,serial,reports):
+    """Reuse media's conditional netd/association initialization before app launch."""
+    associate=initialize_owned_wifi(adb,serial,reports/'initial-wifi-initialization.json')
+    return wait_wifi_ipv4(adb,serial,reports/'initial-wifi-route.json',associate=associate)
 
 
 def confirm_startup_recovery(adb,serial,reports,read_checkpoint):
@@ -101,8 +107,8 @@ def main():
     if args.flavor=='connected':
         # Positive HTTPS acceptance needs an OS route; offline deliberately does not.
         # Host netlink observation is not UMBRA traffic or a bypass of its gate.
-        run('shell','svc','data','disable');run('shell','svc','wifi','enable')
-        wait_wifi_ipv4(adb[0],args.serial,args.reports/'initial-wifi-route.json')
+        run('shell','svc','data','disable')
+        prepare_startup_wifi(adb[0],args.serial,args.reports)
     installed=run('shell','pm','list','packages','-U',package).stdout.decode()
     match=re.search(r'^package:'+re.escape(package)+r' uid:(\d+)$',installed,re.M)
     if not match:raise RuntimeError('Missing unique application UID')

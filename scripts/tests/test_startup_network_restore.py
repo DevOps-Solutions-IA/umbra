@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from run_private_startup import restore_startup_wifi, wifi_control_summary, observe_startup_wifi, confirm_startup_recovery
+from run_private_startup import restore_startup_wifi, wifi_control_summary, observe_startup_wifi, confirm_startup_recovery, prepare_startup_wifi
 
 
 class StartupRestoreTest(unittest.TestCase):
@@ -75,3 +75,16 @@ class StartupRestoreTest(unittest.TestCase):
             self.assertTrue(data['status']['disconnected']);self.assertNotIn('synthetic',target.read_text())
             self.assertEqual([['getprop','ro.kernel.qemu'],['cmd','wifi','status'],['dumpsys','wifi']],
                              [call.args[0][4:] for call in run.call_args_list])
+
+    def test_initial_route_requires_conditional_initialization_and_same_readiness_budget(self):
+        for changed in (False,True):
+            events=[]
+            def initialized(*args):events.append('initialize');return changed
+            def ready(*args,**kwargs):events.append('route');return '10.0.2.16'
+            with tempfile.TemporaryDirectory() as d,patch('run_private_startup.initialize_owned_wifi',side_effect=initialized) as init,\
+                    patch('run_private_startup.wait_wifi_ipv4',side_effect=ready) as wait:
+                root=Path(d)
+                self.assertEqual('10.0.2.16',prepare_startup_wifi('adb','emulator-5554',root))
+                self.assertEqual(['initialize','route'],events)
+                init.assert_called_once_with('adb','emulator-5554',root/'initial-wifi-initialization.json')
+                wait.assert_called_once_with('adb','emulator-5554',root/'initial-wifi-route.json',associate=changed)

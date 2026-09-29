@@ -182,8 +182,10 @@ to acceptance of a new cumulative SHA.
 Historical physical attempt11 passed ten synthetic offline debug cases, including
 native video presentation, on the selected Xiaomi API36 phone. TEE was observed
 for a fixture key, not authenticated production Vault. Hardware-authenticated
-Vault, physical capture, physical R8 and two-peer physical media are separate
-unexecuted cases. Android rejected the authorized Claude preview install without
+Vault, physical capture and two-peer physical media remain separate unexecuted cases.
+The authorized2026-09-29 offline R8 laboratory passed10synthetic cases and
+four-format force-stop/restart on the same phone; exact APK/test/mapping hashes
+are in the dated physical acceptance receipt. It is not the exact product APK. Android rejected the authorized Claude preview install without
 showing the owner a prompt; the preview is not the combined application.
 Use PHYSICAL_DEVICE_TESTING and the explicit selected-device runner. Never clear
 unowned data or change global security to obtain a pass; installation consent and

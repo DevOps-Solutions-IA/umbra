@@ -91,8 +91,9 @@ requires its own exact-HEAD ten-workflow matrix; keep earlier red evidence.
 
 Physical attempt11 historically passed ten synthetic offline debug cases. TEE
 observed on a fixture key does not validate authenticated production Vault.
-Physical R8, microphone/acoustics/route changes and authentication interaction
-remain separately classified; two physical endpoints require NEEDS_SECOND_PEER.
+The later authorized2026-09-29 offline R8 laboratory passed10synthetic tests
+and four-format consume/force-stop/restart. Microphone/acoustics/route changes and
+authentication interaction remain separately classified; two physical endpoints require NEEDS_SECOND_PEER.
 No promise of root/OS resistance, forensic erasure, prevented external recording,
 or disappearance of the sender's original/gallery/backups follows from ONCE.
 

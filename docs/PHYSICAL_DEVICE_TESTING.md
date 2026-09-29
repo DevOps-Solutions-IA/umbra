@@ -6,8 +6,10 @@ executed ten synthetic cases: 10 PASS / 0 FAIL, including silent native file-vid
 playback. Earlier failures remain preserved in dated validation reports; this is
 not a new execution or validation of the latest source HEAD. TEE was reported for
 the synthetic non-authenticated test key, not production Vault authentication.
-Physical R8 and the separate Claude preview installation remain blocked by
-INSTALL_FAILED_USER_RESTRICTED; no prompt appeared in the owner-reported attempts.
+Earlier physical R8 and Claude preview attempts returned INSTALL_FAILED_USER_RESTRICTED
+without a prompt. A later specifically authorized offline R8 installation on
+2026-09-29 succeeded:10synthetic cases and four-format force-stop/restart PASS.
+The separate Claude preview remains uninstalled. See the dated R8 receipt.
 That error does not establish intentional human cancellation or a specific cause.
 Claude owns later combined UI validation.
 
@@ -84,7 +86,7 @@ Raw instrumentation logs still require review before public upload.
 - Camera/microphone/location and audio route tests: MANUAL_PENDING, explicit
   human consent and an audited per-case runner required. No ambient recording.
 - Force-stop/restart restricted consumption: the explicit `--restart-content`
-  lane is implemented for four formats and remains NOT EXECUTED physically;
+  lane passed physically for four formats in the specifically authorized offline R8 run;
   existing AVD coverage is separate. It force-stops after persistent consumption,
   not during commit. SQLite reopen is not process death.
 - R8 physical execution: the runner supports `--optimized` using the existing
@@ -92,7 +94,8 @@ Raw instrumentation logs still require review before public upload.
   APK/JNI/permission guards. Only the package name differs in the manifest policy
   comparison; debug flags, backup, TLS and components cannot be normalized away.
   This branch's optimized APKs passed local inspection, but physical R8 execution
-  is NOT EXECUTED. Existing AVD R8 suites remain. It is not the exact product APK.
+  passed ten synthetic cases and four-format consume/restart on2026-09-29.
+  Existing AVD R8 suites remain complementary. It is not the exact product APK.
 - RFCOMM Android-to-Android and bidirectional physical media: NEEDS_SECOND_PEER.
 - No-network global packet absence on non-root phone: BLOCKED_OBSERVABILITY
   where per-UID observation is unavailable; relay silence alone is insufficient.

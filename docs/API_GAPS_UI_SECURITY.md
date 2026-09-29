@@ -41,7 +41,7 @@ or green final SHA is claimed while cumulative CI remains incomplete.
 | Historical HTTPS EOF after active video | Causal investigation still open; lifecycle diagnostics alone are not a fix |
 | Android Wi-Fi restoration fixture failure | Distinct laboratory issue; preserve failure and verify the resulting correction on its own SHA |
 | Physical authenticated production Vault | MANUAL_PENDING; fixture TEE is not authenticated production-key acceptance |
-| Physical R8 installation/execution | BLOCKED by Android USER_RESTRICTED on recorded attempts; no protection bypass or implied new install consent |
+| Physical R8 installation/execution | Authorized offline laboratory run PASS on2026-09-29:10synthetic cases plus four-format force-stop/restart; not exact production APK or authenticated Vault |
 | Physical microphone/acoustics/route removal | MANUAL_PENDING with explicit consent; codec tests do not cover room audio or physical routing |
 | Two physical Android endpoints | NEEDS_SECOND_PEER for RFCOMM/radio/voice/video; does not block single-device safe tests |
 | Death during SQLite commit / privileged snapshot | Not established by injected failure or force-stop after commit; no forensic or rollback-resistance claim |

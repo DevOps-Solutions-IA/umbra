@@ -35,8 +35,9 @@ compilación, test JVM y Android físico no son intercambiables.
 
 El teléfono ya fue detectado y ejecutó históricamente diez casos sintéticos offline
 debug (intento11). TEE observado corresponde a una clave fixture sin autenticación,
-no a la bóveda productiva autenticada. R8 y preview Claude fueron rechazados por
-Android en intentos registrados; el propietario no vio aviso. No inferir cancelación
+no a la bóveda productiva autenticada. Tras autorización nueva, el29de septiembre
+se instaló R8 offline y pasó10casos sintéticos más consumo/reinicio de cuatro
+formatos; se conservan los rechazos previos. Preview Claude sigue sin instalar. No inferir cancelación
 humana ni instalar de nuevo sin el consentimiento específico requerido. Usar el
 runner seguro y paquete seleccionado; no cambiar protecciones/datos del teléfono.
 `NEEDS_SECOND_PEER`: RFCOMM/voz/video entre dos Android físicos. `MANUAL_PENDING`:
