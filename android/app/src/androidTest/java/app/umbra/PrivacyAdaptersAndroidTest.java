@@ -13,6 +13,60 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class PrivacyAdaptersAndroidTest {
+    /** Disposable AVD only: never inspect a phone's clipboard or restore an unknown clip. */
+    @Test public void nativeClipboardRequiresConsentAndClearsOnlyItsOwnSyntheticClip() throws Exception {
+        var instrumentation=InstrumentationRegistry.getInstrumentation();
+        try(var descriptor=instrumentation.getUiAutomation().executeShellCommand("getprop ro.kernel.qemu");
+            var input=new android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor)) {
+            assertEquals("Clipboard fixture requires a disposable emulator", "1",
+                new String(input.readAllBytes(),StandardCharsets.US_ASCII).trim());
+        }
+        var context=instrumentation.getTargetContext();
+        try(var ar=new app.umbra.lab.SqliteDeviceRecords();var br=new app.umbra.lab.SqliteDeviceRecords()) {
+            var a=new app.umbra.crypto.Engine(ar);var b=new app.umbra.crypto.Engine(br);
+            LocationAndroidTest.pair(a,b,ar,br);
+            String id=a.sendText(b.id(),"Synthetic clipboard fixture",600);
+            try(var host=androidx.test.core.app.ActivityScenario.<android.app.Activity>launch(
+                    context.getPackageManager().getLaunchIntentForPackage(context.getPackageName()))) {
+                var focused=new java.util.concurrent.atomic.AtomicBoolean();
+                long deadline=android.os.SystemClock.elapsedRealtime()+5000;
+                do {
+                    host.onActivity(activity->focused.set(activity.hasWindowFocus()));
+                    if(!focused.get())Thread.sleep(20);
+                }while(!focused.get() && android.os.SystemClock.elapsedRealtime()<deadline);
+                assertTrue("Foreground clipboard host never acquired focus",focused.get());
+                host.onActivity(activity->{
+                    var manager=activity.getSystemService(android.content.ClipboardManager.class);
+                    // Reject a reused/nonempty environment without reading its payload.
+                    assertFalse("Clipboard fixture must start empty",manager.hasPrimaryClip());
+                    var clipboard=new PrivateClipboard(activity);
+                    String foreignLabel="synthetic-other-owner-"+java.util.UUID.randomUUID();
+                    try {
+                        var review=clipboard.reviewMessage(a,b.id(),id);
+                        assertThrows(PrivacyException.class,()->clipboard.copyMessage(review,false));
+                        assertFalse(manager.hasPrimaryClip());
+                        clipboard.copyMessage(review,true);
+                        assertEquals("Synthetic clipboard fixture",manager.getPrimaryClip().getItemAt(0).getText());
+                        assertTrue(manager.getPrimaryClipDescription().getExtras().getBoolean("android.content.extra.IS_SENSITIVE"));
+                        assertThrows(PrivacyException.class,()->clipboard.copyMessage(review,true));
+                        clipboard.clearOwned();assertFalse(manager.hasPrimaryClip());
+                        clipboard.copyMessage(clipboard.reviewMessage(a,b.id(),id),true);
+                        manager.setPrimaryClip(android.content.ClipData.newPlainText(foreignLabel,"Synthetic other owner"));
+                        clipboard.clearOwned();
+                        assertEquals("Synthetic other owner",manager.getPrimaryClip().getItemAt(0).getText());
+                        var stale=clipboard.reviewMessage(a,b.id(),id);ar.gate.lock();ar.gate.unlock();
+                        assertThrows(SecurityException.class,()->clipboard.copyMessage(stale,true));
+                        assertEquals("Synthetic other owner",manager.getPrimaryClip().getItemAt(0).getText());
+                    }catch(Exception failure){throw new AssertionError("Native clipboard fixture failed",failure);}
+                    finally {
+                        clipboard.clearOwned();
+                        var description=manager.getPrimaryClipDescription();
+                        if(description!=null && foreignLabel.contentEquals(description.getLabel()))manager.clearPrimaryClip();
+                    }
+                });
+            }
+        }
+    }
     @Test public void imageCopyRemovesTextMetadataWithoutChangingOriginal() throws Exception {
         Bitmap bitmap=Bitmap.createBitmap(32,24,Bitmap.Config.ARGB_8888);bitmap.eraseColor(0xff449944);
         ByteArrayOutputStream output=new ByteArrayOutputStream();assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG,100,output));bitmap.recycle();
