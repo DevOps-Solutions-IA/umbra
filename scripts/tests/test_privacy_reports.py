@@ -16,16 +16,16 @@ class PrivacyReportsTest(unittest.TestCase):
         self.assertFalse(runner.valid_restart_report(good, 1))
 
     def test_exact_completed_suite_required(self):
-        good = 'OK (19 tests)\nINSTRUMENTATION_CODE: -1\n'
+        good = 'OK (20 tests)\nINSTRUMENTATION_CODE: -1\n'
         self.assertTrue(runner.valid_report(good, 0))
-        for bad in ('', 'OK (18 tests)\nINSTRUMENTATION_CODE: -1\n', 'OK (0 tests)\nINSTRUMENTATION_CODE: -1\n',
-                    'OK (19 tests)\n', good + 'Process crashed',
+        for bad in ('', 'OK (19 tests)\nINSTRUMENTATION_CODE: -1\n', 'OK (0 tests)\nINSTRUMENTATION_CODE: -1\n',
+                    'OK (20 tests)\n', good + 'Process crashed',
                     good + 'INSTRUMENTATION_STATUS_CODE: -3'):
             self.assertFalse(runner.valid_report(bad, 0))
         self.assertFalse(runner.valid_report(good, 1))
-        self.assertTrue(runner.valid_report(good.replace('19 tests', '20 tests'), 0, 20))
-        self.assertFalse(runner.valid_report(good, 0, 20))
-        self.assertFalse(runner.valid_report(good.replace('19 tests', '0 tests'), 0, 0))
+        self.assertTrue(runner.valid_report(good.replace('20 tests', '21 tests'), 0, 21))
+        self.assertFalse(runner.valid_report(good, 0, 21))
+        self.assertFalse(runner.valid_report(good.replace('20 tests', '0 tests'), 0, 0))
 
     def test_r8_requires_all_exercised_entry_points_and_optimization(self):
         names = ('app.umbra.privacy.ImagePreparation',

@@ -36,10 +36,10 @@ def main() -> None:
             package + '.test/androidx.test.runner.AndroidJUnitRunner'], stdout=stream,
             stderr=subprocess.STDOUT, timeout=180)
     output = args.log.read_text(encoding='utf-8')
-    # 65 shared methods (including encrypted Vault DB/WAL inspection and native clipboard),
+    # 66 shared methods (including concurrent Vault ONCE open, encrypted DB/WAL inspection and native clipboard),
     # plus connected capture and two connected video surface lifecycle methods.
     # Exact counts remain fail-closed: adding a class requires updating this contract.
-    expected=68 if args.flavor=='connected' else 65
+    expected=69 if args.flavor=='connected' else 66
     failed = result.returncode != 0 or not re.search(r'^OK \('+str(expected)+r' tests\)$', output, re.MULTILINE)
     failed |= 'INSTRUMENTATION_CODE: -1' not in output
     failed |= bool(re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', output))

@@ -127,6 +127,69 @@ public class RestrictedContentAndroidTest {
         assertTrue("No actual Vault file scanned",scanned>0);return scanned;
     }
 
+    @Test public void concurrentEncryptedVaultOpenHasOneWinnerAndDurableConsumedState()throws Exception {
+        var fixture=new DeviceVaultPasswordTest();
+        var workers=java.util.concurrent.Executors.newFixedThreadPool(2);
+        var ready=new java.util.concurrent.CountDownLatch(2);var begin=new java.util.concurrent.CountDownLatch(1);
+        Engine receiver=null;
+        try {
+            fixture.before();
+            fixture.vault.transaction(()->{
+                fixture.vault.remove("meta","identity");fixture.vault.remove("session","ratchet");return null;
+            });
+            try(var senderRecords=new SqliteDeviceRecords()) {
+                Engine sender=new Engine(senderRecords);receiver=new Engine(fixture.vault);
+                sender.initialize("Synthetic race sender");receiver.initialize("Synthetic race recipient");
+                AdmissionFixture.enroll(sender);AdmissionFixture.enroll(receiver);
+                sender.importCard(receiver.createCard());receiver.importCard(sender.createCard());
+                sender.verify(receiver.id(),app.umbra.core.Bytes.safetyCode(sender.id(),receiver.id()));
+                receiver.verify(sender.id(),app.umbra.core.Bytes.safetyCode(sender.id(),receiver.id()));
+                fixture.vault.createPassword(app.umbra.core.Bytes.utf8("synthetic password alpha"));
+                fixture.gate.unlock();fixture.vault.unlock(app.umbra.core.Bytes.utf8("synthetic password alpha"));
+                byte[] input=png();String id;
+                var sending=sender.restricted().reviewSend(receiver.id(),RestrictedPayload.Mode.ONCE,600,30);
+                try(var prepared=RestrictedImages.prepare(sender,sending,input,true)) {
+                    id=sender.restricted().send(sending,prepared,true);
+                } finally {java.util.Arrays.fill(input,(byte)0);}
+                for(var row:sender.outbox())receiver.receive(row.getJSONObject("envelope"));
+                var service=receiver.restricted();
+                var firstReview=service.reviewOpen(id);var secondReview=service.reviewOpen(id);
+                java.util.concurrent.Callable<RestrictedContentService.Session> first=()->raceOpen(service,firstReview,ready,begin);
+                java.util.concurrent.Callable<RestrictedContentService.Session> second=()->raceOpen(service,secondReview,ready,begin);
+                var one=workers.submit(first);var two=workers.submit(second);
+                assertTrue("Both actual Android workers must reach the barrier",ready.await(3,TimeUnit.SECONDS));
+                begin.countDown();
+                var left=one.get(5,TimeUnit.SECONDS);var right=two.get(5,TimeUnit.SECONDS);
+                assertTrue("Exactly one persistent consume may win",(left==null)!=(right==null));
+                var winner=left!=null?left:right;
+                Bitmap output=Bitmap.createBitmap(24,16,Bitmap.Config.ARGB_8888);
+                try(var decoder=new RestrictedImages.Decoder(winner)) {
+                    decoder.render(new Canvas(output),new Rect(0,0,24,16));assertEquals(0xff336699,output.getPixel(8,8));
+                } finally {output.recycle();winner.close();}
+                winner.closure().toCompletableFuture().get(3,TimeUnit.SECONDS);
+                assertTrue(service.status(id).consumed());
+                fixture.vault.close();fixture.gate.unlock();fixture.vault.unlock(app.umbra.core.Bytes.utf8("synthetic password alpha"));
+                Engine reopened=new Engine(fixture.vault);assertTrue(reopened.restricted().status(id).consumed());
+                assertEquals(ContentException.Code.CONSUMED,assertThrows(ContentException.class,
+                    ()->reopened.restricted().open(reopened.restricted().reviewOpen(id),true)).code());
+                var report=new android.os.Bundle();report.putString("restrictedVaultRace",
+                    "PASS workers=2,winners=1,positiveDecoded=true,consumedAfterReopen=true,processes=1,fixtureNoAuthKeys=true");
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendStatus(0,report);
+            }
+        } finally {
+            begin.countDown();workers.shutdownNow();
+            try {assertTrue("Fixture workers must terminate",workers.awaitTermination(5,TimeUnit.SECONDS));}
+            finally {if(receiver!=null)receiver.restricted().closeAll();fixture.after();}
+        }
+    }
+    private static RestrictedContentService.Session raceOpen(RestrictedContentService service,
+            RestrictedContentService.Review review,java.util.concurrent.CountDownLatch ready,
+            java.util.concurrent.CountDownLatch begin)throws Exception {
+        ready.countDown();if(!begin.await(3,TimeUnit.SECONDS))throw new AssertionError("Synthetic consume barrier timed out");
+        try{return service.open(review,true);}
+        catch(ContentException denied){assertEquals(ContentException.Code.CONSUMED,denied.code());return null;}
+    }
+
     @Test public void sqliteConsumeFailureDoesNotDeliverDecoderSession() throws Exception {
         try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
