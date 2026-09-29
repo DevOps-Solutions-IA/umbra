@@ -107,11 +107,11 @@ class DirectRouteProbeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',
                 side_effect=[ok('1'),ok('inet 10.0.2.16/24'),ok(''),ok(''),ok(),ok('inet 10.0.2.16/24'),ok('wlan0 DOWN'),ok()]) as run,patch('voice_direct_route.time.sleep'),patch('voice_direct_route.select_owned_wifi') as select:
             report=Path(d)/'init.json'
-            initialize_owned_wifi('adb','emulator-5554',report)
+            self.assertTrue(initialize_owned_wifi('adb','emulator-5554',report))
             calls=[c.args[0][4:] for c in run.call_args_list]
             self.assertEqual(['svc','wifi','disable'],calls[4])
             self.assertEqual(['svc','wifi','enable'],calls[-1])
-            select.assert_called_once_with('adb','emulator-5554',Path(d)/'init-selection.json')
+            select.assert_not_called()
             self.assertEqual([False,True],[x['addressCleared'] for x in json.loads(report.read_text())['observations']])
 
     def test_initialization_timeout_never_claims_ready_or_enables_over_old_state(self):
@@ -152,7 +152,7 @@ class DirectRouteProbeTest(unittest.TestCase):
         from voice_direct_route import select_owned_wifi
         ok=lambda text='':subprocess.CompletedProcess([],0,text,'')
         with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',
-                side_effect=[ok('1'),ok('connect-network <ssid> open|owe|wpa2|wpa3'),ok('Connection initiated')]) as run:
+                side_effect=[ok('1'),ok('connect-network <ssid> open|owe|wpa2|wpa3'),ok('Wifi is enabled'),ok('Connection initiated')]) as run:
             report=Path(d)/'selection.json'
             select_owned_wifi('adb','emulator-5554',report)
             self.assertEqual(['su','0','cmd','wifi','connect-network','AndroidWifi','open'],run.call_args.args[0][4:])
@@ -172,6 +172,27 @@ class DirectRouteProbeTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError,'does not support'):
                 select_owned_wifi('adb','emulator-5554',report)
             self.assertEqual(2,run.call_count)
-            run.side_effect=[ok('1'),ok('connect-network <ssid> open|owe'),ok('Connection failed')]
+            run.side_effect=[ok('1'),ok('connect-network <ssid> open|owe'),ok('Wifi is enabled'),ok('Connection failed')]
             with self.assertRaisesRegex(RuntimeError,'selection failed'):
                 select_owned_wifi('adb','emulator-5554',report)
+
+    def test_selection_waits_for_enabled_radio_then_requires_route_in_same_budget(self):
+        import tempfile
+        ok=lambda text='':subprocess.CompletedProcess([],0,text,'')
+        replies=[ok(),ok(),ok('Wifi is disabled'),ok(),ok(),ok('Wifi is enabled'),
+                 ok('inet 10.0.2.16/24'),ok('10.0.2.2 dev wlan0 src 10.0.2.16')]
+        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',side_effect=replies),\
+                patch('voice_direct_route.select_owned_wifi') as select,patch('voice_direct_route.time.sleep'):
+            report=Path(d)/'ready.json'
+            self.assertEqual('10.0.2.16',wait_wifi_ipv4('adb','emulator-5554',report,associate=True))
+            select.assert_called_once_with('adb','emulator-5554',Path(d)/'ready-selection.json')
+
+    def test_virtual_ap_selection_never_runs_before_radio_enabled(self):
+        import tempfile
+        from voice_direct_route import select_owned_wifi
+        ok=lambda text='':subprocess.CompletedProcess([],0,text,'')
+        with tempfile.TemporaryDirectory() as d,patch('voice_direct_route.subprocess.run',
+                side_effect=[ok('1'),ok('connect-network <ssid> open|owe'),ok('Wifi is disabled')]) as run:
+            with self.assertRaisesRegex(RuntimeError,'radio is not enabled'):
+                select_owned_wifi('adb','emulator-5554',Path(d)/'selection.json')
+            self.assertFalse(any('connect-network' in call.args[0] for call in run.call_args_list))

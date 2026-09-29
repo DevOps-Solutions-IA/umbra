@@ -35,8 +35,8 @@ def restore_startup_wifi(adb,serial,reports):
     subprocess.run([adb,'-s',serial,'shell','svc','wifi','enable'],
                    check=True,capture_output=True,timeout=3)
     try:
-        select_owned_wifi(adb,serial,reports/'wifi-selection.json')
         time.sleep(5)
+        select_owned_wifi(adb,serial,reports/'wifi-selection.json')
     finally:
         observe_owned_network(adb,serial,reports/'network-after-restore.json')
         observe_startup_wifi(adb,serial,reports/'wifi-after-restore.json')

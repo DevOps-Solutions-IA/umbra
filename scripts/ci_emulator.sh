@@ -15,7 +15,9 @@ mkdir -p "$UMBRA_DEVICE_REPORTS"
 umbra_cleanup() {
   local original=$? cleanup_status=0 pid serial index
   trap - EXIT
-  for index in "${!UMBRA_EMULATOR_PIDS[@]}"; do
+  # Later AVDs share the first AVD's netsim service. Release dependents first.
+  # A nonzero process exit remains an error, including during graceful cleanup.
+  for ((index=${#UMBRA_EMULATOR_PIDS[@]}-1; index>=0; index--)); do
     pid="${UMBRA_EMULATOR_PIDS[$index]}"; serial="${UMBRA_EMULATOR_SERIALS[$index]}"
     if kill -0 "$pid" 2>/dev/null; then
       if timeout 10 "$ANDROID_HOME/platform-tools/adb" -s "$serial" emu kill; then :; else

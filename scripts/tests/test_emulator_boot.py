@@ -115,6 +115,27 @@ exit 42
             self.assertIn('waited:111', result.stdout)
             self.assertIn('waited:222', result.stdout)
 
+    def test_cleanup_closes_dependent_avd_before_first_shared_service_owner(self):
+        import os
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);script=Path(__file__).resolve().parents[1]/'ci_emulator.sh'
+            command='source "$1"\nUMBRA_EMULATOR_PIDS=(111 222)\nUMBRA_EMULATOR_SERIALS=(emulator-5554 emulator-5556)\nkill() { return 1; }\nwait() { echo "waited:$1"; return 0; }\nexit 0\n'
+            env=dict(os.environ,RUNNER_TEMP=str(root/'temp'),ANDROID_HOME=str(root/'sdk'),UMBRA_DEVICE_REPORTS=str(root/'reports'))
+            result=subprocess.run(['bash','-c',command,'test',str(script)],env=env,capture_output=True,text=True,timeout=10)
+            self.assertEqual(0,result.returncode,result.stderr)
+            self.assertEqual(['waited:222','waited:111'],result.stdout.splitlines())
+
+    def test_abnormal_emulator_shutdown_still_fails_successful_scenario(self):
+        import os
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);script=Path(__file__).resolve().parents[1]/'ci_emulator.sh'
+            command='source "$1"\nUMBRA_EMULATOR_PIDS=(111 222)\nUMBRA_EMULATOR_SERIALS=(emulator-5554 emulator-5556)\nkill() { return 1; }\nwait() { echo "waited:$1"; if [[ "$1" == 222 ]]; then return 134; fi; return 0; }\nexit 0\n'
+            env=dict(os.environ,RUNNER_TEMP=str(root/'temp'),ANDROID_HOME=str(root/'sdk'),UMBRA_DEVICE_REPORTS=str(root/'reports'))
+            result=subprocess.run(['bash','-c',command,'test',str(script)],env=env,capture_output=True,text=True,timeout=10)
+            self.assertEqual(1,result.returncode)
+            self.assertIn('exited abnormally',result.stderr)
+            self.assertEqual(2,len(result.stdout.splitlines()))
+
     def test_avd_not_created_fails_before_launch(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary); sdk = root / 'sdk'; (sdk / 'emulator').mkdir(parents=True)

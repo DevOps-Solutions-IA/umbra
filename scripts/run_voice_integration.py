@@ -189,6 +189,7 @@ def main():
             if result.returncode!=1: raise RuntimeError("ADB voice exchange failed")
             time.sleep(0.1)
         raise RuntimeError("Two-AVD voice exchange deadline exceeded: "+name)
+    association_needed={}
     for serial in (args.a,args.b):
         if run(serial,"shell","getprop","ro.kernel.qemu").stdout.strip()!=b"1": raise RuntimeError("Only synthetic AVDs supported")
         run(serial,"shell","svc","power","stayon","true")
@@ -203,7 +204,7 @@ def main():
         observe_owned_network(adb,serial,args.reports/f'network-before-data-disable-{serial}.json')
         run(serial,"shell","svc","data","disable")
         observe_owned_network(adb,serial,args.reports/f'network-after-data-disable-{serial}.json')
-        initialize_owned_wifi(adb,serial,args.reports/f'network-wifi-initialization-{serial}.json')
+        association_needed[serial]=initialize_owned_wifi(adb,serial,args.reports/f'network-wifi-initialization-{serial}.json')
         observe_owned_network(adb,serial,args.reports/f'network-after-wifi-enable-{serial}.json')
         variant="mediaLab" if args.optimized else "debug"
         for path in (f"connected/{variant}/app-connected-{variant}.apk",f"androidTest/connected/{variant}/app-connected-{variant}-androidTest.apk"):
@@ -268,7 +269,7 @@ def main():
                 candidates=list(root.glob("android*/netsimd/pcaps/*-"+avd_path.stem+"-WIFI.pcap"))
                 if len(candidates)!=1: raise RuntimeError("Owned netsim Wi-Fi capture missing; start with ci_emulator.sh")
                 capture_paths.append(candidates[0])
-                address=wait_wifi_ipv4(adb,serial,args.reports/f'wifi-ready-{serial}.json')
+                address=wait_wifi_ipv4(adb,serial,args.reports/f'wifi-ready-{serial}.json',associate=association_needed[serial])
                 addresses.append(str(ipaddress.ip_address(address)))
                 if args.turn_ipv6:
                     value=run(serial,"shell","ip","-6","addr","show","wlan0").stdout.decode()

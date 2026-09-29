@@ -105,6 +105,9 @@ def select_owned_wifi(adb, serial, report):
         receipt['supported'] = supported
         if not supported:
             raise RuntimeError('Installed AVD Wi-Fi CLI does not support explicit open AP selection')
+        state = command('cmd', 'wifi', 'status')
+        if state.returncode or not state.stdout.startswith('Wifi is enabled'):
+            raise RuntimeError('Owned AVD Wi-Fi radio is not enabled for selection')
         result = command('su', '0', 'cmd', 'wifi', 'connect-network', 'AndroidWifi', 'open')
         receipt['exit'] = result.returncode
         receipt['reportedFailure'] = 'fail' in (result.stdout + result.stderr).lower()
@@ -145,7 +148,7 @@ def initialize_owned_wifi(adb: str, serial: str, report):
         found=re.search(r'inet (10\.0\.2\.[0-9]+)/',address.stdout)
         if address.returncode==0 and route.returncode==0 and found and wifi_ipv4_route(route.stdout,found[1]):
             action='preserved-existing-route'
-            return
+            return False
         action='initialize-missing-route'
         result=command('svc','wifi','disable')
         if result.returncode:raise RuntimeError('Owned AVD Wi-Fi disable failed')
@@ -161,7 +164,7 @@ def initialize_owned_wifi(adb: str, serial: str, report):
             time.sleep(.2)
         result=command('svc','wifi','enable')
         if result.returncode:raise RuntimeError('Owned AVD Wi-Fi enable failed')
-        select_owned_wifi(adb,serial,report.with_name(report.stem+'-selection.json'))
+        return True  # Selection waits for enabled state within wait_wifi_ipv4's existing budget.
     finally:
         report.parent.mkdir(parents=True,exist_ok=True)
         report.write_text(json.dumps({'action':action,'before':before,'observations':observations,
@@ -175,8 +178,12 @@ def wifi_ipv4_route(text: str, source: str) -> bool:
             and not re.search(r'\b(?:unreachable|prohibit|blackhole)\b',text))
 
 
-def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20):
-    """Observe netlink only, no DNS/traffic. Same 20s AVD readiness budget as before."""
+def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20, associate=False):
+    """Observe netlink; optional owned-AP association shares the existing 20s budget.
+
+    Default is read-only. Association is host fixture setup, never application
+    network consent, and does not replace the subsequent UDP/media assertions.
+    """
     if not serial.startswith('emulator-') or not serial[9:].isdigit():
         raise ValueError('Owned emulator required')
     import json
@@ -192,6 +199,11 @@ def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20):
                 'source':found[1] if found else None,'route':route.stdout[:1024],'error':route.stderr[:512]})
             if ready:return found[1]
             if time.monotonic()-start>=timeout:raise RuntimeError('Owned AVD Wi-Fi IPv4 policy route unavailable within readiness budget')
+            if associate:
+                state=subprocess.run([adb,'-s',serial,'shell','cmd','wifi','status'],capture_output=True,text=True,timeout=3)
+                if state.returncode==0 and state.stdout.startswith('Wifi is enabled'):
+                    select_owned_wifi(adb,serial,reports.with_name(reports.stem+'-selection.json'))
+                    associate=False  # A single explicit selection, never a retry-until-green loop.
             time.sleep(.2)
     except (RuntimeError, subprocess.TimeoutExpired):
         # Owned synthetic AVD only. Capture control-plane state before cleanup;
