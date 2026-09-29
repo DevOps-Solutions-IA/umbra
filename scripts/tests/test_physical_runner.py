@@ -91,3 +91,33 @@ class PhysicalRunnerTests(unittest.TestCase):
         for code,out,err in ((2,'',''),(0,'','permission denied'),(1,'package:/data/app/a/base.apk',''),(0,'package:/personal/other','')):
             with patch.object(runner.subprocess,'run',return_value=subprocess.CompletedProcess([],code,out,err)), self.assertRaises(RuntimeError):
                 runner.installed_digest(['adb','-s','synthetic'],'app.umbra.privatechat.dev')
+
+    def test_r8_manifest_cannot_normalize_away_security_flags(self):
+        from test_build_validation import BuildValidationTests
+        import check_apk_policy
+        for flag in ('debuggable','allowBackup','fullBackupContent','usesCleartextTraffic','testOnly'):
+            root=BuildValidationTests().manifest()
+            root.set('package','app.umbra.privatechat.vaultlab')
+            root.find('application').set('android:debuggable','false')
+            root.find('application').set('android:'+flag,'true')
+            with patch.object(runner,'run',return_value='synthetic manifest') as call, \
+                    patch.object(check_apk_policy,'decode_tree',return_value=root), self.assertRaises(RuntimeError):
+                runner.inspect_optimized(Path('/synthetic.apk'),'connected',Path('/sdk'),Path('/mapping.txt'),{})
+            self.assertEqual(call.call_count,1)
+            self.assertEqual(root.get('package'),'app.umbra.privatechat.vaultlab')
+            self.assertEqual(root.find('application').get('android:'+flag),'true')
+
+    def test_explicit_server_remains_local_and_targeted(self):
+        self.assertEqual(runner.adb_command('adb.exe',5038), ['adb.exe','-H','localhost','-P','5038'])
+        for port in (0,503.8,'5038',65536):
+            with self.assertRaises(ValueError):runner.adb_command('adb.exe',port)
+        with patch.object(runner,'run',return_value='List of devices attached\n') as call:
+            with self.assertRaises(RuntimeError):runner.physical_profile('adb.exe','synthetic',5038)
+            self.assertEqual(call.call_args.args[0],['adb.exe','-H','localhost','-P','5038','devices','-l'])
+
+    def test_install_reports_only_fixed_error_code(self):
+        result=runner.install_outcome(1,'','adb: failed with INSTALL_FAILED_USER_RESTRICTED: synthetic private detail')
+        self.assertEqual(result['code'],'INSTALL_FAILED_USER_RESTRICTED')
+        self.assertNotIn('private',str(result))
+        self.assertEqual(runner.install_outcome(0,'Success\n','')['result'],'SUCCESS')
+        self.assertEqual(runner.install_outcome(1,'Success\n','')['result'],'FAILED')

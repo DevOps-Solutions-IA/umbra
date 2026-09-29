@@ -22,9 +22,10 @@ public final class PhysicalKeystoreFixture extends RunListener {
     @Override public void testRunStarted(Description description) throws Exception {
         var instrumentation=InstrumentationRegistry.getInstrumentation();
         assertEquals("true",InstrumentationRegistry.getArguments().getString("physicalSafe"));
-        assertTrue(BuildConfig.DEBUG);
-        assertTrue(Set.of("app.umbra.privatechat.dev","app.umbra.privatechat.offline.dev")
-            .contains(instrumentation.getTargetContext().getPackageName()));
+        String target=instrumentation.getTargetContext().getPackageName();
+        assertTrue(Set.of("app.umbra.privatechat.dev","app.umbra.privatechat.offline.dev",
+            "app.umbra.privatechat.vaultlab","app.umbra.privatechat.offline.vaultlab").contains(target));
+        assertEquals(target.endsWith(".dev"),BuildConfig.DEBUG);
         String alias="umbra-physical-synthetic-"+UUID.randomUUID();
         KeyStore store=KeyStore.getInstance("AndroidKeyStore");store.load(null);
         assertFalse(store.containsAlias(alias));

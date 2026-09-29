@@ -76,9 +76,18 @@ def device_lock(directory, serial):
             fcntl.flock(lock, fcntl.LOCK_UN)
 
 
-def physical_profile(adb, serial):
-    select_device(run([adb, 'devices', '-l']), serial)
-    command = [adb, '-s', serial]
+def adb_command(adb, port=None):
+    if port is None:
+        return [adb]
+    if not isinstance(port,int) or not 1024 <= port <= 65535:
+        raise ValueError('Local ADB server port outside allowed range')
+    return [adb, '-H', 'localhost', '-P', str(port)]
+
+
+def physical_profile(adb, serial, port=None):
+    prefix = adb_command(adb, port)
+    select_device(run([*prefix, 'devices', '-l']), serial)
+    command = [*prefix, '-s', serial]
     props = {key: run([*command, 'shell', 'getprop', key]).strip() for key in PROPERTIES}
     if props['ro.kernel.qemu'] == '1' or not props['ro.build.version.sdk'].isdigit():
         raise RuntimeError('Physical device/API could not be established')
@@ -174,6 +183,42 @@ def apk_path_for_adb(adb, apk):
     return str(apk.resolve())
 
 
+def inspect_optimized(apk, flavor, tools, mapping, receipt):
+    from copy import deepcopy
+    from check_apk_policy import decode_tree, validate_manifest, validate_resources, validate_dex
+    from run_privacy_tests import optimized_classes
+    tree = decode_tree(run([str(tools/'aapt'), 'dump', 'xmltree', str(apk), 'AndroidManifest.xml']))
+    if tree.get('package') != package(flavor, True):
+        raise RuntimeError('Unexpected optimized laboratory applicationId')
+    # Only the isolated applicationId differs from the production manifest policy.
+    # Do not normalize debuggable/testOnly/permissions/components or other flags.
+    normalized = deepcopy(tree)
+    normalized.set('package', 'app.umbra.privatechat' + ('.offline' if flavor == 'offline' else ''))
+    refs = validate_manifest(normalized, flavor, 'release')
+    table = run([str(tools/'aapt'), 'dump', '--values', 'resources', str(apk)])
+    resources = []
+    for ref in refs:
+        paths = set(re.findall(r'resource ' + ref[1:] + r' [^\n]+\n\s*\(string8\) "([^"]+)"', table))
+        if len(paths) != 1:
+            raise RuntimeError('Ambiguous optimized policy resource')
+        resources.append(decode_tree(run([str(tools/'aapt'), 'dump', 'xmltree', str(apk), paths.pop()])))
+    validate_resources(*resources)
+    with zipfile.ZipFile(apk) as archive:
+        validate_dex(archive)
+    configuration = mapping.with_name('configuration.txt')
+    receipt['optimizedClasses'] = optimized_classes(mapping.read_text(), configuration.read_text())
+    receipt['mappingSha256'] = digest(mapping)
+    receipt['configurationSha256'] = digest(configuration)
+    receipt['exactProductionApk'] = False
+
+
+def install_outcome(code, stdout, stderr):
+    if code == 0 and re.search(r'^Success\s*$', stdout, re.M):
+        return {'exitCode': code, 'result': 'SUCCESS', 'code': 'SUCCESS'}
+    match=re.search(r'\b(INSTALL_(?:FAILED|PARSE_FAILED)_[A-Z_]+)\b',stdout+'\n'+stderr)
+    return {'exitCode': code, 'result': 'FAILED', 'code': match[1] if match else 'INSTALL_COMMAND_FAILED'}
+
+
 def execute(args, profile, state_path, receipt):
     pkg = package(args.flavor, args.optimized)
     tools = Path(args.sdk) / 'build-tools' / '35.0.0'
@@ -192,10 +237,13 @@ def execute(args, profile, state_path, receipt):
         from check_debug_apks import inspect as inspect_jni_permissions
         inspect_jni_permissions(apks[0], tools / 'aapt', args.flavor)
     else:
-        raise RuntimeError('Physical R8 runner coverage not yet implemented; no debug substitution')
+        mapping=ROOT/'android/app/build/outputs/mapping'/(args.flavor+'VaultLab')/'mapping.txt'
+        inspect_optimized(apks[0], args.flavor, tools, mapping, receipt)
+        from check_debug_apks import inspect as inspect_jni_permissions
+        inspect_jni_permissions(apks[0], tools / 'aapt', args.flavor)
     receipt['artifacts'] = infos
     owned = json.loads(state_path.read_text()) if state_path.exists() else {}
-    command = [args.adb, '-s', args.serial]
+    command = [*adb_command(args.adb,args.server_port), '-s', args.serial]
     installs = []
     for info, apk in zip(infos, apks):
         installed = installed_digest(command, info['package'])
@@ -205,9 +253,13 @@ def execute(args, profile, state_path, receipt):
     for info, apk in installs:
         if digest(apk) != info['sha256']:
             raise RuntimeError('APK changed after inspection')
-        result = run([*command, 'install', '-t', apk_path_for_adb(args.adb, apk)], 180)
-        if not re.search(r'^Success\s*$', result, re.M):
-            raise RuntimeError('APK install did not confirm success')
+        result = subprocess.run([*command, 'install', '-t', apk_path_for_adb(args.adb, apk)],
+                                capture_output=True, text=True, timeout=180)
+        # Only fixed Android error code, never arbitrary installer stderr or paths.
+        outcome = install_outcome(result.returncode, result.stdout, result.stderr)
+        receipt.setdefault('installAttempts', []).append({'package': info['package'], **outcome})
+        if outcome['result'] != 'SUCCESS':
+            raise RuntimeError('Isolated APK install failed: ' + outcome['code'])
         if installed_digest(command, info['package']) != info['sha256']:
             raise RuntimeError('Installed bytes differ from inspected APK')
         owned[info['package']] = info['sha256']
@@ -226,6 +278,13 @@ def execute(args, profile, state_path, receipt):
         if not valid_receipt(text, result.returncode):
             raise RuntimeError('Physical instrumentation did not pass every selected case')
         receipt['result'] = 'PASS'
+    except subprocess.TimeoutExpired as expired:
+        def printable(value):
+            return value.decode(errors='replace') if isinstance(value,bytes) else (value or '')
+        partial=(printable(expired.stdout)+printable(expired.stderr)).replace(args.serial,'[selected-device]')
+        (args.reports/'instrumentation.log').write_text(partial)
+        receipt.update(exitCode=None, elapsedNanos=time.monotonic_ns()-started, timedOut=True)
+        raise RuntimeError('Physical instrumentation timed out; partial output retained') from None
     finally:
         # Only our preflighted, owned package. No caller-selected arbitrary shell operations.
         run([*command, 'shell', 'am', 'force-stop', pkg])
@@ -234,6 +293,7 @@ def execute(args, profile, state_path, receipt):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--adb', required=True)
+    parser.add_argument('--server-port', type=int, help='Explicit existing localhost ADB server; never kills/restarts a server')
     parser.add_argument('--serial', required=True)
     parser.add_argument('--safe', required=True, action='store_true')
     parser.add_argument('--flavor', choices=('connected', 'offline'), default='offline')
@@ -246,7 +306,7 @@ def main():
     parser.add_argument('--signer-sha256')
     args = parser.parse_args()
     args.reports.mkdir(parents=True, exist_ok=False)  # Never overwrite an earlier attempt.
-    evidence = {'layer': 'PHYSICAL_LAB', 'result': 'NOT_EXECUTED', 'cases': CASES,
+    evidence = {'adbServerPort': args.server_port or 5037, 'layer': 'PHYSICAL_LAB', 'result': 'NOT_EXECUTED', 'cases': CASES,
                 'productionAuthenticationTested': False, 'physicalTwoPeerTested': False,
                 'sourceHead': run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD']).strip(),
                 'sourceTree': run(['git', '-C', str(ROOT), 'rev-parse', 'HEAD^{tree}']).strip(),
@@ -256,8 +316,8 @@ def main():
                             'globalPacketAbsence': 'BLOCKED_OBSERVABILITY', 'cameraMicrophoneLocation': 'MANUAL_PENDING'}}
     try:
         with device_lock(Path.home() / '.cache/umbra-physical-locks', args.serial) as state:
-            evidence['adbVersion'] = run([args.adb, 'version']).splitlines()[:2]
-            profile = physical_profile(args.adb, args.serial)
+            evidence['adbVersion'] = run([*adb_command(args.adb,args.server_port), 'version']).splitlines()[:2]
+            profile = physical_profile(args.adb, args.serial, args.server_port)
             evidence['device'] = profile
             if args.execute:
                 if not all((args.sdk, args.app_apk, args.test_apk)):

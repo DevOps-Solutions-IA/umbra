@@ -1,10 +1,20 @@
 # Physical device laboratory (master v4)
 
-Status: safe runner implemented; physical execution NOT EXECUTED until an explicit
-USB target is available. Claude owns the product UI and its later combined tests.
-This host runs WSL2. Official platform-tools 36.0.0-13206524 is present both in the
-Linux SDK and Windows. On 2026-09-28 both `devices -l` lists were empty. No server
-restart, USB bind, global setting change or package installation was performed.
+Status: a physical USB target passed read-only preflight on 2026-09-28.
+First installation was blocked; physical test results must be taken from dated
+receipts, not inferred from detection. Claude owns later combined UI validation.
+
+On this WSL2 host Windows port 5037 was owned by `wslrelay`, forwarding to Linux
+ADB without USB access. Windows ADB 36.0.0 on a separate localhost-only port 5038
+then detected the phone. The owner accepted its RSA prompt. The existing server
+was not killed/restarted; no USB bind, firewall or driver changes were made.
+Use `--server-port 5038` consistently for this selected route. It cannot select
+a remote server, start one, or replace another server. A separately owned server
+can be stopped after all tasks using it finish; do not stop the unrelated 5037.
+
+Read-only profile: Xiaomi 2606FRN72L, Android 16/API 36, ARM64/ARM32, patch
+2026-05-01; battery 57%, 32 C at preflight. Boot properties green/locked are
+informational, not attestation. Serial is kept privately outside repository.
 
 ## First lane: no sensors, no external endpoints
 
@@ -27,7 +37,7 @@ For execution additionally provide `--execute --flavor connected|offline`,
 `--signer-sha256` from the exact locally built debug certificate. Build with
 JDK 21 and the pinned Gradle first. The runner verifies signature, package,
 instrumentation target, existing APK policy/JNI/permission guards and ABI before
-installing either package. It installs only `.dev` isolated packages, without
+installing either package. It installs only `.dev` or optimized `.vaultlab` isolated packages, without
 `-r`, downgrade or permission grants. Existing unowned packages block the run,
 even if signed alike. There is no uninstall/clear workaround. Its private local
 ownership receipt permits rerunning only the exact previously installed bytes;
@@ -61,8 +71,12 @@ Raw instrumentation logs still require review before public upload.
   human consent and an audited per-case runner required. No ambient recording.
 - Force-stop/restart restricted consumption: existing AVD coverage retained;
   physical dedicated lane pending. SQLite reopen is not death during commit.
-- R8 physical execution: explicitly refused by this first runner version;
-  existing AVD R8 suites remain. Debug is never reported as R8.
+- R8 physical execution: the runner supports `--optimized` using the existing
+  non-debuggable vaultLab flavor, exact mapping/configuration hashes and native
+  APK/JNI/permission guards. Only the package name differs in the manifest policy
+  comparison; debug flags, backup, TLS and components cannot be normalized away.
+  This branch's optimized APKs passed local inspection, but physical R8 execution
+  is NOT EXECUTED. Existing AVD R8 suites remain. It is not the exact product APK.
 - RFCOMM Android-to-Android and bidirectional physical media: NEEDS_SECOND_PEER.
 - No-network global packet absence on non-root phone: BLOCKED_OBSERVABILITY
   where per-UID observation is unavailable; relay silence alone is insufficient.
