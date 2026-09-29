@@ -39,22 +39,59 @@ public final class RestrictedRestartFixtureListener extends RunListener {
                 Bitmap output=Bitmap.createBitmap(16,16,Bitmap.Config.ARGB_8888);
                 decoder.render(new Canvas(output),new Rect(0,0,16,16));
                 if(output.getPixel(8,8)!=0xff447799 || !b.restricted().status(id).consumed())throw new AssertionError("No positive consumed render");
-                output.recycle();status("READY committed consumption and positive render; awaiting host force-stop");
+                output.recycle();
+                // Independent formats share the same persisted consume contract. No audible
+                // playback: observe synthetic AAC after the real native decoder instead.
+                var audioReview=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,60);
+                String audioId;
+                try(var prepared=SyntheticRestrictedAudio.sanitizedTone(a,audioReview)) {
+                    audioId=a.restricted().send(audioReview,prepared,true);
+                }
+                var pdfReview=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,60);
+                String pdfId;
+                try(var prepared=SyntheticDocuments.prepare(InstrumentationRegistry.getInstrumentation().getTargetContext(),a,pdfReview,0xff447799)) {
+                    pdfId=a.restricted().send(pdfReview,prepared,true);
+                }
+                for(var row:a.outbox()) {
+                    var wire=row.getJSONObject("envelope");b.receive(wire);
+                    br.transaction(()->{br.put("synthetic-restart",wire.getString("id"),Bytes.utf8(wire.toString()));return null;});
+                }
+                var audioSession=b.restricted().open(b.restricted().reviewOpen(audioId),true);
+                var observation=SyntheticRestrictedAudio.observe(audioSession);
+                if(observation.samples()<16000 || observation.rms()<1000 || observation.targetEnergy()<=observation.otherEnergy()*10)
+                    throw new AssertionError("No positive synthetic AAC decode");
+                var pdfSession=b.restricted().open(b.restricted().reviewOpen(pdfId),true);
+                var pdfDecoder=new RestrictedDocuments.Decoder(pdfSession);
+                Bitmap page=Bitmap.createBitmap(32,24,Bitmap.Config.ARGB_8888);
+                try {
+                    pdfDecoder.render(0,new Canvas(page),new Rect(0,0,32,24));
+                    if(page.getPixel(12,12)!=0xff447799)throw new AssertionError("No positive PDF render");
+                }finally{page.recycle();}
+                if(br.keys("restricted-state").size()!=3 || !br.keys("restricted-object").isEmpty())
+                    throw new AssertionError("Three consumed formats required before force-stop");
+                status("READY formats=PNG,AAC_ADTS,PDF_PAGES committed consumption and positive decode/render; awaiting host force-stop");
                 while(true)Thread.sleep(1000);
             }
         } else if(phase.equals("verify")) {
             // Synthetic SQLite adapter unlocks itself; this is NOT a production Keystore unlock test.
             try(var br=new SqliteDeviceRecords("restricted-restart",true)) {
                 var b=new Engine(br);
-                if(!b.initialized() || br.keys("restricted-state").size()!=1 || !br.keys("restricted-object").isEmpty())
+                if(!b.initialized() || br.keys("restricted-state").size()!=3 || !br.keys("restricted-object").isEmpty())
                     throw new AssertionError("Consumed record or removed payload did not survive");
-                String id=br.keys("restricted-state").get(0);
-                b.receive(new JSONObject(Bytes.text(br.get("synthetic-restart","envelope"))));
-                if(br.keys("restricted-state").size()!=1 || !br.keys("restricted-object").isEmpty() || !b.restricted().status(id).consumed())
+                var formats=java.util.EnumSet.noneOf(RestrictedPayload.Format.class);
+                for(String key:br.keys("synthetic-restart"))
+                    b.receive(new JSONObject(Bytes.text(br.get("synthetic-restart",key))));
+                if(br.keys("restricted-state").size()!=3 || !br.keys("restricted-object").isEmpty())
                     throw new AssertionError("Duplicate restored consumed payload");
-                try {b.restricted().open(b.restricted().reviewOpen(id),true);throw new AssertionError("Consumed object reopened");}
-                catch(ContentException denied){if(denied.code()!=ContentException.Code.CONSUMED)throw denied;}
-                status("PASS consumed PNG cannot reopen or revive after actual process force-stop");
+                for(String id:br.keys("restricted-state")) {
+                    var item=b.restricted().status(id);formats.add(item.format());
+                    if(!item.consumed())throw new AssertionError("Consumption not durable");
+                    try {b.restricted().open(b.restricted().reviewOpen(id),true);throw new AssertionError("Consumed object reopened");}
+                    catch(ContentException denied){if(denied.code()!=ContentException.Code.CONSUMED)throw denied;}
+                }
+                if(!formats.equals(java.util.EnumSet.of(RestrictedPayload.Format.PNG,RestrictedPayload.Format.AAC_ADTS,RestrictedPayload.Format.PDF_PAGES)))
+                    throw new AssertionError("Wrong durable format inventory");
+                status("PASS formats=PNG,AAC_ADTS,PDF_PAGES cannot reopen or revive after actual process force-stop");
             }
         } else throw new SecurityException("Specify synthetic restart phase");
     }

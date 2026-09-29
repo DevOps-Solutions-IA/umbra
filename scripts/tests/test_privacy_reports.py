@@ -8,9 +8,9 @@ spec.loader.exec_module(runner)
 
 class PrivacyReportsTest(unittest.TestCase):
     def test_restart_requires_domain_receipt_and_completed_jni_suite(self):
-        good = 'restrictedRestart=PASS\nOK (3 tests)\nINSTRUMENTATION_CODE: -1\n'
+        good = 'restrictedRestart=PASS formats=PNG,AAC_ADTS,PDF_PAGES\nOK (3 tests)\nINSTRUMENTATION_CODE: -1\n'
         self.assertTrue(runner.valid_restart_report(good, 0))
-        for bad in ('', good.replace('PASS', 'READY'), good.replace('3 tests', '0 tests'),
+        for bad in ('', good.replace('PASS', 'READY'), good.replace(',AAC_ADTS,PDF_PAGES', ''), good.replace('3 tests', '0 tests'),
                     good + 'Process crashed', good + 'INSTRUMENTATION_STATUS_CODE: -2'):
             self.assertFalse(runner.valid_restart_report(bad, 0))
         self.assertFalse(runner.valid_restart_report(good, 1))

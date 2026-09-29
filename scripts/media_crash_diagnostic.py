@@ -21,6 +21,12 @@ def summarize(text, package):
                        'nativeModules': sorted(set(modules)),
                        'jniCheckFailure': 'JNI DETECTED ERROR' in block,
                        'nativeCheckFailure': 'Check failed:' in block,
-                       'nativeSites': [site for site in ('MediaMuxer', 'MPEG4Writer', 'MediaCodec', 'CCodecBufferChannel', 'ABuffer', 'MediaImage', 'DirectByteBuffer') if site in block]})
+                       'nativeSites': [site for site in ('MediaMuxer', 'MPEG4Writer', 'MediaCodec', 'CCodecBufferChannel', 'ABuffer', 'MediaImage', 'DirectByteBuffer',
+                           'MPEG4Writer::init', 'MPEG4Writer::start', 'MPEG4Writer::stop',
+                           'MPEG4Writer::addSource', 'MPEG4Writer::write', 'MPEG4Writer::endBox',
+                           'MPEG4Writer::Track::Track', 'MPEG4Writer::Track::setTimeScale',
+                           'MPEG4Writer::Track::getCodecSpecificDataFromInputFormatIfPossible',
+                           'MPEG4Writer::Track::writeAvccBox', 'MPEG4Writer::Track::writeMp4aEsdsBox',
+                           'MPEG4Writer::Track::makeAVCCodecSpecificData', 'MPEG4Writer::Track::threadEntry') if site in block]})
     return {'ownedCrashRecords': result[:4], 'rawLogPersisted': False,
             'scope': 'recent crash buffer for owned package; may include earlier scenarios'}

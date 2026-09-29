@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def valid_restart_report(text, code):
-    return (code == 0 and 'restrictedRestart=PASS' in text
+    return (code == 0 and 'restrictedRestart=PASS formats=PNG,AAC_ADTS,PDF_PAGES' in text
             and re.search(r'^OK \(3 tests\)$', text, re.M)
             and 'INSTRUMENTATION_CODE: -1' in text
             and not re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)
@@ -31,7 +31,7 @@ def consumption_restart(adb, package, reports):
         process = subprocess.Popen([*command, 'prepare', runner], stdout=stream, stderr=subprocess.STDOUT)
         try:
             deadline = time.monotonic() + 45
-            while 'restrictedRestart=READY' not in before.read_text():
+            while 'restrictedRestart=READY formats=PNG,AAC_ADTS,PDF_PAGES' not in before.read_text():
                 if process.poll() is not None or time.monotonic() >= deadline:
                     raise RuntimeError('Restricted positive render/consume not reached; inspect ' + str(before))
                 time.sleep(0.1)
@@ -56,7 +56,7 @@ def consumption_restart(adb, package, reports):
     if not valid_restart_report(after.read_text(), result.returncode):
         raise RuntimeError('Restricted restart/duplicate rejection not verified; inspect ' + str(after))
     (reports / 'restricted-restart.json').write_text(json.dumps({
-        'result': 'PASS', 'positiveRenderBeforeKill': True, 'hostForceStop': True,
+        'formats': ['PNG', 'AAC_ADTS', 'PDF_PAGES'], 'result': 'PASS', 'positiveDecodeRenderBeforeKill': True, 'hostForceStop': True,
         'deathDuringCommit': False, 'storage': 'synthetic-plaintext-SQLite-test-adapter',
         'productionKeystore': False, 'consumedReopenRejected': True,
         'postRestartDuplicateRejected': True}, indent=2) + '\n')
