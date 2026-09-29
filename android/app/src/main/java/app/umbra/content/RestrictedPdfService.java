@@ -41,12 +41,18 @@ public final class RestrictedPdfService extends Service {
     @SuppressWarnings("deprecation") // Typed Parcelable overload is API 33; minSdk remains 31.
     private static ParcelFileDescriptor legacyDescriptor(Bundle arguments){return arguments.getParcelable("input");}
     private void render(ParcelFileDescriptor input,Messenger recipient) {
-        byte[] packed=null;boolean success=false;
+        byte[] packed=null;boolean success=false;int failureStage=1;
         var pages=new ArrayList<byte[]>();
-        try(input;var renderer=openChecked(input)) {
+        try(input) {
+            long inputSize=input.getStatSize();
+            if(inputSize<1 || inputSize>RestrictedPayload.MAX_BYTES)throw RestrictedPayload.invalid();
+            failureStage=2;
+            try(var renderer=new PdfRenderer(input)) {
+            failureStage=3;
             int count=renderer.getPageCount();
             if(count<1 || count>DocumentPages.MAX_PAGES)throw RestrictedPayload.invalid();
             int remaining=RestrictedPayload.MAX_BYTES-8;
+            failureStage=4;
             for(int index=0;index<count;index++) {
                 try(var page=renderer.openPage(index)) {
                     int width=page.getWidth(),height=page.getHeight();
@@ -64,7 +70,8 @@ public final class RestrictedPdfService extends Service {
                     } finally {bitmap.recycle();}
                 }
             }
-            packed=DocumentPages.pack(pages);
+            failureStage=5;packed=DocumentPages.pack(pages);failureStage=6;
+            }
         } catch(Exception | OutOfMemoryError failure) {
             // No parser exception, path, document metadata or bytes enter diagnostics.
             if(packed!=null)Arrays.fill(packed,(byte)0);packed=null;
@@ -73,15 +80,11 @@ public final class RestrictedPdfService extends Service {
         try {
             Message reply=Message.obtain(null,RESULT);reply.arg1=success?1:0;reply.arg2=android.os.Process.isIsolated()?1:0;
             if(success){Bundle data=new Bundle();data.putByteArray("pages",packed);reply.setData(data);}
+            else {Bundle data=new Bundle();data.putInt("failureStage",failureStage);reply.setData(data);}
             recipient.send(reply);
         } catch(RemoteException unavailable) {
             // The parent cannot receive a successful result; process death still confirms closure.
         } finally {if(packed!=null)Arrays.fill(packed,(byte)0);terminate();}
-    }
-    private static PdfRenderer openChecked(ParcelFileDescriptor input)throws Exception {
-        long size=input.getStatSize();
-        if(size<1 || size>RestrictedPayload.MAX_BYTES)throw RestrictedPayload.invalid();
-        return new PdfRenderer(input);
     }
     private void terminate() {
         // This endpoint can terminate only its own OS-isolated parser process.

@@ -83,7 +83,7 @@ public class RestrictedContentAndroidTest {
             var session=b.restricted().open(b.restricted().reviewOpen(id),true);
             try {
                 var observed=SyntheticRestrictedAudio.observe(session);
-                var receipt=new android.os.Bundle();receipt.putString("restrictedAac", "decodedSamples="+observed.samples()+",encodedFrames="+observed.encodedFrames()+",tailFraction="+observed.tailFraction()+",rms="+observed.rms());
+                var receipt=new android.os.Bundle();receipt.putString("restrictedAac", "decodedSamples="+observed.samples()+",encodedFrames="+observed.encodedFrames()+",tailFraction="+observed.tailFraction()+",rms="+observed.rms()+",markerStart="+observed.markerStart()+",markerFraction="+observed.markerFraction());
                 androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendStatus(0,receipt);
                 assertTrue("Decoded note shorter than input: "+observed.samples(),observed.samples()>=16000);
                 assertTrue("Decoded note exceeded bounded priming: "+observed.samples(),observed.samples()<24000);

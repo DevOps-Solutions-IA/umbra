@@ -70,7 +70,13 @@ final class PdfPreparation {
                 }catch(Exception failure){if(!binder.isBinderAlive())death.complete(null);result.completeExceptionally(RestrictedPayload.invalid());cancel();}
             }
             @Override public void onServiceDisconnected(ComponentName name){/* Actual Binder death confirms closure. */}
-            @Override public void onBindingDied(ComponentName name){cancel();}
+            @Override public void onBindingDied(ComponentName name){
+                // A one-job parser intentionally exits after replying. Android may
+                // deliver binding death before the reply/death futures are observed
+                // together. Binding loss is not user/lease cancellation. Keep the
+                // existing bounded wait: only authenticated result + actual Binder
+                // death permit success; missing either still fails closed.
+            }
             @Override public void onNullBinding(ComponentName name){dead.complete(null);result.completeExceptionally(RestrictedPayload.invalid());}
         };
         Job(Context context,Runnable authorization) {
@@ -83,10 +89,21 @@ final class PdfPreparation {
             handler=new Handler(callbacks.getLooper(),message->{
                 byte[] pages=null;
                 try {
-                    if(message.what!=RestrictedPdfService.RESULT || message.arg1!=1 || message.arg2!=1 || cancelled.get() ||
+                    if(message.what!=RestrictedPdfService.RESULT || (message.arg1!=0 && message.arg1!=1) || message.arg2!=1 || cancelled.get() ||
                             message.sendingUid==android.os.Process.myUid() ||
                             (Build.VERSION.SDK_INT>=34 && !android.os.Process.isIsolatedUid(message.sendingUid)))throw RestrictedPayload.invalid();
-                    Bundle data=message.getData();if(!data.keySet().equals(Set.of("pages")))throw RestrictedPayload.invalid();
+                    Bundle data=message.getData();
+                    if(message.arg1==0) {
+                        if(!data.keySet().equals(Set.of("failureStage")))throw RestrictedPayload.invalid();
+                        String phase=switch(data.getInt("failureStage",0)) {
+                            case 1 -> "PDF_INPUT_STAT_FAILED";case 2 -> "PDF_OPEN_FAILED";
+                            case 3 -> "PDF_PAGE_COUNT_REJECTED";case 4 -> "PDF_RENDER_FAILED";
+                            case 5 -> "PDF_PACK_FAILED";case 6 -> "PDF_NATIVE_CLOSE_FAILED";
+                            default -> throw RestrictedPayload.invalid();
+                        };
+                        result.completeExceptionally(new IllegalStateException(phase));return true;
+                    }
+                    if(!data.keySet().equals(Set.of("pages")))throw RestrictedPayload.invalid();
                     pages=data.getByteArray("pages");DocumentPages.parse(pages);authorization.run();
                     if(!result.complete(pages)){Arrays.fill(pages,(byte)0);}return true;
                 }catch(Exception failure){if(pages!=null)Arrays.fill(pages,(byte)0);result.completeExceptionally(RestrictedPayload.invalid());return true;}
@@ -101,10 +118,16 @@ final class PdfPreparation {
             long started=System.nanoTime();
             while(!result.isDone() || !dead.isDone()) {
                 authorization.run();
-                if(cancelled.get() || System.nanoTime()-started>12_000_000_000L)throw RestrictedPayload.invalid();
+                if(cancelled.get() || System.nanoTime()-started>12_000_000_000L) {
+                    var denied=RestrictedPayload.invalid();
+                    denied.initCause(new IllegalStateException("PDF_WAIT_"+(connected.get()?"CONNECTED":"UNCONNECTED")+
+                        (result.isDone()?"_RESULT":"_NO_RESULT")+(dead.isDone()?"_DEAD":"_ALIVE")+
+                        (cancelled.get()?"_CANCELLED":"_DEADLINE")));
+                    throw denied;
+                }
                 Thread.sleep(10);
             }
-            try {byte[] value=result.get();claimed=true;return value;}catch(ExecutionException invalid){throw RestrictedPayload.invalid();}
+            try {byte[] value=result.get();claimed=true;return value;}catch(ExecutionException invalid){var denied=RestrictedPayload.invalid();denied.initCause(invalid.getCause());throw denied;}
         }
         void cancel() {
             cancelled.set(true);if(source!=null)source.invalidate();Messenger remote=endpoint.get();

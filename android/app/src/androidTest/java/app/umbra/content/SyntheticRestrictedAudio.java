@@ -37,7 +37,7 @@ public final class SyntheticRestrictedAudio {
             } finally {Arrays.fill(unchanged,(byte)0);}
         } finally {Arrays.fill(pcm,(short)0);if(original!=null)Arrays.fill(original,(byte)0);}
     }
-    public record Observation(int samples,double rms,double targetEnergy,double otherEnergy,int encodedFrames,double tailFraction) {}
+    public record Observation(int samples,double rms,double targetEnergy,double otherEnergy,int encodedFrames,double tailFraction,int markerStart,double markerFraction) {}
     public static RestrictedContentService.Prepared silence(Runnable authorization)throws Exception {
         short[] pcm=new short[RestrictedAudio.SAMPLE_RATE];
         try{return RestrictedAudio.encode(pcm,authorization);}finally{Arrays.fill(pcm,(short)0);}
@@ -86,7 +86,18 @@ public final class SyntheticRestrictedAudio {
                     for(int i=0;i<512;i++){double sample=pcm[start+i];total+=sample*sample;re+=sample*Math.cos(2*Math.PI*1320*i/16000);im+=sample*Math.sin(2*Math.PI*1320*i/16000);}
                     if(total>512*1000.0*1000.0)tailFraction=Math.max(tailFraction,2*(re*re+im*im)/(512*total));
                 }
-                return new Observation(pcm.length,Math.sqrt(energy/count),target,other,frames,tailFraction);
+                // Diagnostic only: find synthetic end marker across the decoded note, keeping
+                // the original bounded-tail acceptance unchanged until cause is demonstrated.
+                int markerStart=-1;double markerFraction=0;
+                for(int start=0;start+512<=pcm.length;start+=128) {
+                    double re=0,im=0,total=0;
+                    for(int i=0;i<512;i++){double sample=pcm[start+i];total+=sample*sample;re+=sample*Math.cos(2*Math.PI*1320*i/16000);im+=sample*Math.sin(2*Math.PI*1320*i/16000);}
+                    if(total>512*1000.0*1000.0) {
+                        double fraction=2*(re*re+im*im)/(512*total);
+                        if(fraction>markerFraction){markerFraction=fraction;markerStart=start;}
+                    }
+                }
+                return new Observation(pcm.length,Math.sqrt(energy/count),target,other,frames,tailFraction,markerStart,markerFraction);
             }finally{Arrays.fill(pcm,(short)0);}
         },ignored->{});
     }

@@ -64,5 +64,14 @@ public final class PhysicalKeystoreFixture extends RunListener {
         Bundle result=new Bundle();result.putString("physicalKeystoreLevel",level);
         result.putString("physicalKeystoreAuthentication","NON_AUTHENTICATED_LAB_KEY_ONLY");
         instrumentation.sendStatus(0,result);
+        for(boolean encoding:new boolean[]{true,false}) {
+            var codec=encoding?android.media.MediaCodec.createEncoderByType("audio/mp4a-latm"):
+                android.media.MediaCodec.createDecoderByType("audio/mp4a-latm");
+            try {
+                String name=codec.getName();assertTrue(name.matches("[A-Za-z0-9._-]{1,120}"));
+                Bundle selected=new Bundle();selected.putString(encoding?"physicalDefaultAacEncoder":"physicalDefaultAacDecoder",name);
+                instrumentation.sendStatus(0,selected);
+            }finally{codec.release();}
+        }
     }
 }

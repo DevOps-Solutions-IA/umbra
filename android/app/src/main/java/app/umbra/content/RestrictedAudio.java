@@ -99,6 +99,11 @@ public final class RestrictedAudio {
         // AAC-LC encodes 1024-sample access units. Do not rely on an encoder
         // emitting an incomplete PCM frame at EOS; append only zero alignment samples.
         int alignedSamples=((pcm.length+FRAME_SAMPLES-1)/FRAME_SAMPLES)*FRAME_SAMPLES+DRAIN_SAMPLES;
+        // Keep the PCM plus the explicitly supplied AAC lookahead drain, not
+        // additional EOS padding emitted by newer C2 implementations. Still
+        // drain the codec to EOS and validate every access unit. This bound is
+        // independent of signal amplitude: intentional silence is never trimmed.
+        int retainedFrameLimit=alignedSamples/FRAME_SAMPLES;
         long started=System.nanoTime();boolean inputEnded=false,outputEnded=false;
         try {
             if(!codec.getCodecInfo().isSoftwareOnly() || !"c2.android.aac.encoder".equals(codec.getCanonicalName()))throw RestrictedPayload.invalid();
@@ -125,10 +130,13 @@ public final class RestrictedAudio {
                 else if(index>=0) {
                     try {
                         if(info.size>0 && (info.flags&android.media.MediaCodec.BUFFER_FLAG_CODEC_CONFIG)==0) {
-                            if(++frames>MAX_FRAMES || info.size>8184 || info.size+7>encoded.length-written)throw RestrictedPayload.invalid();
+                            if(++frames>MAX_FRAMES || info.size>8184)throw RestrictedPayload.invalid();
+                            if(frames<=retainedFrameLimit) {
+                            if(info.size+7>encoded.length-written)throw RestrictedPayload.invalid();
                             ByteBuffer output=java.util.Objects.requireNonNull(codec.getOutputBuffer(index));
                             output.position(info.offset);output.limit(info.offset+info.size);
                             header(encoded,written,info.size);written+=7;output.get(encoded,written,info.size);written+=info.size;
+                            }
                         }
                         outputEnded=(info.flags&android.media.MediaCodec.BUFFER_FLAG_END_OF_STREAM)!=0;
                     } finally {codec.releaseOutputBuffer(index,false);}

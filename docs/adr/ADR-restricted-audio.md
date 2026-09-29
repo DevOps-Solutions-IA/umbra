@@ -47,3 +47,13 @@ cover FDK AAC-LC's 1600-sample MDCT/block-switch lookahead. The native test chec
 9*16000-3*1024 samples, reserving alignment/drain within the unchanged nine-second
 decode buffer. Capture remains eight seconds. Small priming/trailing silence is
 allowed; gapless playback is not promised. Unsupported codec/profile fails closed.
+
+## Android 16 EOS padding
+
+The retained access-unit count is bounded by aligned PCM input plus the existing
+two-frame drain. Native output is still drained to EOS and validated; further
+EOS padding is discarded, never signal-dependent silence trimming. This avoids
+accumulating additional encoder flush padding on sanitation/re-encoding. The
+physical before/after and unchanged final-marker assertions are recorded in
+`../validation/2026-09-28-physical-pdf-aac-corrections.md`. No capture-duration,
+parser, frame-count, decoder-buffer or cancellation limit is increased.
