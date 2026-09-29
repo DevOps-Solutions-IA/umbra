@@ -32,12 +32,14 @@ def main() -> None:
         subprocess.run([*adb, 'install', '-r', str(apk)], check=True, timeout=180)
     args.log.parent.mkdir(parents=True, exist_ok=True)
     with args.log.open('w', encoding='utf-8') as stream:
-        result = subprocess.run([*adb, 'shell', 'am', 'instrument', '-w', '-r',
+        result = subprocess.run([*adb, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'syntheticNoHostAudio', 'true',
             package + '.test/androidx.test.runner.AndroidJUnitRunner'], stdout=stream,
             stderr=subprocess.STDOUT, timeout=180)
     output = args.log.read_text(encoding='utf-8')
-    # Existing 42/40 cases plus six EmergencyLockAndroidTest cases, all discovered and required.
-    expected=48 if args.flavor=='connected' else 46
+    # 66 shared methods (including concurrent Vault ONCE open, encrypted DB/WAL inspection and native clipboard),
+    # plus connected capture and two connected video surface lifecycle methods.
+    # Exact counts remain fail-closed: adding a class requires updating this contract.
+    expected=69 if args.flavor=='connected' else 66
     failed = result.returncode != 0 or not re.search(r'^OK \('+str(expected)+r' tests\)$', output, re.MULTILINE)
     failed |= 'INSTRUMENTATION_CODE: -1' not in output
     failed |= bool(re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', output))

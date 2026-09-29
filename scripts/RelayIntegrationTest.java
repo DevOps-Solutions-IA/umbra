@@ -146,6 +146,7 @@ public final class RelayIntegrationTest {
             try (RelayClient locked = new RelayClient(base, () -> false)) {
                 rejects(() -> locked.poll(bProfile, 0), "locked policy prevents network operation");
             }
+            app.umbra.content.RestrictedRelayIntegration.run(alice,bob,client,bProfile,bobRoute,aProfile,aliceRoute);
             // A separate hostile TLS fixture withholds a PUBLIC realm response body.
             // No unadmitted private API is opened to exercise cancellation.
             ExecutorService pendingExecutor = Executors.newSingleThreadExecutor();

@@ -22,6 +22,7 @@ public final class Engine {
     public static final int MAX_OUTBOX = 256, MAX_MESSAGES = 4096, MAX_SEEN = 8192;
     private final Records db;
     private final SignalStore signal;
+    private final app.umbra.content.RestrictedContentService restricted;
     private final app.umbra.admission.AdmissionService admission;
     private final app.umbra.location.LocationService locations;
     private final app.umbra.calls.CallService calls;
@@ -29,6 +30,7 @@ public final class Engine {
     public Engine(Records records, java.util.function.LongSupplier elapsed) {
         db = records; signal = new SignalStore(records);
         admission = new app.umbra.admission.AdmissionService(records);
+        restricted = new app.umbra.content.RestrictedContentService(records,this);
         locations = new app.umbra.location.LocationService(records, this, elapsed);
         calls = new app.umbra.calls.CallService(records, this, elapsed);
         connectivity().onOnlineStopped(calls::cancelLocal);
@@ -44,8 +46,10 @@ public final class Engine {
     public app.umbra.connectivity.ConnectivityService connectivity() { return admission.connectivity(); }
     public app.umbra.admission.AdmissionService admission() { return admission; }
     public app.umbra.calls.CallService calls() { return calls; }
+    public app.umbra.content.RestrictedContentService restricted() { return restricted; }
     public app.umbra.location.LocationService locations() { return locations; }
     public JSONObject get(String bucket, String key) throws Exception {
+        if(bucket.startsWith("restricted-"))throw new app.umbra.content.ContentException(app.umbra.content.ContentException.Code.EXPORT_FORBIDDEN);
         byte[] value = db.get(bucket, key); return value == null ? null : new JSONObject(Bytes.text(value));
     }
     private void put(String bucket, String key, JSONObject value) { db.put(bucket, key, Bytes.utf8(value.toString())); }
@@ -55,7 +59,7 @@ public final class Engine {
             // A missing identity is only a fresh install when no application records remain.
             // Never offer re-enrollment over a partially lost or damaged vault.
             for (String bucket : new String[]{"meta", "contact", "trusted", "session", "prekey", "signed", "kyber",
-                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export", "pairing-issued", "pairing-pending", "device-roster", "device-index", "device-issued", "device-pending", "device-relay", "location-out", "location-in", "calls", "admission", "admission-secret", "admission-peers", "admission-revoked", "admission-decisions", "admission-nonces", "admission-challenges"})
+                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export", "pairing-issued", "pairing-pending", "device-roster", "device-index", "device-issued", "device-pending", "device-relay", "location-out", "location-in", "calls", "admission", "admission-secret", "admission-peers", "admission-revoked", "admission-decisions", "admission-nonces", "admission-challenges", "admission-peer-evidence", "restricted-state", "restricted-object"})
                 if (!db.keys(bucket).isEmpty()) throw new IllegalStateException("Identity missing from existing vault");
             return false;
         }
@@ -391,6 +395,25 @@ public final class Engine {
             return null;
         });
     }
+    public final class RestrictedIngress {
+        private final String body;
+        private RestrictedIngress(JSONObject content) {body=content.toString();}
+        public void check(Records records,JSONObject content) {
+            if(records!=db || !body.equals(content.toString()))throw new SecurityException("Restricted ingress substitution");
+        }
+    }
+    public void enqueueRestricted(app.umbra.content.RestrictedContentService.Permit permit,JSONObject payload) throws Exception {
+        db.transaction(()->{
+            if(permit==null)throw new SecurityException("Restricted consent required");permit.check(db,payload);
+            app.umbra.content.RestrictedPayload.descriptor(payload,Bytes.now());
+            if(!id().equals(payload.getString("from")))throw new SecurityException("Restricted sender mismatch");
+            String peer=payload.getString("to");requiredContact(peer,true);
+            JSONObject content=new JSONObject().put("kind","restricted").put("restricted",new JSONObject(payload.toString()));
+            JSONObject envelope=encrypt(peer,content,payload.getLong("expires"));putOutbox(peer,envelope,false);
+            JSONObject queued=get("outbox",envelope.getString("id"));queued.put("restrictedId",payload.getString("id"));
+            put("outbox",envelope.getString("id"),queued);return null;
+        });
+    }
     private String send(String peer, JSONObject content, long ttl) throws Exception {
         if (ttl < 60 || ttl > MAX_TTL) throw new IllegalArgumentException("Caducidad inválida");
         return db.transaction(() -> {
@@ -485,7 +508,7 @@ public final class Engine {
                 String acknowledged = content.getString("ackFor");
                 JSONObject sent = get("message", acknowledged);
                 JSONObject pending = get("outbox", acknowledged);
-                if(pending != null && (pending.has("locationSession") || pending.has("callSession")) && peer.equals(pending.getString("peer"))) db.remove("outbox", acknowledged);
+                if(pending != null && (pending.has("locationSession") || pending.has("callSession") || pending.has("restrictedId")) && peer.equals(pending.getString("peer"))) db.remove("outbox", acknowledged);
                 if (sent != null && sent.optBoolean("outgoing") && peer.equals(sent.getString("peer"))) {
                     sent.put("status", "Entregado"); put("message", acknowledged, sent); db.remove("outbox", acknowledged);
                 }
@@ -505,6 +528,8 @@ public final class Engine {
                     calls.receive(new CallIngress(content),content);
                 } else if (kind.equals("location")) {
                     locations.receive(content);
+                } else if (kind.equals("restricted")) {
+                    restricted.receive(new RestrictedIngress(content),content);
                 } else if (kind.equals("text")) {
                     if (Bytes.utf8(content.getString("text")).length > 16_000) throw new SecurityException("Text too large");
                 } else if (kind.equals("file")) {
@@ -512,7 +537,7 @@ public final class Engine {
                         throw new SecurityException("Attachment too large");
                 } else throw new SecurityException("Unsupported content");
                 if (db.keys("message").size() >= MAX_MESSAGES) throw new LocalCapacityException();
-                if (!kind.startsWith("device-") && !kind.equals("location") && !kind.equals("call")) put("message", peer + ":" + messageId, new JSONObject(content.toString()).put("peer", peer).put("outgoing", false).put("status", "Recibido"));
+                if (!kind.startsWith("device-") && !kind.equals("location") && !kind.equals("call") && !kind.equals("restricted")) put("message", peer + ":" + messageId, new JSONObject(content.toString()).put("peer", peer).put("outgoing", false).put("status", "Recibido"));
                 if (acknowledge) {
                     JSONObject receipt = encrypt(peer, new JSONObject().put("kind", "receipt").put("ackFor", messageId), Math.min(expiry, now + 86400));
                     putOutbox(peer, receipt, true); seenValue.put("receipt", receipt);

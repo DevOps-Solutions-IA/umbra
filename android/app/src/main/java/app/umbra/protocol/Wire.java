@@ -50,6 +50,7 @@ public final class Wire {
             case "text" -> names.add("text");
             case "call" -> names.add("call");
             case "location" -> names.add("location");
+            case "restricted" -> names.add("restricted");
             case "file" -> { names.add("name"); names.add("data"); }
             case "receipt" -> names.add("ackFor");
             case "device-roster" -> names.add("roster");
@@ -70,7 +71,12 @@ public final class Wire {
         if ((version != 1 && version != 2) || expiry != integer(envelope, "expires") || created < now - maxTtl || created > now + 300 ||
             expiry <= created || expiry - created > maxTtl || ms < 0 || Math.abs(ms / 1000 - created) > 1)
             throw new SecurityException("Authenticated timestamp mismatch");
-        if (kind.equals("call")) {
+        if(kind.equals("restricted")) {
+            if(!(c.get("restricted") instanceof JSONObject p))throw new SecurityException("Invalid restricted object");
+            app.umbra.content.RestrictedPayload.descriptor(p,now);
+            if(!p.getString("from").equals(c.getString("from")) || !p.getString("to").equals(c.getString("to")) ||
+                    p.getLong("expires")!=expiry)throw new SecurityException("Restricted context mismatch");
+        } else if (kind.equals("call")) {
             if(!(c.get("call") instanceof JSONObject p)) throw new SecurityException("Invalid call object");
             app.umbra.calls.CallPayload.validate(p,now);
             JSONObject context=p.getJSONObject("context");

@@ -1,4 +1,100 @@
+# Estado vigente del master v4 — 2026-09-29
+
+Rama técnica `codex/security-content-completion`, PR #16 en borrador contra
+`codex/emergency-lock`, base exacta
+`ba75d329bedb2a26cd2e70371d2369e2fb3ba7a1`.
+Fuente inspeccionada: `6093d0333a5616f6ebcd379929ba0958705bd4eb` más regresiones
+locales posteriores identificadas en el recibo de trabajo; no es un SHA final
+aceptado ni una instrucción de reset. Consultar siempre HEAD real y conservar
+avances posteriores. No modificar UI de Claude, main ni historia roja.
+
+El master vigente es `UMBRA_MASTER_CODEX_v4_MOVIL_FISICO.md`, SHA256
+`59af8c3e3ff5d0291b7f1a244559c54dcbc693bcad64d0227000443a374187ed`.
+La copia original del propietario se conserva. Las entradas fechadas bajo el
+apéndice histórico reflejan su momento, **no el estado actual de implementación**.
+
+| Bloque | Implementación actual | Aceptación pendiente o límite |
+|---|---|---|
+| A | Contraseña/Vault, admisión y G1–G7, inicio privado, emergencia, privacy adapters, clipboard/exportación ordinaria | CI acumulativa propia del último SHA; UI por pantalla y autenticación física separadas |
+| B | Motor común v1, PNG, AAC/notas, ONCE/UMBRA_ONLY, caducidad, deduplicación y cierre coordinado | Recibos finales de HTTPS/RFCOMM/debug/R8; captura/acústica física con consentimiento |
+| C | PDF estático aislado, AVC_MP4 de archivo con reproducción/superficie y audio opcional | Recibos finales de codec/reproducción/restart; integración gráfica optimizada de Claude posterior |
+
+No se debe volver a implementar PDF/video ni reconstruir emergencia. Las llamadas
+no sustituyen las notas o videos de archivo. El contrato documentado es
+`UI_SECURITY_CONTENT_API_V1`; ver [UI_API_CONTRACT](UI_API_CONTRACT.md),
+[UI_INTEGRATION_MATRIX](UI_INTEGRATION_MATRIX.md),
+[API_GAPS_UI_SECURITY](API_GAPS_UI_SECURITY.md) y
+[CLAUDE_UI_HANDOFF](CLAUDE_UI_HANDOFF.md). No se identifican APIs G1–G7 faltantes;
+no equivale a aceptación final ni elimina fallos de laboratorio.
+
+[La auditoría de contenido](validation/2026-09-29-content-acceptance-audit.md)
+reconcilia los veinte casos. Nuevas regresiones distinguen TTL real del objeto de
+caducidad de sesión, inspeccionan Vault/WAL cifrados con claves aisladas, y ejercitan
+el parser exacto anterior con Signal real. Cada una necesita su resultado por SHA;
+compilación, test JVM y Android físico no son intercambiables.
+
+El teléfono ya fue detectado y ejecutó históricamente diez casos sintéticos offline
+debug (intento11). TEE observado corresponde a una clave fixture sin autenticación,
+no a la bóveda productiva autenticada. Tras autorización nueva, el29de septiembre
+se instaló R8 offline y pasó10casos sintéticos más consumo/reinicio de cuatro
+formatos; se conservan los rechazos previos. Preview Claude sigue sin instalar. No inferir cancelación
+humana ni instalar de nuevo sin el consentimiento específico requerido. Usar el
+runner seguro y paquete seleccionado; no cambiar protecciones/datos del teléfono.
+`NEEDS_SECOND_PEER`: RFCOMM/voz/video entre dos Android físicos. `MANUAL_PENDING`:
+autenticación y captura/acústica/rutas físicas. Un único teléfono no cubre dos radios.
+
+La matriz final requiere los diez workflows aplicables sobre el mismo HEAD/árbol.
+Preservar por separado EOF HTTPS tras video activo, restauración Wi-Fi de AVD y
+cualquier fallo de credenciales; diagnósticos o un pase posterior no demuestran
+una causa corregida. El recibo final de PR16 fijará HEAD, checkout, padres, árbol,
+runs, artefactos, APK/mapping y respaldo recuperable. No congelar aceptación antes.
+
+## Apéndice histórico — no usar como estado actual
+
+## 2026-09-28 master v4 continuation (not final acceptance)
+
+The governing local master is `UMBRA_MASTER_CODEX_v4_MOVIL_FISICO.md`, SHA-256
+59af8c3e3ff5d0291b7f1a244559c54dcbc693bcad64d0227000443a374187ed. Its original
+Windows copy was read, not overwritten. One physical phone is reported by the
+owner, but both Windows/Linux ADB lists were empty: physical tests NOT EXECUTED.
+See PHYSICAL_DEVICE_TESTING for the new safe runner and blocked/manual lanes.
+
+RFCOMM fixes: 5c40c24 supplies the required coordinator via the existing SQLite
+lab adapter and verifies all three restricted formats separately. fbb98a3 delays
+inbound fixture delivery until the deliberate duplicate writes complete, preserving
+Engine's rejection after ACK. Both historical failures and per-SHA CI are retained.
+Do not attribute the old memory-fixture storage claim to the new SQLite fixture.
+
+File-video now has a candidate bounded AVC/AAC import/re-encode adapter and real
+Android codec tests. Native acceptance, surface playback, file-video HTTPS/RFCOMM,
+cancellation observations and final contract freeze are NOT completed. See
+RESTRICTED_VIDEO and ADR-restricted-video. A/B/C remain open. Claude UI untouched.
+
 # Transferencia técnica a Codex
+
+## Avance acumulativo — PDF y preparación, 2026-09-28
+
+PR #16 sigue abierta en borrador. `c7584ee` incorpora PDF acotado en proceso
+Android aislado; privacidad debug pasó en run 36461176840. R8 falló antes de
+instrumentar por una omisión del fixture en TraceReferences, corregida en a909b60
+y comprobada localmente en ambos mappings; falta repetir su ejecución Android. `c808418` aprobó privacidad debug/R8 y el resto de
+resultados se conserva por SHA, no como aceptación de cambios posteriores.
+La corrección `4e969dc` impide enviar una preparación de una generación anterior
+con un consentimiento nuevo. La siguiente revisión añade ownership de pendientes,
+cuatro slots, invalidación inmediata y cierre comprobable sin esperar bajo el gate.
+Ver UI_API_CONTRACT y validation/2026-09-28-restricted-pdf-checkpoint.md.
+Video de archivo aún no implementado; matriz final y contrato definitivo pendientes.
+No hay integración de UI de Claude ni validación física nueva. Master A/B/C abierto.
+
+## Master v3 — continuación técnica, 2026-09-28
+
+PR #16 permanece parcial, sin UI de Claude. Consultar
+[revisión del checkpoint](validation/2026-09-28-checkpoint-13a5da6-review.md) y
+[AAC nativo y pendientes](validation/2026-09-28-restricted-audio-native.md).
+Contratos provisionales en UI_API_CONTRACT y API_GAPS_UI_SECURITY; no congelados.
+13a5da6 aprobó nueve workflows y falló video. bde7abb falló duración AAC en
+privacidad debug/R8; no contar builds como reproducción aceptada. A/B/C no cerrados.
+
 
 ## Bloqueo de emergencia — 2026-09-28, implementación bajo validación
 
@@ -339,3 +435,23 @@ locks sin hashes siguen siendo deuda de cadena de suministro, no una garantía d
 Consultar `docs/HANDOFF_SOURCES.md`. Codex debe verificar versiones y capacidades actuales antes
 de instalar herramientas. No descargar scripts arbitrarios con `curl | sh` ni copiar secretos a
 mensajes, issues, artefactos de CI, capturas de pantalla o servicios de análisis.
+
+
+### 2026-09-28 master v4 continuation (not closure)
+
+Technical worktree `/tmp/umbra-security-content-completion`; PR16 stays draft against
+emergency-lock. Published a8e6f0d validated native MP4 preparation; a1a4a00 fixes
+physical PDF binding-death cancellation and AAC EOS padding. Ten safe physical
+offline debug cases now pass including silent file presentation and lock. R8
+physical install was rejected with INSTALL_FAILED_USER_RESTRICTED: not executed,
+normal owner installer interaction pending; no protection disabled. New video
+HTTPS/RFCOMM/restart and focus regression code requires its own cumulative CI.
+See 2026-09-28 physical/pdf-aac and file-video checkpoint evidence. Claude UI
+remains untouched; API freeze and full A/B/C closure are NOT declared.
+
+
+USER_DECISION 2026-09-28: No more phone APK installs/updates without specific
+owner consent before EACH installation (including separate app/test packages).
+No installation was in progress when instructed. Physical runner now requires
+per-invocation exact approved APK hashes; never populate flags by inference.
+Continue local/CI work; R8 installer rejection and next physical APK remain blocked.

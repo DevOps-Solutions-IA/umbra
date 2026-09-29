@@ -8,7 +8,7 @@ import org.bouncycastle.math.ec.rfc8032.Ed25519;
 final class AdmissionCodec {
     static final int MAX_WIRE = 4096;
     private AdmissionCodec() {}
-    static SecurityException invalid() { return new SecurityException("Admission unavailable"); }
+    static SecurityException invalid() { return new AdmissionException(AdmissionException.Code.INVALID); }
     static String encode(byte[] value) { return Base64.getUrlEncoder().withoutPadding().encodeToString(value); }
     static byte[] decode(String value, int length) {
         if (value == null || value.length() > MAX_WIRE || !value.matches("[A-Za-z0-9_-]+")) throw invalid();

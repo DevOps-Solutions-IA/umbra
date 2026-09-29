@@ -84,7 +84,19 @@ public final class VoiceEngineFixtureListener extends RunListener {
             relay.acknowledge(engine.profile(),envelope.getString("id"));
         }
     }
-    private void finishTransport(RelayClient relay,Engine engine,NativeVoiceSession voice,boolean localLockApplied,JSONObject savedProfile) throws Exception {
+    private void assertBlockedPeer(Engine engine,String peer) throws Exception {
+        if(!engine.contact(peer).optBoolean("blocked"))throw new AssertionError("Trust-loss action did not persist");
+        try {engine.authorizeTransport(peer);throw new AssertionError("Blocked peer retained transport authorization");}
+        catch(SecurityException expected) { /* Explicit rejection assertion before I/O, not an ignored pump failure. */ }
+    }
+    private void finishTransport(RelayClient relay,Engine engine,NativeVoiceSession voice,boolean localLockApplied,
+                                 boolean localTrustRemoved,String peer,JSONObject savedProfile) throws Exception {
+        if(localTrustRemoved) {
+            assertBlockedPeer(engine,peer);
+            if(voice.transmitVoiceAllowed() || (voice.state()!=NativeVoiceSession.State.FAILED && voice.state()!=NativeVoiceSession.State.ENDED))
+                throw new AssertionError("Trust loss did not close native media");
+            return; // No final send/fetch/apply for a deliberately blocked peer.
+        }
         if(!localLockApplied) { pump(relay,engine); return; }
         if(engine.connectivity().getConnectivityState()!=app.umbra.connectivity.ConnectivityService.State.LOCKED_PRIVATE ||
                 voice.transmitVoiceAllowed() || (voice.state()!=NativeVoiceSession.State.FAILED && voice.state()!=NativeVoiceSession.State.ENDED))
@@ -265,7 +277,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
             if(withVideo) { voice.syntheticVideo(()->new SyntheticVideoCapturer(caller,videoCaptured,lastVideoCaptureNanos));voice.setRemoteVideoSink(videoDecoded); }
             int videoStage=0,videoAudioBaseline=0,videoFrameBaseline=0,videoCaptureBaseline=0;long videoOffAt=0,videoOffRequestedNanos=0;
             boolean videoRequested=false,videoAccepted=false;
-            boolean evidence=false,muting=false,mutedEvidence=false,resuming=false,resumedEvidence=false,terminationApplied=false,localLockApplied=false;
+            boolean evidence=false,muting=false,mutedEvidence=false,resuming=false,resumedEvidence=false,terminationApplied=false,localLockApplied=false,localTrustRemoved=false;
             boolean initialProcessingEvidence=false,initialNatural=false;
             boolean emergencyApplied=false;JSONObject savedProfile=engine.profile();
             boolean cameraDeniedChecked=false,cameraDeniedEvidence=false;int cameraDeniedBaseline=0;
@@ -282,7 +294,8 @@ public final class VoiceEngineFixtureListener extends RunListener {
                             connectivity!=app.umbra.connectivity.ConnectivityService.State.LOCKED_PRIVATE &&
                             !(emergencyApplied && connectivity==app.umbra.connectivity.ConnectivityService.State.DISCONNECTING))
                         throw new AssertionError("Connectivity restored during native closure");
-                } else pump(relay,engine,id,voice,expiryExpected,credential.getLong("expires"));
+                } else if(localTrustRemoved)assertBlockedPeer(engine,peer);
+                else pump(relay,engine,id,voice,expiryExpected,credential.getLong("expires"));
                 if(voice.state()==NativeVoiceSession.State.FAILED && !evidence) {
                     if(!expectedRejection) throw new AssertionError("Native authenticated voice failed before audio: "+voice.failureStage()+"; "+voice.negotiationDiagnostic()+"; captured="+captured.get()+", decoded="+decoded.get());
                     if(captured.get()!=0 || decoded.get()!=0 || videoCaptured.get()!=0) throw new AssertionError("Rejected TURN path captured or decoded audio");
@@ -316,7 +329,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                 }
                 if(evidence && !terminationApplied && Files.exists(files.resolve("synthetic-voice-loss.json"))) {
                     String action=read("synthetic-voice-loss.json").optString("action");
-                    if(action.equals("trust-loss")) engine.block(peer,true);
+                    if(action.equals("trust-loss")) {engine.block(peer,true);localTrustRemoved=true;assertBlockedPeer(engine,peer);}
                     if(action.equals("device-revoked")) devices.revoke(engine.id());
                     if(action.equals("storage-failure")) { db.failBucket="calls";voice.close(); }
                     if(action.equals("emergency-lock")) {
@@ -546,14 +559,14 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     }
                 }
                 if(Files.exists(files.resolve("synthetic-voice-stop.json"))) {
-                    voice.close(); finishTransport(relay,engine,voice,localLockApplied,savedProfile); break;
+                    voice.close(); finishTransport(relay,engine,voice,localLockApplied,localTrustRemoved,peer,savedProfile); break;
                 }
                 Thread.sleep(100);
             }
             if(withVideo && !expectedRejection && videoStage!=5)throw new AssertionError("Missing decoded bidirectional video/off/reactivation evidence; stage="+videoStage+", native="+voice.videoStatus()+", failure="+voice.failureStage()+", sourceFrames="+videoCaptured.get()+", sinkFrames="+voice.decodedVideoFrames()+", validPatterns="+videoDecoded.frames.get()+", phaseMask="+videoDecoded.phases.get()+", counters="+voice.videoStats());
             if(modulation && processingStep!=10)throw new AssertionError("Incomplete remote modulation sequence");
             if(!evidence || (!expectedRejection && !resumedEvidence)) throw new AssertionError("Missing native audio or mute/unmute evidence");
-            voice.close(); finishTransport(relay,engine,voice,localLockApplied,savedProfile);
+            voice.close(); finishTransport(relay,engine,voice,localLockApplied,localTrustRemoved,peer,savedProfile);
             if(configuration.optBoolean("admissionRevocationCheck")) {
                 // Media is already closed. Test actual AVD -> HTTPS authorization independently
                 // of local revocation knowledge; never confuse DevicePolicy revocation with this.

@@ -27,7 +27,7 @@ public record AdmissionCredential(String wire,String realmId,String credentialId
         if(!realmId.equals(realm.realmId()) || !issuerKeyId.equals(realm.authorityKeyId())) throw AdmissionCodec.invalid();
         AdmissionCodec.verify("credential",wire,realm.authorityPublicKey(),AdmissionCodec.fields("credential",wire,10));
     }
-    public void validate(RealmConfig realm,long now) { verify(realm); if(now<notBefore || now>=expiresAt) throw AdmissionCodec.invalid(); }
+    public void validate(RealmConfig realm,long now) { verify(realm); if(now<notBefore) throw new AdmissionException(AdmissionException.Code.NOT_YET_VALID); if(now>=expiresAt) throw new AdmissionException(AdmissionException.Code.EXPIRED); }
     static AdmissionCredential issue(RealmConfig realm,byte[] seed,AdmissionRequest request,long now,long ttl) {
         request.validate(realm,now);
         if(ttl<60 || ttl>MAX_TTL) throw AdmissionCodec.invalid();

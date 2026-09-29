@@ -128,4 +128,16 @@ public class DeviceAdversarialTest {
         assertThrows(SecurityException.class,() -> a.e.createCard());
         assertEquals(2,DeviceRoster.parse(a.d.renew()).version); assertNotNull(a.e.createCard());
     }
+    @Test public void blockedPeerRejectsLateCiphertextAndPreviouslyAuthorizedDeliveryWithoutApplyingIt() throws Exception {
+        Device a=new Device("A1"),b=new Device("B1");pair(a,b);a.d.migrate();b.d.migrate();
+        var prior=b.e.deliveryAuthorization(a.e.id());prior.run();
+        a.e.sendText(b.e.id(),"synthetic late control equivalent",600);
+        JSONObject delayed=a.e.outbox().get(0).getJSONObject("envelope");
+        b.e.block(a.e.id(),true);
+        assertTrue(b.e.contact(a.e.id()).getBoolean("blocked"));
+        assertThrows(SecurityException.class,prior::run);
+        assertThrows(SecurityException.class,()->b.e.authorizeTransport(a.e.id()));
+        assertThrows(SecurityException.class,()->b.e.receive(delayed));
+        assertTrue(b.db.keys("message").isEmpty());assertTrue(b.db.keys("inbox").isEmpty());
+    }
 }

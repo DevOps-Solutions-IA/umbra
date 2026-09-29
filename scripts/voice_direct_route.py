@@ -10,6 +10,172 @@ import subprocess
 import time
 
 
+def wifi_control_summary(text):
+    """Keep service state tokens, never saved SSIDs, passphrases or packet dumps."""
+    fields = re.findall(
+        r"\b(curState|mWifiState|mWifiEnabled|mWifiToggleEnabled|mNetworkSelectionStatus|"
+        r"networkSelectionStatus|mNetworkSelectionDisableReason|mIsWifiEnabled|"
+        r"mIsInterfaceUp|mIsStopped|mTargetRole|mRole)\s*[:=]\s*([A-Za-z0-9_]+)", text)
+    fields += re.findall(r'\b(NetworkSelectionStatus|NetworkSelectionDisableReason)\s*[:=]?\s+(NETWORK_SELECTION_[A-Z_]+)',text)
+    return [{'field': key, 'value': value[:80]} for key, value in fields[:128]]
+
+
+def observe_owned_wifi(adb,serial,report=None):
+    """Read-only Wi-Fi service evidence, solely for the owned disposable AVD."""
+    if not serial.startswith('emulator-') or not serial[9:].isdigit():
+        raise ValueError('Owned emulator required')
+    qemu=subprocess.run([adb,'-s',serial,'shell','getprop','ro.kernel.qemu'],
+                        capture_output=True,text=True,timeout=3)
+    if qemu.returncode or qemu.stdout.strip()!='1':
+        raise ValueError('Disposable emulator required')
+    import json
+    evidence={'observedNanos':time.monotonic_ns()}
+    for name,command in (('status',('cmd','wifi','status')),('state',('dumpsys','wifi'))):
+        try:
+            result=subprocess.run([adb,'-s',serial,'shell',*command],
+                                  capture_output=True,text=True,timeout=3)
+            entry={'exit':result.returncode}
+            if name=='status':
+                entry.update(enabled=result.stdout.startswith('Wifi is enabled'),
+                             disabled=result.stdout.startswith('Wifi is disabled'),
+                             disconnected='Wifi is not connected' in result.stdout)
+            else:
+                entry['fields']=wifi_control_summary(result.stdout)
+            evidence[name]=entry
+        except subprocess.TimeoutExpired:
+            evidence[name]={'error':'diagnostic_timeout'}
+    if report is not None:report.write_text(json.dumps(evidence,indent=2)+'\n')
+    return evidence
+
+
+def observe_owned_network(adb: str, serial: str, report):
+    """Read-only control-plane evidence around setup; never an acceptance result.
+
+    Only disposable AVDs are supported. No app logs, packet payloads, credentials,
+    DNS probes or route mutation. Each command is independently bounded.
+    """
+    if not serial.startswith('emulator-') or not serial[9:].isdigit():
+        raise ValueError('Owned emulator required')
+    import json
+    evidence = {'observedNanos': time.monotonic_ns(), 'commands': {}}
+    for label, arguments in (
+        ('qemu', ('getprop', 'ro.kernel.qemu')),
+        ('route', ('ip', '-4', 'route', 'get', '10.0.2.2')),
+        ('routes', ('ip', '-4', 'route', 'show', 'table', 'all')),
+        ('rules', ('ip', '-4', 'rule', 'show')),
+        ('addresses', ('ip', '-4', 'addr', 'show'))):
+        try:
+            result = subprocess.run([adb, '-s', serial, 'shell', *arguments],
+                                    capture_output=True, text=True, timeout=3)
+            evidence['commands'][label] = {'exit': result.returncode,
+                'stdout': result.stdout[:16384], 'stderr': result.stderr[:1024]}
+            if label == 'qemu' and (result.returncode != 0 or result.stdout.strip() != '1'):
+                raise ValueError('Selected target is not a disposable emulator')
+        except subprocess.TimeoutExpired:
+            evidence['commands'][label] = {'error': 'diagnostic_timeout'}
+            if label == 'qemu':
+                raise ValueError('Could not verify disposable emulator')
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(json.dumps(evidence, indent=2)+'\n')
+
+
+def select_owned_wifi(adb, serial, report):
+    """Explicitly associate to the disposable emulator's fixed virtual AP.
+
+    Enabling a radio does not select a saved network. This is host laboratory
+    setup, not application connectivity consent or proof of route readiness.
+    Runtime help must support the API; never select a physical/supplied SSID.
+    """
+    import json
+    if not serial.startswith('emulator-') or not serial[9:].isdigit():
+        raise ValueError('Owned emulator required')
+    def command(*args):
+        return subprocess.run([adb, '-s', serial, 'shell', *args],
+                              capture_output=True, text=True, timeout=3)
+    qemu = command('getprop', 'ro.kernel.qemu')
+    if qemu.returncode or qemu.stdout.strip() != '1':
+        raise ValueError('Disposable emulator required')
+    receipt = {'purpose': 'owned virtual AP selection, not network acceptance'}
+    try:
+        # API 35 exposes this administrative command to root on AOSP test images.
+        # Match the existing owned-AVD firewall context, never root a phone.
+        help_result = command('su', '0', 'cmd', 'wifi', 'help')
+        # Android BasicShellCommandHandler prints help then returns -1 (ADB 255).
+        # Only this read-only help command may use that documented status.
+        receipt['helpExit'] = help_result.returncode
+        receipt['helpSyntax'] = [line.strip()[:240] for line in help_result.stdout.splitlines()
+                                 if line.strip().startswith('connect-network ')][:2]
+        supported = help_result.returncode in (0,255) and not help_result.stderr.strip() and re.search(
+            r'connect-network\s+<ssid>\s+open(?:\||\s)', help_result.stdout) is not None
+        receipt['supported'] = supported
+        if not supported:
+            raise RuntimeError('Installed AVD Wi-Fi CLI does not support explicit open AP selection')
+        state = command('cmd', 'wifi', 'status')
+        if state.returncode or not state.stdout.startswith('Wifi is enabled'):
+            raise RuntimeError('Owned AVD Wi-Fi radio is not enabled for selection')
+        result = command('su', '0', 'cmd', 'wifi', 'connect-network', 'AndroidWifi', 'open')
+        receipt['exit'] = result.returncode
+        receipt['reportedFailure'] = 'fail' in (result.stdout + result.stderr).lower()
+        if result.returncode or receipt['reportedFailure']:
+            raise RuntimeError('Owned AVD virtual AP selection failed')
+    finally:
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(json.dumps(receipt, indent=2)+'\n')
+
+
+def initialize_owned_wifi(adb: str, serial: str, report):
+    """Preserve a routed association; initialize an inconsistent disposable AVD.
+
+    A booted first AVD can retain a DHCP address without netd policy routes at
+    media setup. `wifi enable` on that already-enabled agent is
+    not initialization. Do not cycle a healthy association: this discards IPv6
+    autoconfiguration used by later scenarios. Observe OFF before ON only when
+    the IPv4 address/route is missing; never inject a route or retry a
+    failed media scenario. OFF has a separate bounded 10s setup deadline. Existing
+    wait_wifi_ipv4 still requires real routes within its unchanged 20s budget.
+    """
+    if not serial.startswith('emulator-') or not serial[9:].isdigit():
+        raise ValueError('Owned emulator required')
+    import json
+    def command(*arguments):
+        return subprocess.run([adb,'-s',serial,'shell',*arguments],
+                              capture_output=True,text=True,timeout=3)
+    verified=command('getprop','ro.kernel.qemu')
+    if verified.returncode != 0 or verified.stdout.strip() != '1':
+        raise ValueError('Selected target is not a disposable emulator')
+    start=time.monotonic(); observations=[]; action='not-initialized'; before={}
+    try:
+        address=command('ip','-4','addr','show','wlan0')
+        route=command('ip','-4','route','get','10.0.2.2')
+        ipv6=command('ip','-6','addr','show','wlan0')
+        for label,value in (('address',address),('route',route),('ipv6',ipv6)):
+            before[label]={'exit':value.returncode,'stdout':value.stdout[:8192],'stderr':value.stderr[:512]}
+        found=re.search(r'inet (10\.0\.2\.[0-9]+)/',address.stdout)
+        if address.returncode==0 and route.returncode==0 and found and wifi_ipv4_route(route.stdout,found[1]):
+            action='preserved-existing-route'
+            return False
+        action='initialize-missing-route'
+        result=command('svc','wifi','disable')
+        if result.returncode:raise RuntimeError('Owned AVD Wi-Fi disable failed')
+        while True:
+            state=command('ip','-4','addr','show','wlan0')
+            absent=(state.returncode==1 and 'does not exist' in state.stderr)
+            cleared=(state.returncode==0 and re.search(r'\binet\s',state.stdout) is None)
+            observations.append({'elapsedMillis':round((time.monotonic()-start)*1000),
+                'exit':state.returncode,'addressCleared':absent or cleared})
+            if absent or cleared:break
+            if time.monotonic()-start>=10:
+                raise RuntimeError('Owned AVD Wi-Fi did not disconnect within setup budget')
+            time.sleep(.2)
+        result=command('svc','wifi','enable')
+        if result.returncode:raise RuntimeError('Owned AVD Wi-Fi enable failed')
+        return True  # Selection waits for enabled state within wait_wifi_ipv4's existing budget.
+    finally:
+        report.parent.mkdir(parents=True,exist_ok=True)
+        report.write_text(json.dumps({'action':action,'before':before,'observations':observations,
+            'purpose':'initialization, not media acceptance'},indent=2)+'\n')
+
+
 def wifi_ipv4_route(text: str, source: str) -> bool:
     """An address alone is insufficient: netd may not have populated policy routes."""
     return (re.search(r'(?:^|\s)dev wlan0(?:\s|$)',text) is not None
@@ -17,8 +183,12 @@ def wifi_ipv4_route(text: str, source: str) -> bool:
             and not re.search(r'\b(?:unreachable|prohibit|blackhole)\b',text))
 
 
-def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20):
-    """Observe netlink only, no DNS/traffic. Same 20s AVD readiness budget as before."""
+def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20, associate=False):
+    """Observe netlink; optional owned-AP association shares the existing 20s budget.
+
+    Default is read-only. Association is host fixture setup, never application
+    network consent, and does not replace the subsequent UDP/media assertions.
+    """
     if not serial.startswith('emulator-') or not serial[9:].isdigit():
         raise ValueError('Owned emulator required')
     import json
@@ -34,6 +204,11 @@ def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20):
                 'source':found[1] if found else None,'route':route.stdout[:1024],'error':route.stderr[:512]})
             if ready:return found[1]
             if time.monotonic()-start>=timeout:raise RuntimeError('Owned AVD Wi-Fi IPv4 policy route unavailable within readiness budget')
+            if associate:
+                state=subprocess.run([adb,'-s',serial,'shell','cmd','wifi','status'],capture_output=True,text=True,timeout=3)
+                if state.returncode==0 and state.stdout.startswith('Wifi is enabled'):
+                    select_owned_wifi(adb,serial,reports.with_name(reports.stem+'-selection.json'))
+                    associate=False  # A single explicit selection, never a retry-until-green loop.
             time.sleep(.2)
     except (RuntimeError, subprocess.TimeoutExpired):
         # Owned synthetic AVD only. Capture control-plane state before cleanup;
@@ -49,6 +224,10 @@ def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20):
                 failure_state[label]={'exit':captured.returncode,'stdout':captured.stdout[:65536],'stderr':captured.stderr[:1024]}
             except subprocess.TimeoutExpired:
                 failure_state[label]={'error':'diagnostic_timeout'}
+        try:
+            failure_state['wifi_service']=observe_owned_wifi(adb,serial)
+        except (ValueError, OSError, subprocess.TimeoutExpired):
+            failure_state['wifi_service']={'error':'diagnostic_unavailable'}
         raise
     finally:
         reports.write_text(json.dumps({'serial':serial,'attempts':attempts,'failureState':failure_state},indent=2)+'\n')

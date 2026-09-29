@@ -68,9 +68,15 @@ public final class ConnectivityService {
     /** Enables on-demand I/O, not a promise of Internet reachability. No socket/DNS here. */
     public void connect(String origin, boolean confirmed) throws Exception {
         Frame before=online.get();
-        if(cleanupFailed || !confirmed || !onlineEdition || before.vault==null ||
-                before.state!=State.UNLOCKED_OFFLINE && before.state!=State.OFFLINE_ERROR) throw denied();
-        before.vault.run(); String validated=RelayClient.validate(origin); var membership=admission.authorization();
+        // No parameter/configuration oracle while the vault lease is absent or stale.
+        if(before.vault==null)throw new app.umbra.core.AccessGate.LockedException();
+        before.vault.run();
+        if(cleanupFailed)throw new ConnectivityException(ConnectivityException.Code.CLEANUP_FAILED);
+        if(!confirmed)throw new ConnectivityException(ConnectivityException.Code.CONSENT_REQUIRED);
+        if(!onlineEdition)throw new ConnectivityException(ConnectivityException.Code.EDITION);
+        if(before.state!=State.UNLOCKED_OFFLINE && before.state!=State.OFFLINE_ERROR)
+            throw new ConnectivityException(ConnectivityException.Code.STATE);
+        String validated=RelayClient.validate(origin); var membership=admission.authorization();
         Runnable member=() -> { try { membership.run(); } catch(Exception invalid) { throw denied(); } }; member.run();
         Frame starting=new Frame(State.CONNECTING,new Object(),before.vault,member,validated);
         if(!online.compareAndSet(before,starting)) throw denied();
@@ -167,7 +173,7 @@ public final class ConnectivityService {
     public Lease startNearby(boolean confirmed) {
         Frame f=online.get(); if(cleanupFailed || !confirmed || f.vault==null || f.state==State.DISCONNECTING) throw denied(); f.vault.run();
         Lease lease=new Lease(f,true);
-        if(!nearby.compareAndSet(null,lease)) throw new IllegalStateException("Nearby already requested");
+        if(!nearby.compareAndSet(null,lease)) throw new ConnectivityException(ConnectivityException.Code.NEARBY_ALREADY_REQUESTED);
         try { lease.check(); return lease; } catch(RuntimeException failed) { lease.close(); throw failed; }
     }
     public boolean isNearbySessionAllowed() {
@@ -176,7 +182,7 @@ public final class ConnectivityService {
     }
     public void stopNearby() { Lease lease=nearby.getAndSet(null); if(lease!=null) lease.close(); }
     public void admissionInvalidated() { networkLost(); stopNearby(); }
-    private static SecurityException denied() { return new SecurityException("Explicit connectivity consent required"); }
+    private static SecurityException denied() { return new ConnectivityException(ConnectivityException.Code.CONSENT_OR_SESSION_UNAVAILABLE); }
 
     public final class Lease implements AutoCloseable {
         private final Frame granted;

@@ -17,7 +17,7 @@ from turn_lab import TurnLab, docker
 from voice_relay_lab import voice_relay
 from android_apk_install import ensure_apk
 from admission_lab import reset_exchange
-from voice_direct_route import probe_udp, wait_wifi_ipv4
+from voice_direct_route import probe_udp, wait_wifi_ipv4, observe_owned_network, initialize_owned_wifi
 from check_optimized_media import inspect as inspect_optimized_media
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -189,6 +189,7 @@ def main():
             if result.returncode!=1: raise RuntimeError("ADB voice exchange failed")
             time.sleep(0.1)
         raise RuntimeError("Two-AVD voice exchange deadline exceeded: "+name)
+    association_needed={}
     for serial in (args.a,args.b):
         if run(serial,"shell","getprop","ro.kernel.qemu").stdout.strip()!=b"1": raise RuntimeError("Only synthetic AVDs supported")
         run(serial,"shell","svc","power","stayon","true")
@@ -200,8 +201,11 @@ def main():
         run(serial,"shell","settings","put","global","captive_portal_mode","0")
         # One declared lab network: owned netsim Wi-Fi. Disable the AVD's separate
         # virtual cellular uplink so captures cover the entire enabled topology.
+        observe_owned_network(adb,serial,args.reports/f'network-before-data-disable-{serial}.json')
         run(serial,"shell","svc","data","disable")
-        run(serial,"shell","svc","wifi","enable")
+        observe_owned_network(adb,serial,args.reports/f'network-after-data-disable-{serial}.json')
+        association_needed[serial]=initialize_owned_wifi(adb,serial,args.reports/f'network-wifi-initialization-{serial}.json')
+        observe_owned_network(adb,serial,args.reports/f'network-after-wifi-enable-{serial}.json')
         variant="mediaLab" if args.optimized else "debug"
         for path in (f"connected/{variant}/app-connected-{variant}.apk",f"androidTest/connected/{variant}/app-connected-{variant}-androidTest.apk"):
             apk=ROOT/"android/app/build/outputs/apk"/path
@@ -253,7 +257,7 @@ def main():
             try: evidence['after']=topology()
             finally: (args.reports/f'direct-route-{probe_number}.json').write_text(json.dumps(evidence,indent=2)+'\n')
     processes={}; streams=[]
-    with voice_relay() as relay, TurnLab(alternate_port=3479 if args.scenario=="unauthorized-redirect" else None, allocation_lifetime=180,tls_mode=args.turn_tls,ipv6=args.turn_ipv6) as turn:
+    with voice_relay(args.reports/"https-lifecycle.json") as relay, TurnLab(alternate_port=3479 if args.scenario=="unauthorized-redirect" else None, allocation_lifetime=180,tls_mode=args.turn_tls,ipv6=args.turn_ipv6) as turn:
         capture_paths=[]; blocked_routes=[]; shaped=[]; shape_evidence=[]; allocation_evidence=None
         try:
             addresses=[];addresses6=[]
@@ -265,7 +269,7 @@ def main():
                 candidates=list(root.glob("android*/netsimd/pcaps/*-"+avd_path.stem+"-WIFI.pcap"))
                 if len(candidates)!=1: raise RuntimeError("Owned netsim Wi-Fi capture missing; start with ci_emulator.sh")
                 capture_paths.append(candidates[0])
-                address=wait_wifi_ipv4(adb,serial,args.reports/f'wifi-ready-{serial}.json')
+                address=wait_wifi_ipv4(adb,serial,args.reports/f'wifi-ready-{serial}.json',associate=association_needed[serial])
                 addresses.append(str(ipaddress.ip_address(address)))
                 if args.turn_ipv6:
                     value=run(serial,"shell","ip","-6","addr","show","wlan0").stdout.decode()
@@ -523,6 +527,13 @@ def main():
                 try: run(serial,"shell","su","0","iptables","-D","OUTPUT","-d",peer,"-m","comment","--comment","umbra-private-voice-test","-j","REJECT")
                 except Exception as failure: errors.append(failure)
             for serial,process in processes.items():
+                # Observe crash metadata before fixture cleanup. Never persist raw logcat,
+                # SDP, abort messages, memory dumps or events belonging to another package.
+                try:
+                    from media_crash_diagnostic import summarize as summarize_crash
+                    crash=run(serial,"logcat","-b","crash","-d","-t","128").stdout.decode("utf-8",errors="replace")
+                    (args.reports/("crash-metadata-"+serial+".json")).write_text(json.dumps(summarize_crash(crash,PACKAGE),indent=2)+"\n")
+                except Exception as failure: errors.append(failure)
                 try: run(serial,"shell","am","force-stop",PACKAGE)
                 except Exception as failure: errors.append(failure)
                 if args.modulation:

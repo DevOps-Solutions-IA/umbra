@@ -21,5 +21,8 @@
             <intent-filter><action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/></intent-filter>
         </activity>
+        <service android:name="app.umbra.content.RestrictedPdfService"
+            android:process=":restricted_pdf" android:isolatedProcess="true"
+            android:exported="false"/>
     </application>
 </manifest>

@@ -17,9 +17,45 @@ import sys
 import tempfile
 import time
 from voice_relay_lab import voice_relay
-from voice_direct_route import wait_wifi_ipv4
+from voice_direct_route import (wait_wifi_ipv4, observe_owned_network, wifi_control_summary, select_owned_wifi, initialize_owned_wifi,
+                                observe_owned_wifi as observe_startup_wifi)
 
 ROOT=Path(__file__).resolve().parents[1]
+
+
+def restore_startup_wifi(adb,serial,reports):
+    """Restore the declared Wi-Fi-only topology, without granting app consent.
+
+    Preserve the original five-second settling period. The Android fixture owns
+    the later 15-second default-network readiness assertion, after the quiet I/O
+    window. Do not impose a new earlier route deadline or add a cellular uplink.
+    """
+    observe_owned_network(adb,serial,reports/'network-before-restore.json')
+    observe_startup_wifi(adb,serial,reports/'wifi-before-restore.json')
+    subprocess.run([adb,'-s',serial,'shell','svc','wifi','enable'],
+                   check=True,capture_output=True,timeout=3)
+    try:
+        time.sleep(5)
+        select_owned_wifi(adb,serial,reports/'wifi-selection.json')
+    finally:
+        observe_owned_network(adb,serial,reports/'network-after-restore.json')
+        observe_startup_wifi(adb,serial,reports/'wifi-after-restore.json')
+
+
+def prepare_startup_wifi(adb,serial,reports):
+    """Reuse media's conditional netd/association initialization before app launch."""
+    associate=initialize_owned_wifi(adb,serial,reports/'initial-wifi-initialization.json')
+    return wait_wifi_ipv4(adb,serial,reports/'initial-wifi-route.json',associate=associate)
+
+
+def confirm_startup_recovery(adb,serial,reports,read_checkpoint):
+    """The fixture first proves OS readiness, explicitly reconnects and locks.
+
+    Add a single netlink assertion after that proof, not an earlier five-second
+    deadline that cuts short the existing Android readiness window.
+    """
+    read_checkpoint('synthetic-startup-locked.json')
+    return wait_wifi_ipv4(adb,serial,reports/'network-restored-route.json',timeout=0)
 
 
 def valid_report(text):
@@ -71,8 +107,8 @@ def main():
     if args.flavor=='connected':
         # Positive HTTPS acceptance needs an OS route; offline deliberately does not.
         # Host netlink observation is not UMBRA traffic or a bypass of its gate.
-        run('shell','svc','data','disable');run('shell','svc','wifi','enable')
-        wait_wifi_ipv4(adb[0],args.serial,args.reports/'initial-wifi-route.json')
+        run('shell','svc','data','disable')
+        prepare_startup_wifi(adb[0],args.serial,args.reports)
     installed=run('shell','pm','list','packages','-U',package).stdout.decode()
     match=re.search(r'^package:'+re.escape(package)+r' uid:(\d+)$',installed,re.M)
     if not match:raise RuntimeError('Missing unique application UID')
@@ -160,11 +196,12 @@ def main():
                     read('synthetic-startup-loss-ready.json')
                     run('shell','svc','wifi','disable');run('shell','svc','data','disable');go('loss-ready')
                     read('synthetic-startup-network-lost.json')
-                    # Restore both original OS paths; the Android fixture observes actual
-                    # default-network readiness before the new explicit connect action.
-                    reset();run('shell','svc','wifi','enable');run('shell','svc','data','enable');time.sleep(5)
+                    # Startup disabled cellular; restore only that original Wi-Fi topology.
+                    # Domain remains denied during host observation and until explicit action.
+                    reset();restore_startup_wifi(adb[0],args.serial,args.reports)
                     observe('network-return-no-reconnect',dns_log);go('network-lost')
-                    read('synthetic-startup-locked.json');time.sleep(1);reset();observe('vault-lock',dns_log);go('locked')
+                    confirm_startup_recovery(adb[0],args.serial,args.reports,read)
+                    time.sleep(1);reset();observe('vault-lock',dns_log);go('locked')
                 else:
                     read('synthetic-startup-offline.json');reset();observe('offline-flavor',dns_log);go('offline')
                 if args.emergency:

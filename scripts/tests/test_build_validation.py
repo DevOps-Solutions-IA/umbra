@@ -46,7 +46,19 @@ class BuildValidationTests(unittest.TestCase):
         intent = ET.SubElement(activity, "intent-filter")
         ET.SubElement(intent, "action", {"android:name": "android.intent.action.MAIN"})
         ET.SubElement(intent, "category", {"android:name": "android.intent.category.LAUNCHER"})
+        ET.SubElement(app, "service", {"android:name": "app.umbra.content.RestrictedPdfService", "android:exported": "false", "android:isolatedProcess": "true", "android:process": ":restricted_pdf"})
         return root
+
+    def test_pdf_parser_isolation_cannot_be_removed_or_exported(self):
+        for field, value in (("exported", "true"), ("isolatedProcess", "false"), ("process", "app.umbra.privatechat.dev")):
+            root = self.manifest()
+            root.find("application/service").set("android:" + field, value)
+            with self.assertRaises(RuntimeError):
+                policy.validate_manifest(root, "connected", "debug")
+        root = self.manifest()
+        ET.SubElement(root.find("application/service"), "intent-filter")
+        with self.assertRaises(RuntimeError):
+            policy.validate_manifest(root, "connected", "debug")
 
     def test_unsafe_binary_manifest_flags_and_components_rejected(self):
         policy.validate_manifest(self.manifest(), "connected", "debug")

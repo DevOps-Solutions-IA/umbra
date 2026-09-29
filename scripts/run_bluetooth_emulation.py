@@ -20,6 +20,24 @@ def both_drained(reports: list[str]) -> bool:
             and not any("nearbyResult=FAIL:" in text for text in reports))
 
 
+def both_quiescent(reports: list[str]) -> bool:
+    return both_drained(reports) and all('nearbyStage=quiescent' in text for text in reports)
+
+
+def finish_drained_peers(devices, send_command, wait_for):
+    # One shared existing budget, not a new timeout per phase. A historical
+    # drained snapshot does not prove that duplicate-generated ACK writes ended.
+    deadline = time.monotonic() + 60
+    wait_for(both_drained, deadline - time.monotonic(),
+             'Both RFCOMM endpoints must flush all receipts before shutdown')
+    for serial in devices:
+        send_command(serial, 'quiesce')
+    wait_for(both_quiescent, deadline - time.monotonic(),
+             'Both RFCOMM writers must quiesce before either peer closes')
+    for serial in devices:
+        send_command(serial, 'finish')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--unadmitted-dialer', action='store_true')
@@ -121,9 +139,8 @@ def main() -> None:
             wait_for(lambda content: all('nearbyStage=verified' in text for text in content), 15, 'Verification barrier failed')
             for serial in devices:
                 adb(serial, 'shell', f"run-as {package} sh -c 'printf go > files/nearby-synthetic-approval'")
-            wait_for(both_drained, 60, 'Both RFCOMM endpoints must flush all receipts before shutdown')
-            for serial in devices:
-                adb(serial, 'shell', f"run-as {package} sh -c 'printf finish > files/nearby-synthetic-approval'")
+            finish_drained_peers(devices,
+                lambda serial, command: adb(serial, 'shell', f"run-as {package} sh -c 'printf {command} > files/nearby-synthetic-approval'"), wait_for)
         for process in processes:
             if process.wait(timeout=90) != 0:
                 raise RuntimeError('adb instrumentation failed')
@@ -141,7 +158,7 @@ def main() -> None:
                     or re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b',text) or 'nearbyResult=FAIL:' in text):
                     raise RuntimeError('Unadmitted RFCOMM rejection or JNI tests not proven')
                 continue
-            if ('nearbyResult=PASS:' not in text or 'authenticated device roster' not in text or 'encrypted location' not in text or not re.search(r'^OK \(3 tests\)$', text, re.MULTILINE)
+            if ('nearbyResult=PASS:' not in text or 'authenticated device roster' not in text or 'encrypted location' not in text or 'restricted PNG, native AAC, isolated PDF and AVC decoded/consumed' not in text or not re.search(r'^OK \(3 tests\)$', text, re.MULTILINE)
                 or 'INSTRUMENTATION_CODE: -1' not in text or 'nearbyResult=FAIL:' in text
                 or re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)):
                 raise RuntimeError('Bluetooth fixture or subsequent JNI tests failed; inspect device logs')

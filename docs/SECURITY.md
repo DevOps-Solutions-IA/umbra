@@ -1,4 +1,43 @@
+## 2026-09-28 restricted file-video candidate / physical laboratory
+
+The candidate AVC_MP4 profile uses the existing restricted policy and per-object
+Signal/AES-GCM delivery. It re-encodes bounded video/audio through Android codecs
+and a RAM-only muxer destination. This is not yet accepted file-video playback;
+see docs/protocol/RESTRICTED_VIDEO.md for limits and missing native validation.
+No camera/microphone/network permission is added to offline. No file/URI exporter
+or external viewer fallback is provided. A failed native cleanup invalidates
+access rather than silently opening another preparation.
+
+The physical runner uses isolated packages, explicit USB selection and fixed
+synthetic tests. Its non-authenticated test-key observation does not validate the
+production authenticated Vault/Keystore boundary. No phone has been observed by
+ADB in this checkpoint; no hardware level or physical success is claimed.
+
 # Seguridad y límites de UMBRA 0.2
+
+## Avance acumulativo — PDF y preparación, 2026-09-28
+
+PR #16 sigue abierta en borrador. `c7584ee` incorpora PDF acotado en proceso
+Android aislado; privacidad debug pasó en run 36461176840. R8 falló antes de
+instrumentar por una omisión del fixture en TraceReferences, corregida en a909b60
+y comprobada localmente en ambos mappings; falta repetir su ejecución Android. `c808418` aprobó privacidad debug/R8 y el resto de
+resultados se conserva por SHA, no como aceptación de cambios posteriores.
+La corrección `4e969dc` impide enviar una preparación de una generación anterior
+con un consentimiento nuevo. La siguiente revisión añade ownership de pendientes,
+cuatro slots, invalidación inmediata y cierre comprobable sin esperar bajo el gate.
+Ver UI_API_CONTRACT y validation/2026-09-28-restricted-pdf-checkpoint.md.
+Video de archivo aún no implementado; matriz final y contrato definitivo pendientes.
+No hay integración de UI de Claude ni validación física nueva. Master A/B/C abierto.
+
+## Master v3 — continuación técnica, 2026-09-28
+
+PR #16 permanece parcial, sin UI de Claude. Consultar
+[revisión del checkpoint](validation/2026-09-28-checkpoint-13a5da6-review.md) y
+[AAC nativo y pendientes](validation/2026-09-28-restricted-audio-native.md).
+Contratos provisionales en UI_API_CONTRACT y API_GAPS_UI_SECURITY; no congelados.
+13a5da6 aprobó nueve workflows y falló video. bde7abb falló duración AAC en
+privacidad debug/R8; no contar builds como reproducción aceptada. A/B/C no cerrados.
+
 
 ## Bloqueo de emergencia — 2026-09-28, implementación bajo validación
 
@@ -240,3 +279,17 @@ See [threat model and limits](VAULT_PASSWORD.md) and
 password material. Historical legacy copies and privileged full-state rollback
 are not retroactively prevented. AVD software-key fixtures do not prove physical
 hardware security, biometric interaction or protection against a compromised OS.
+
+
+### Restricted file-media implementation limits (master v4 checkpoint)
+
+File video uses the same consumed session and authorization as restricted notes,
+not call permissions. Caller-supplied surfaces must be protected before first frame
+and cleared on disposal; final Claude UI integration remains pending. Anonymous
+kernel-size-sealed memfd replaces the incompatible FUSE MP4 output descriptor;
+there is no named plaintext staging file or disk fallback. PDF parser process
+binding loss is not explicit cancellation; authenticated result and actual process
+Binder death are both required within the original deadline. AAC sanitation bounds
+retained EOS padding without changing duration/security test thresholds. Physical
+synthetic findings are scope-limited; no OS-compromise/forensic or physical-peer
+claims. See dated validation for exact tested bytes and outstanding cases.
