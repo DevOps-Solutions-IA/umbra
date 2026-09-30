@@ -86,6 +86,39 @@ public class PrivacyAdaptersAndroidTest {
         assertEquals(0xff449944,decoded.getPixel(8,8));decoded.recycle();
     }
     @Test public void invalidAndOversizedImagesOrStaleLeaseCannotProduceCopy() throws Exception {
+        // Fixed synthetic corpus: header-only prefixes reach the framework image parser.
+        for(Bitmap.CompressFormat format:new Bitmap.CompressFormat[]{Bitmap.CompressFormat.PNG,Bitmap.CompressFormat.JPEG}) {
+            Bitmap fixture=Bitmap.createBitmap(16,16,Bitmap.Config.ARGB_8888);
+            byte[] encoded;
+            try(var bytes=new ByteArrayOutputStream()) {
+                fixture.eraseColor(0xff336699);assertTrue(fixture.compress(format,90,bytes));encoded=bytes.toByteArray();
+            } finally {fixture.recycle();}
+            try {
+                for(int length:new int[]{1,2,4,8}) {
+                    byte[] prefix=java.util.Arrays.copyOf(encoded,length);
+                    assertThrows("format="+format+" prefix="+length,java.io.IOException.class,
+                            ()->ImagePreparation.sanitize(prefix,()->{}));
+                }
+                byte[] clean=ImagePreparation.sanitize(encoded,()->{});
+                try {
+                    Bitmap decoded=BitmapFactory.decodeByteArray(clean,0,clean.length);
+                    assertNotNull(decoded);
+                    try {assertEquals(16,decoded.getWidth());assertEquals(16,decoded.getHeight());}
+                    finally {decoded.recycle();}
+                } finally {java.util.Arrays.fill(clean,(byte)0);}
+            } finally {java.util.Arrays.fill(encoded,(byte)0);}
+        }
+        for(int width:new int[]{ImagePreparation.MAX_DIMENSION,ImagePreparation.MAX_DIMENSION+1}) {
+            Bitmap fixture=Bitmap.createBitmap(width,1,Bitmap.Config.ARGB_8888);
+            try(var bytes=new ByteArrayOutputStream()) {
+                assertTrue(fixture.compress(Bitmap.CompressFormat.PNG,100,bytes));byte[] encoded=bytes.toByteArray();
+                try {
+                    if(width>ImagePreparation.MAX_DIMENSION)
+                        assertThrows(PrivacyException.class,()->ImagePreparation.sanitize(encoded,()->{}));
+                    else {byte[] clean=ImagePreparation.sanitize(encoded,()->{});java.util.Arrays.fill(clean,(byte)0);}
+                } finally {java.util.Arrays.fill(encoded,(byte)0);}
+            } finally {fixture.recycle();}
+        }
         assertThrows(PrivacyException.class,()->ImagePreparation.sanitize(new byte[ImagePreparation.MAX_INPUT+1],()->{}));
         assertThrows(java.io.IOException.class,()->ImagePreparation.sanitize(new byte[]{1,2,3},()->{}));
         assertThrows(SecurityException.class,()->ImagePreparation.sanitize(new byte[]{1},()->{throw new SecurityException("Locked");}));
