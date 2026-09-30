@@ -12,6 +12,28 @@ import org.json.JSONObject;
 public final class RestrictedContentService {
     public static final int MAX_OBJECTS=128,MAX_TOMBSTONES=4096;
     private final Records db; private final Engine engine;
+    // Resource accounting is shared across Engine/storage owners. It never grants
+    // authorization and retains no Session, native resource, plaintext or Records.
+    private static final Map<Object,ResourceSlots> RESOURCE_SCOPES=new WeakHashMap<>();
+    private static synchronized ResourceSlots resourceSlots(Records db) {
+        return RESOURCE_SCOPES.computeIfAbsent(Objects.requireNonNull(db.restrictedResourceScope()),ignored->new ResourceSlots());
+    }
+    private static final class ResourceSlots {
+        private final Set<String> ids=new HashSet<>();
+        synchronized Reservation reserve(String id) {
+            if(ids.contains(id))throw new ContentException(ContentException.Code.BUSY);
+            if(ids.size()>=4)throw new ContentException(ContentException.Code.CAPACITY);
+            ids.add(id);return new Reservation(this,id);
+        }
+        synchronized void release(String id){ids.remove(id);}
+    }
+    private static final class Reservation {
+        private final ResourceSlots slots;private final String id;
+        private final java.util.concurrent.atomic.AtomicBoolean released=new java.util.concurrent.atomic.AtomicBoolean();
+        Reservation(ResourceSlots slots,String id){this.slots=slots;this.id=id;}
+        void release(){if(released.compareAndSet(false,true))slots.release(id);}
+    }
+    private final ResourceSlots resourceSlots;
     private final Set<Session> active=java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final Set<Prepared> pending=java.util.concurrent.ConcurrentHashMap.newKeySet();
     private final java.util.concurrent.Semaphore preparedSlots=new java.util.concurrent.Semaphore(4);
@@ -19,7 +41,7 @@ public final class RestrictedContentService {
         Thread thread=new Thread(work,"umbra-restricted-cleanup");thread.setDaemon(true);return thread;
     });
     private final Runnable invalidated=this::closeAll;
-    public RestrictedContentService(Records db,Engine engine) { this.db=db;this.engine=engine;cleanup.setRemoveOnCancelPolicy(true);cleanup.setKeepAliveTime(1,java.util.concurrent.TimeUnit.SECONDS);cleanup.allowCoreThreadTimeOut(true);db.onInvalidation(invalidated); }
+    public RestrictedContentService(Records db,Engine engine) { this.db=db;this.engine=engine;this.resourceSlots=resourceSlots(db);cleanup.setRemoveOnCancelPolicy(true);cleanup.setKeepAliveTime(1,java.util.concurrent.TimeUnit.SECONDS);cleanup.allowCoreThreadTimeOut(true);db.onInvalidation(invalidated); }
     private JSONObject get(String bucket,String id) throws Exception { byte[] v=db.get(bucket,id);return v==null?null:Wire.parse(v,600000); }
     private void put(String bucket,String id,JSONObject value) { db.put(bucket,id,Bytes.utf8(value.toString())); }
     public final class Review {
@@ -178,6 +200,7 @@ public final class RestrictedContentService {
         if(review==null || review.owner!=this)throw new ContentException(ContentException.Code.CONSENT_REQUIRED);
         review.check(false);String id=review.target;Runnable lease=review.lease;if(!confirmed)throw new ContentException(ContentException.Code.CONSENT_REQUIRED);
         final Session[] pending={null};
+        final Reservation[] reservation={null};
         try {
             db.transaction(()->{
                 review.check(false);JSONObject state=get("restricted-state",Wire.uuid(id));if(state==null)throw RestrictedPayload.invalid();
@@ -188,6 +211,7 @@ public final class RestrictedContentService {
                 int busy=0;
                 for(String key:db.keys("restricted-state"))if(get("restricted-state",key).getLong("busyUntil")>now)busy++;
                 if(busy>=4)throw new ContentException(ContentException.Code.CAPACITY);
+                reservation[0]=resourceSlots.reserve(id);
                 JSONObject p=get("restricted-object",id);if(p==null)throw RestrictedPayload.invalid();
                 RestrictedPayload.descriptor(p,now);
                 if(!RestrictedPayload.address(p).equals(RestrictedPayload.address(d)))throw RestrictedPayload.invalid();
@@ -195,7 +219,7 @@ public final class RestrictedContentService {
                 try {plain=VaultCodec.open(new SecretKeySpec(key,"AES"),"restricted-content",RestrictedPayload.address(d),Bytes.unb64(p.getString("nonce")),Bytes.unb64(p.getString("ciphertext")));}
                 finally {Arrays.fill(key,(byte)0);}
                 long deadline=Math.min(d.getLong("expires"),now+d.getLong("sessionSeconds"));
-                pending[0]=new Session(id,d,plain,lease,deadline,now);
+                pending[0]=new Session(id,d,plain,lease,deadline,now,reservation[0]);
                 if(d.getString("mode").equals("ONCE")) {state.put("consumed",true);db.remove("restricted-object",id);}
                 state.put("busyUntil",deadline);put("restricted-state",id,state);lease.run();return null;
             });
@@ -210,7 +234,10 @@ public final class RestrictedContentService {
             },250,250,java.util.concurrent.TimeUnit.MILLISECONDS);
             if(session.denied.get())session.expiry.cancel(false);
             return session;
-        } catch(Exception | Error failure) {if(pending[0]!=null)pending[0].close();throw failure;}
+        } catch(Exception | Error failure) {
+            if(pending[0]!=null)pending[0].close();else if(reservation[0]!=null)reservation[0].release();
+            throw failure;
+        }
     }
     /** No public raw bytes, URI, export, seek or forwarding operation. */
     interface Decoder<T> { T decode(byte[] bytes) throws Exception; }
@@ -222,9 +249,10 @@ public final class RestrictedContentService {
         private final java.util.List<AutoCloseable> resources=new java.util.ArrayList<>();
         private final java.util.concurrent.atomic.AtomicBoolean unconfirmedCleanup=new java.util.concurrent.atomic.AtomicBoolean();
         private final java.util.concurrent.CompletableFuture<Void> closed=new java.util.concurrent.CompletableFuture<>();
+        private final Reservation reservation;
         private volatile java.util.concurrent.ScheduledFuture<?> expiry;
         private EmergencyLock.Registration registration;
-        Session(String id,JSONObject descriptor,byte[] bytes,Runnable lease,long deadline,long startedWall) {this.id=id;this.descriptor=descriptor;this.bytes=bytes;this.lease=lease;this.deadline=deadline;this.startedWall=startedWall;}
+        Session(String id,JSONObject descriptor,byte[] bytes,Runnable lease,long deadline,long startedWall,Reservation reservation) {this.id=id;this.descriptor=descriptor;this.bytes=bytes;this.lease=lease;this.deadline=deadline;this.startedWall=startedWall;this.reservation=reservation;}
         private void timeCheck() {
             long elapsed=System.nanoTime()-startedNanos;
             if(denied.get() || elapsed<0 || elapsed>=(deadline-startedWall)*1_000_000_000L || Bytes.now()<startedWall || Bytes.now()>=deadline)
@@ -271,7 +299,7 @@ public final class RestrictedContentService {
                 }
                 active.remove(this);
                 if(failed || unconfirmedCleanup.get())closed.completeExceptionally(new IllegalStateException("Restricted resource closure failed"));
-                else {if(registration!=null)registration.close();closed.complete(null);}
+                else {reservation.release();if(registration!=null)registration.close();closed.complete(null);}
             });
         }
         @Override public String toString() {return "RestrictedSession[redacted]";}
