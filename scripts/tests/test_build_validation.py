@@ -39,6 +39,16 @@ class BuildValidationTests(unittest.TestCase):
             path.write_text('<testsuite name="app.umbra.Test" tests="1"><testcase/></testsuite>')
             self.assertEqual(check_android_tests.validate(directory, {"app.umbra.Test"}), 1)
 
+    def test_inventory_includes_variant_subpackages(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary)
+            (source / "admission").mkdir()
+            (source / "TopTest.java").touch()
+            (source / "admission/PendingTest.java").touch()
+            (source / "admission/Helper.java").touch()
+            self.assertEqual(check_android_tests.discover(source),
+                             {"app.umbra.TopTest", "app.umbra.admission.PendingTest"})
+
     def manifest(self):
         root = ET.Element("manifest", package="app.umbra.privatechat.dev")
         app = ET.SubElement(root, "application", {"android:allowBackup": "false", "android:fullBackupContent": "false", "android:usesCleartextTraffic": "false", "android:debuggable": "true", "android:networkSecurityConfig": "@0x7f040001", "android:dataExtractionRules": "@0x7f040000"})

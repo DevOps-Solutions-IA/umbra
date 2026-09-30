@@ -31,7 +31,7 @@ public final class VoiceControls implements AutoCloseable {
             display(activity,track,new AlertDialog.Builder(activity).setTitle("Voz: "+voice.state()+" · "+voice.modulationStatus())
                 .setItems(new String[]{"Silenciar","Activar micrófono","Salida de audio","Finalizar","Solicitar video","Responder solicitud de video","Apagar video, conservar audio","Cambiar cámara","Ver video recibido","Activar/reintentar modulación local","Transmitir voz natural"},(d,which)->{
                     try {
-                        if(which<2) voice.mute(which==0);
+                        if(which<2) setMuted(which==0);
                         else if(which==9) {voice.modulation(true,false);changed.run();}
                         else if(which==10) {
                             long reviewedMode=epoch;
@@ -45,21 +45,7 @@ public final class VoiceControls implements AutoCloseable {
                         else if(which==3) { close(); }
                         else if(which==4 || which==5) {
                             display(activity,track,new AlertDialog.Builder(activity).setTitle(which==4?"Solicitar video":"Consentimiento de video")
-                                .setItems(new String[]{"Solo recibir","Enviar y recibir","Rechazar solicitud"},(choice,index)->{
-                                    if(index==2) {worker.execute(()->{try {voice.rejectVideo();}catch(Exception invalid){activity.runOnUiThread(()->failure(activity));}});return;}
-                                    boolean sending=index==1;
-                                    if(sending && activity.checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED) {
-                                        activity.requestPermissions(new String[]{Manifest.permission.CAMERA},304);return;
-                                    }
-                                    long clicked=SystemClock.elapsedRealtime(),reviewed=epoch;
-                                    worker.execute(()->{
-                                        try {
-                                            if(reviewed!=epoch || SystemClock.elapsedRealtime()-clicked>30_000)throw new SecurityException("Video review expired");
-                                            voice.video(sending,true,which==5,true);
-                                            activity.runOnUiThread(()->{if(reviewed==epoch)changed.run();});
-                                        } catch(Exception invalid){activity.runOnUiThread(()->failure(activity));}
-                                    });
-                                }));
+                                .setItems(new String[]{"Solo recibir","Enviar y recibir","Rechazar solicitud"},(choice,index)->answerVideo(activity,worker,which==5,index,changed)));
                         } else if(which==6) {
                             voice.requestVideoStop();
                         } else if(which==7) {
@@ -105,7 +91,7 @@ public final class VoiceControls implements AutoCloseable {
                         final NativeVoiceSession opened=NativeVoiceSession.open(activity,lease,turn,requestedModulation);
                         activity.runOnUiThread(()->{
                             if(reviewed!=epoch || activity.isFinishing() || activity.isDestroyed()) { opened.close();return; }
-                            current=opened;monitor(activity,opened,changed);changed.run();
+                            current=opened;callId=id;muted=false;monitor(activity,opened,changed);changed.run();
                         });
                     } catch(Exception invalid) {
                         if(lease!=null) lease.close(); if(turn!=null) turn.close();
@@ -113,6 +99,64 @@ public final class VoiceControls implements AutoCloseable {
                     }
                 });
             }));
+    }
+    /*
+     * Read-only state and single-purpose controls for the call screen (UI integration point).
+     * They call the same NativeVoiceSession APIs and consent guards as the dialog above; no media,
+     * DSP, TURN or signaling behavior is added or changed here.
+     */
+    private volatile boolean muted;
+    private volatile String callId;
+    public record Snapshot(String callId,String state,String modulationStatus,boolean modulationRequested,boolean muted,
+                           String videoStatus,long lastCaptureNanos,long closedNanos) {}
+    public Snapshot snapshot() {
+        NativeVoiceSession voice=current; if(voice==null) return null;
+        return new Snapshot(callId,voice.state().name(),voice.modulationStatus(),voice.modulationRequested(),muted,
+            voice.videoStatus(),voice.videoCaptureLastNanos(),voice.videoClosedNanos());
+    }
+    private NativeVoiceSession require() { NativeVoiceSession voice=current; if(voice==null) throw new IllegalStateException("No voice session"); return voice; }
+    /** Mute state is recorded only after the engine accepted the change. */
+    public void setMuted(boolean value) throws Exception { require().mute(value); muted=value; }
+    public void requestModulation() throws Exception { require().modulation(true,false); }
+    /** Epoch captured when the "Vas a transmitir tu voz natural" confirmation was shown. */
+    public long modeEpoch() { return epoch; }
+    public void useNaturalVoice(long reviewedEpoch) throws Exception {
+        if(reviewedEpoch!=epoch) throw new SecurityException("Consentimiento caducado");
+        require().modulation(false,true);
+    }
+    public void chooseAudioOutput(Activity activity,Consumer<Dialog> track) throws Exception {
+        NativeVoiceSession voice=require();
+        var devices=voice.communicationDevices();
+        String[] labels=devices.stream().map(device->device.getProductName().toString()).toArray(String[]::new);
+        display(activity,track,new AlertDialog.Builder(activity).setTitle("Salida de audio")
+            .setItems(labels,(dialog,index)->{ try { voice.selectCommunicationDevice(devices.get(index).getId()); } catch(Exception invalid) { close(); failure(activity); } }));
+    }
+    public void showRemoteVideo(Activity activity,Consumer<Dialog> track) { VideoSurface.show(activity,require(),track); }
+    public void switchCamera(Activity activity,Executor worker) {
+        NativeVoiceSession voice=require();
+        worker.execute(()->{try {voice.switchCamera();}catch(Exception invalid){activity.runOnUiThread(()->failure(activity));}});
+    }
+    public void stopVideo() { require().requestVideoStop(); }
+    /**
+     * Per-direction video consent. choice: 0 receive only, 1 send and receive, 2 reject.
+     * Camera permission is requested without starting capture; the user must choose again.
+     */
+    public void answerVideo(Activity activity,Executor worker,boolean accepting,int choice,Runnable changed) {
+        NativeVoiceSession voice=current;
+        if(voice==null) { failure(activity); return; }
+        if(choice==2) {worker.execute(()->{try {voice.rejectVideo();}catch(Exception invalid){activity.runOnUiThread(()->failure(activity));}});return;}
+        boolean sending=choice==1;
+        if(sending && activity.checkSelfPermission(Manifest.permission.CAMERA)!=PackageManager.PERMISSION_GRANTED) {
+            activity.requestPermissions(new String[]{Manifest.permission.CAMERA},304);return;
+        }
+        long clicked=SystemClock.elapsedRealtime(),reviewed=epoch;
+        worker.execute(()->{
+            try {
+                if(reviewed!=epoch || SystemClock.elapsedRealtime()-clicked>30_000)throw new SecurityException("Video review expired");
+                voice.video(sending,true,accepting,true);
+                activity.runOnUiThread(()->{if(reviewed==epoch)changed.run();});
+            } catch(Exception invalid){activity.runOnUiThread(()->failure(activity));}
+        });
     }
     private void monitor(Activity activity,NativeVoiceSession voice,Runnable changed) {
         if(stateMonitor!=null)stateHandler.removeCallbacks(stateMonitor);
@@ -143,5 +187,5 @@ public final class VoiceControls implements AutoCloseable {
         AlertDialog dialog=builder.create(); dialog.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);track.accept(dialog);dialog.show();
     }
     private static void failure(Activity activity) { Toast.makeText(activity,"No se pudo establecer la conexión privada mediante el retransmisor.",Toast.LENGTH_LONG).show(); }
-    @Override public void close() { if(stateMonitor!=null)stateHandler.removeCallbacks(stateMonitor);stateMonitor=null;epoch++;NativeVoiceSession voice=current;current=null;if(voice!=null) voice.close(); }
+    @Override public void close() { if(stateMonitor!=null)stateHandler.removeCallbacks(stateMonitor);stateMonitor=null;epoch++;NativeVoiceSession voice=current;current=null;callId=null;muted=false;if(voice!=null) voice.close(); }
 }

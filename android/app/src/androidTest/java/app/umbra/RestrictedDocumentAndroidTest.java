@@ -55,6 +55,17 @@ public class RestrictedDocumentAndroidTest {
         var context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
+            byte[] seedPdf=pdf(1);
+            try {
+                for(int length:new int[]{5,8,16}) {
+                    byte[] prefix=Arrays.copyOf(seedPdf,length);
+                    assertThrows("PDF prefix="+length,ContentException.class,
+                            ()->RestrictedDocuments.prepare(context,a,a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),prefix,true));
+                }
+            } finally {Arrays.fill(seedPdf,(byte)0);}
+            byte[] maximumPages=pdf(4);
+            try(var prepared=RestrictedDocuments.prepare(context,a,a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),maximumPages,true)){assertNotNull(prepared);}
+            finally {Arrays.fill(maximumPages,(byte)0);}
             var review=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
             assertThrows(ContentException.class,()->RestrictedDocuments.prepare(context,a,review,new byte[]{1,2,3},true));
             byte[] tooMany=pdf(5);

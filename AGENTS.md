@@ -48,7 +48,7 @@ python scripts/repository_guard.py
 python scripts/build_android.py --check-only
 python scripts/build_android.py
 ```
-Se necesita Python 3.12+, JDK 21, Gradle 8.13 y SDK Android 36 para los comandos correspondientes.
+Se necesita Python 3.12+, JDK 21, Gradle 8.14.4 y SDK Android 36 para los comandos correspondientes.
 El setup prepara Python; no instala el SDK ni ejecuta emuladores automáticamente. Si un requisito
 falta, registrar el bloqueo y avanzar en las tareas independientes. Los jobs Android de CI tienen
 su propio SDK. No usar `|| true`, `continue-on-error`, exclusiones de tests o mocks para hacer

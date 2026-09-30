@@ -7,6 +7,20 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class VaultSessionRegistryTest {
+    @Test public void restrictedResourceScopeSurvivesGateAndClaimReplacementForSamePath() {
+        String path=UUID.randomUUID().toString();var first=new AccessGate();first.unlock();
+        var claim=VaultSessionRegistry.claim(path,first);Object scope=claim.restrictedResourceScope();claim.close();
+        var nextGate=new AccessGate();nextGate.unlock();
+        try(var next=VaultSessionRegistry.claim(path,nextGate)) {
+            assertSame(scope,next.restrictedResourceScope());
+            try(var concurrent=VaultSessionRegistry.claim(path,nextGate)) {
+                assertSame(scope,concurrent.restrictedResourceScope());
+            }
+        }
+        try(var unrelated=VaultSessionRegistry.claim(UUID.randomUUID().toString(),nextGate)) {
+            assertNotSame(scope,unrelated.restrictedResourceScope());
+        }
+    }
     private static void closed(AccessGate gate) throws Exception {
         long until=System.nanoTime()+TimeUnit.SECONDS.toNanos(2);
         while(gate.emergency().status().state()==EmergencyLock.State.CLOSING && System.nanoTime()<until)Thread.sleep(5);

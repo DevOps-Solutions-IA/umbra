@@ -166,7 +166,9 @@ if (vaultLab) {
             from(layout.buildDirectory.dir("intermediates/javac/${variant}AndroidTest/compile${capital}AndroidTestJavaWithJavac/classes")) {
                 include("app/umbra/RestrictedVideoAndroidTest*.class", "app/umbra/content/SyntheticRestrictedVideo*.class", "app/umbra/RestrictedDocumentAndroidTest*.class", "app/umbra/content/SyntheticDocuments*.class", "app/umbra/PrivacyAdaptersAndroidTest*.class", "app/umbra/RestrictedContentAndroidTest*.class", "app/umbra/RestrictedRestartFixtureListener*.class", "app/umbra/RestrictedRecordingAndroidTest*.class", "app/umbra/RestrictedHttpsFixtureListener*.class", "app/umbra/content/SyntheticRestrictedAudio*.class",
                     "app/umbra/LocationAndroidTest*.class", "app/umbra/EmergencyLockAndroidTest*.class", "app/umbra/PrivateStartupTest*.class", "app/umbra/PrivateStartupFixtureListener*.class", "app/umbra/AdmissionLab*.class", "app/umbra/DeviceSignalTest*.class", "app/umbra/AdmissionRestartFixtureListener*.class", "app/umbra/DeviceAdmissionTest*.class", "app/umbra/lab/SqliteDeviceRecords*.class", "app/umbra/AdmissionFixture*.class", "app/umbra/DeviceVaultPasswordTest*.class", "app/umbra/PasswordRestartFixtureListener*.class",
-                    "app/umbra/DeviceSignalTest*.class", "app/umbra/DeviceMemoryRecords*.class")
+                    "app/umbra/DeviceSignalTest*.class", "app/umbra/DeviceMemoryRecords*.class",
+                    // Claude UI integration suite (scripts/run_ui_integration.py --optimized): test-only references.
+                    "app/umbra/UiScreensRenderTest*.class", "app/umbra/UiSecurityFlowTest*.class", "app/umbra/UiContentIntegrationTest*.class")
             }
         }
         val trace = tasks.register<JavaExec>("trace${capital}Api") {

@@ -106,8 +106,10 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2 # v5, Node 24
         with:
-          gradle-version: '8.13'
+          gradle-version: '8.14.4'
           cache-disabled: true
+      - name: Reject dependency fallback after repository connection failure
+        run: python scripts/check_gradle_repository_failure.py --gradle "$(command -v gradle)" --report android/app/build/reports/gradle-repository-failure.json
       - run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
       - name: Real libsignal unit tests, Android builds and lint
         working-directory: android
@@ -151,8 +153,8 @@ jobs:
           sudo apt-get install --no-install-recommends -y tcpdump
           source scripts/ci_emulator.sh
           umbra_start_avd umbra-ci 5554
-          python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor connected --log android/app/build/reports/device/connected.log
-          python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor offline --log android/app/build/reports/device/offline.log
+          python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor connected --log android/app/build/reports/device/connected.log --evidence-dir android/app/build/reports/device/ui-evidence/connected
+          python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor offline --log android/app/build/reports/device/offline.log --evidence-dir android/app/build/reports/device/ui-evidence/offline
           python scripts/run_location_restart.py --serial emulator-5554 --flavor connected --log-dir android/app/build/reports/device/
           python scripts/run_location_restart.py --serial emulator-5554 --flavor offline --log-dir android/app/build/reports/device/
           python scripts/smoke_release_launch.py --serial emulator-5554 > android/app/build/reports/device/release-launch.log

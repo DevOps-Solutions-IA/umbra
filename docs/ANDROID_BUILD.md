@@ -1,6 +1,6 @@
 # Compilación y validación Android
 
-Requisitos fijados: Python 3.12+, JDK 21, Gradle 8.13, AGP 8.13.2,
+Requisitos fijados: Python 3.12+, JDK 21, Gradle 8.14.4, AGP 8.13.2,
 plataforma Android 36 y Build Tools 35.0.0. libsignal sigue en 0.102.3.
 El AAR requiere core library desugaring; se utiliza `desugar_jdk_libs:2.0.3`.
 
@@ -21,7 +21,7 @@ python scripts/build_android.py --release
 python scripts/test_relay_integration.py
 ```
 
-El script utiliza exclusivamente la distribución Gradle 8.13 de `.umbra-tools`,
+El script utiliza exclusivamente la distribución Gradle 8.14.4 de `.umbra-tools`,
 descargada por `bootstrap_gradle.py` y contrastada con el SHA-256 oficial fijado en el código (una instalación local existente se reutiliza, no se vuelve a autenticar).
 Un Gradle diferente presente en `PATH` no altera la selección. `--check-only`
 verifica Python, Java/javac 21, la plataforma y aapt; no descarga Gradle ni demuestra
@@ -78,7 +78,7 @@ compilarlos no implica haber ejecutado el código ofuscado ni autoriza su distri
 Para los ocho tests por variante, preparar un AVD desechable sin PIN ni datos UMBRA:
 
 ```bash
-.umbra-tools/gradle-8.13/bin/gradle -p android --no-daemon :app:assembleConnectedDebugAndroidTest :app:assembleOfflineDebugAndroidTest
+.umbra-tools/gradle-8.14.4/bin/gradle -p android --no-daemon :app:assembleConnectedDebugAndroidTest :app:assembleOfflineDebugAndroidTest
 python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor connected --log /tmp/umbra-connected-device.log
 python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor offline --log /tmp/umbra-offline-device.log
 ```

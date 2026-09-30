@@ -22,11 +22,16 @@ def validate(directory: Path, expected: set[str]) -> int:
     return count
 
 
+def discover(source: Path) -> set[str]:
+    return {"app.umbra." + ".".join(path.relative_to(source).with_suffix("").parts)
+            for path in source.rglob("*Test.java")}
+
+
 def main():
     source = ROOT / "android/app/src/test/java/app/umbra"
-    expected = {"app.umbra." + ".".join(path.relative_to(source).with_suffix("").parts) for path in source.rglob("*Test.java")}
+    expected = discover(source)
     for variant in ("Connected", "Offline"):
-        variant_expected = expected | {"app.umbra." + path.stem for path in (ROOT / f"android/app/src/test{variant}/java/app/umbra").glob("*Test.java")}
+        variant_expected = expected | discover(ROOT / f"android/app/src/test{variant}/java/app/umbra")
         count = validate(ROOT / f"android/app/build/test-results/test{variant}DebugUnitTest", variant_expected)
         print(f"PASS {variant}: {count} JVM tests, no failures/errors/skips")
 

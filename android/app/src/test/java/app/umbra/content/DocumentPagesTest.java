@@ -37,4 +37,46 @@ public class DocumentPagesTest {
             catch(ContentException expected) {assertEquals(ContentException.Code.INVALID,expected.code());}
         }
     }
+    @Test public void multiPageTruncationAndExactCapacityBoundariesFailClosed() {
+        byte[] valid=DocumentPages.pack(List.of(new byte[8],new byte[13],new byte[21],new byte[34]));
+        assertEquals(4,DocumentPages.parse(valid).size());
+        for(int size=0;size<valid.length;size++) {
+            byte[] truncated=Arrays.copyOf(valid,size);
+            assertThrows("prefix="+size,ContentException.class,()->DocumentPages.parse(truncated));
+        }
+        for(int at:new int[]{8,20,37,62}) {
+            for(int length:new int[]{Integer.MIN_VALUE,-1,0,7,valid.length,Integer.MAX_VALUE}) {
+                byte[] mutated=valid.clone();ByteBuffer.wrap(mutated).putInt(at,length);
+                assertThrows("offset="+at+" length="+length,ContentException.class,()->DocumentPages.parse(mutated));
+            }
+        }
+        byte[] maximum=DocumentPages.pack(List.of(new byte[RestrictedPayload.MAX_BYTES-12]));
+        assertEquals(RestrictedPayload.MAX_BYTES,maximum.length);
+        assertEquals(maximum.length-12,DocumentPages.parse(maximum).get(0).length());
+        assertThrows(ContentException.class,()->DocumentPages.parse(Arrays.copyOf(maximum,maximum.length+1)));
+        ContentException capacity=assertThrows(ContentException.class,
+                ()->DocumentPages.pack(List.of(new byte[RestrictedPayload.MAX_BYTES-11])));
+        assertEquals(ContentException.Code.CAPACITY,capacity.code());
+    }
+    @Test public void fixedSeedStructuredMutationsRejectOrDescribeExactBoundedSlices() {
+        final long seed=0x554d425241L;Random random=new Random(seed);
+        byte[] valid=DocumentPages.pack(List.of(new byte[8],new byte[16],new byte[24],new byte[32]));
+        for(int iteration=0;iteration<1024;iteration++) {
+            byte[] input=valid.clone();
+            for(int n=0,count=1+random.nextInt(4);n<count;n++)
+                input[random.nextInt(input.length)]^=(byte)(1+random.nextInt(255));
+            String context="seed="+seed+" iteration="+iteration;
+            try {
+                var slices=DocumentPages.parse(input);
+                assertTrue(context,slices.size()>=1 && slices.size()<=4);
+                int end=8;
+                for(var slice:slices) {
+                    assertEquals(context,end+4,slice.offset());assertTrue(context,slice.length()>=8);
+                    assertTrue(context,slice.offset()<=input.length-slice.length());
+                    end=slice.offset()+slice.length();
+                }
+                assertEquals(context,input.length,end);
+            } catch(ContentException rejected) {assertEquals(context,ContentException.Code.INVALID,rejected.code());}
+        }
+    }
 }

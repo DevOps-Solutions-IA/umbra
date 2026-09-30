@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Install synthetic debug fixtures and require all real single-device checks, including connected video lifecycle."""
+"""Install synthetic debug fixtures and require all real single-device checks, including connected video lifecycle.
+
+Optionally pulls the UI rendering evidence (synthetic data only) written by UiScreensRenderTest."""
 from __future__ import annotations
 
 import argparse
@@ -10,6 +12,7 @@ import shutil
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
+MIN_EVIDENCE = 30
 
 
 def main() -> None:
@@ -19,6 +22,7 @@ def main() -> None:
     parser.add_argument('--log', type=Path, required=True)
     parser.add_argument('--app-apk', type=Path)
     parser.add_argument('--test-apk', type=Path)
+    parser.add_argument('--evidence-dir', type=Path, help='copy ui-evidence PNGs rendered with synthetic data here')
     parser.add_argument('--adb', default=shutil.which('adb') or str(Path(os.environ.get('ANDROID_HOME', '')) / 'platform-tools/adb'))
     args = parser.parse_args()
     outputs = ROOT / 'android/app/build/outputs/apk'
@@ -34,18 +38,28 @@ def main() -> None:
     with args.log.open('w', encoding='utf-8') as stream:
         result = subprocess.run([*adb, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'syntheticNoHostAudio', 'true',
             package + '.test/androidx.test.runner.AndroidJUnitRunner'], stdout=stream,
-            stderr=subprocess.STDOUT, timeout=180)
+            stderr=subprocess.STDOUT, timeout=300)
     output = args.log.read_text(encoding='utf-8')
-    # 66 shared methods (including concurrent Vault ONCE open, encrypted DB/WAL inspection and native clipboard),
-    # plus connected capture and two connected video surface lifecycle methods.
+    # Inventory: 67 shared technical methods (including concurrent Vault ONCE open, encrypted DB/WAL
+    # inspection, native clipboard and SQLite admission snapshots that preserve corruption) + 32 Claude UI
+    # methods (UiScreensRenderTest, UiSecurityFlowTest, UiContentIntegrationTest); connected adds capture and
+    # two video surface lifecycle methods.
     # Exact counts remain fail-closed: adding a class requires updating this contract.
-    expected=69 if args.flavor=='connected' else 66
+    expected=102 if args.flavor=='connected' else 99
     failed = result.returncode != 0 or not re.search(r'^OK \('+str(expected)+r' tests\)$', output, re.MULTILINE)
     failed |= 'INSTRUMENTATION_CODE: -1' not in output
     failed |= bool(re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', output))
     failed |= any(marker in output for marker in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'Process crashed'))
     if failed:
         raise SystemExit(f'Instrumentation failed, skipped checks, or did not run exactly {expected} tests: {args.log}')
+    if args.evidence_dir:
+        remote = f'/sdcard/Android/data/{package}/files/ui-evidence/{args.flavor}'
+        args.evidence_dir.mkdir(parents=True, exist_ok=True)
+        subprocess.run([*adb, 'pull', remote + '/.', str(args.evidence_dir)], check=True, timeout=120)
+        images = sorted(args.evidence_dir.glob('*.png'))
+        if len(images) < MIN_EVIDENCE:
+            raise SystemExit(f'Expected at least {MIN_EVIDENCE} UI evidence images, found {len(images)} in {args.evidence_dir}')
+        print(f'{args.flavor}: {len(images)} synthetic UI renders copied to {args.evidence_dir}')
     print(f'{args.flavor}: {expected} Android instrumentation tests passed on {args.serial}; log: {args.log}')
 
 

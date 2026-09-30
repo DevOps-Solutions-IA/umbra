@@ -48,6 +48,30 @@ public final class RestrictedVideoAndroidTest {
         var context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         try(var ar=new SqliteDeviceRecords();var br=new SqliteDeviceRecords()) {
             Engine a=new Engine(ar),b=new Engine(br);LocationAndroidTest.pair(a,b,ar,br);
+            byte[] clip=SyntheticRestrictedVideo.clip(context,ar.authorization(),false);
+            try {
+                for(int length:new int[]{1,8,23}) {
+                    byte[] prefix=Arrays.copyOf(clip,length);
+                    assertThrows("MP4 prefix="+length,ContentException.class,
+                            ()->RestrictedVideo.prepare(context,a,a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),prefix,true));
+                }
+                for(int boxLength:new int[]{0,15,Integer.MAX_VALUE,-1}) {
+                    byte[] mutation=clip.clone();java.nio.ByteBuffer.wrap(mutation).putInt(boxLength);
+                    assertThrows("MP4 ftyp length="+boxLength,ContentException.class,
+                            ()->RestrictedVideo.prepare(context,a,a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),mutation,true));
+                }
+                int ftypLength=java.nio.ByteBuffer.wrap(clip).getInt();
+                assertTrue(ftypLength>=24 && ftypLength<clip.length);
+                byte[] headerOnly=Arrays.copyOf(clip,ftypLength);
+                try {
+                    try(var unexpected=RestrictedVideo.prepare(context,a,a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),headerOnly,true)) {
+                        fail("MP4 with ftyp only accepted");
+                    }
+                } catch(java.io.IOException | ContentException expected) {
+                    // MediaExtractor input rejection only; unexpected runtime failures propagate.
+                }
+                try(var prepared=RestrictedVideo.prepare(context,a,a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30),clip,true)){assertNotNull(prepared);}
+            } finally {Arrays.fill(clip,(byte)0);}
             var review=a.restricted().reviewSend(b.id(),RestrictedPayload.Mode.ONCE,600,30);
             assertThrows(ContentException.class,()->RestrictedVideo.prepare(context,a,review,new byte[32],true));
             assertThrows(ContentException.class,()->RestrictedVideo.prepare(context,a,review,new byte[RestrictedPayload.MAX_BYTES+1],true));
