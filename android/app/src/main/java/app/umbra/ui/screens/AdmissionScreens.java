@@ -18,9 +18,14 @@ public final class AdmissionScreens {
     private AdmissionScreens() {}
 
     public record RequestInfo(String deviceFingerprint, String identityFingerprint, String realm, String expires, boolean expired) {}
+    /**
+     * @param renewalAvailable the domain returned this phone's current public credential (ADMITTED), so a
+     *                         renewal request can carry it; otherwise a new request is generated
+     */
     public record AdmissionState(AdmissionPresentation presentation, String realm, String authority, String identity,
-                                 RequestInfo request, String credentialExpires, boolean offlineEdition, boolean busy) {}
-    public interface AdmissionActions { void back(); void importFile(); void createRequest(); void exportRequest(); void admin(); }
+                                 RequestInfo request, String credentialExpires, boolean offlineEdition, boolean busy,
+                                 boolean renewalAvailable) {}
+    public interface AdmissionActions { void back(); void importFile(); void createRequest(); void exportRequest(); void cancelRequest(); void admin(); }
 
     /** Label + public value (fingerprints, identifiers, times). Never private material. */
     private static void fingerprint(Ui ui, LinearLayout box, String label, String value) {
@@ -59,7 +64,7 @@ public final class AdmissionScreens {
 
         if (r != null && p.canExportRequest() && !r.expired()) body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Exportar solicitud", Glyph.FILE, a::exportRequest));
         if (p.canCreateRequest()) {
-            String label = p.status() == AdmissionPresentation.Status.ADMITTED || (p.status() == AdmissionPresentation.Status.EXPIRED && r == null) ? "Solicitar renovación" : "Generar solicitud";
+            String label = s.renewalAvailable() ? "Solicitar renovación" : "Generar solicitud";
             Button create = ui.button(r == null ? Ui.ButtonKind.PRIMARY : Ui.ButtonKind.SECONDARY, label, Glyph.DEVICE_PENDING, a::createRequest);
             if (s.busy()) ui.disabled(create, "operación en curso");
             body.addView(create);
@@ -71,6 +76,10 @@ public final class AdmissionScreens {
             body.addView(importer);
         }
         if (r != null) {
+            // Local abandonment of this exact request (AdmissionService.cancelPendingRequest); not a remote recall.
+            Button cancel = ui.button(Ui.ButtonKind.GHOST, "Cancelar solicitud", Glyph.CLOSE, a::cancelRequest);
+            if (s.busy()) ui.disabled(cancel, "operación en curso");
+            body.addView(cancel);
             LinearLayout qr = ui.row(); qr.addView(ui.text(UmbraType.CAPTION, "Compartir por QR"), Ui.weight()); qr.addView(ui.pendingChip());
             body.addView(qr, ui.margins(Ui.match(), 6, 0));
         }
@@ -80,7 +89,11 @@ public final class AdmissionScreens {
     }
 
     // ------------------------------------------------------------------ administrator
-    public record AdminState(boolean realmConfigured, String realm, String authority, boolean busy) {}
+    /** Authority-only public metadata of one issued credential (AdmissionService.issuedCredentials). */
+    public record IssuedRow(String device, String issued, String expires, boolean revoked, boolean expired) {}
+    /** @param authority snapshot of {@code isAdmissionAuthority()}; presentation only, the domain re-checks */
+    public record AdminState(boolean realmConfigured, String realm, String authority, boolean busy, boolean isAuthority,
+                             java.util.List<IssuedRow> issued) {}
     public interface AdminActions { void back(); void createRealm(); void exportRealm(); void reviewRequest(); void revokeCredential(); }
 
     public static Screen admin(Ui ui, AdminState s, AdminActions a) {
@@ -98,12 +111,28 @@ public final class AdmissionScreens {
         fingerprint(ui, realm, "Entorno", s.realm());
         fingerprint(ui, realm, "Autoridad", s.authority());
         body.addView(realm);
+        if (!s.isAuthority()) {
+            // Members may re-share the public realm file; decisions belong to the authority phone only.
+            body.addView(ui.banner(Tone.NEUTRAL, Glyph.SHIELD, "Este teléfono no es la autoridad", null, null, null));
+            body.addView(ui.button(Ui.ButtonKind.SECONDARY, "Exportar entorno", Glyph.FILE, a::exportRealm));
+            return Screen.of(top, body, null);
+        }
         Button review = ui.button(Ui.ButtonKind.PRIMARY, "Revisar solicitud", Glyph.DEVICE_PENDING, a::reviewRequest);
         Button revoke = ui.button(Ui.ButtonKind.DESTRUCTIVE, "Revocar credencial", Glyph.DEVICE_REVOKED, a::revokeCredential);
         if (s.busy()) { ui.disabled(review, "operación en curso"); ui.disabled(revoke, "operación en curso"); }
         body.addView(review);
         body.addView(ui.button(Ui.ButtonKind.SECONDARY, "Exportar entorno", Glyph.FILE, a::exportRealm));
         body.addView(revoke);
+        body.addView(ui.sectionHeader("Credenciales emitidas"));
+        if (s.issued().isEmpty()) body.addView(ui.text(UmbraType.CAPTION, "Ninguna."));
+        for (IssuedRow row : s.issued()) {
+            Tone tone = row.revoked() ? Tone.BLOCKED : row.expired() ? Tone.WARNING : Tone.SUCCESS;
+            String state = row.revoked() ? "Revocada" : row.expired() ? "Vencida" : "Vigente";
+            LinearLayout item = ui.listRow(ui.iconTile(row.revoked() ? Glyph.DEVICE_REVOKED : Glyph.DEVICE_AUTHORIZED, tone), row.device(),
+                "Emitida " + row.issued() + " · vence " + row.expires(), ui.chip(tone, row.revoked() ? Glyph.BLOCK : Glyph.CHECK, state), null);
+            item.setContentDescription("Credencial de " + row.device() + ". " + state + ". Vence " + row.expires());
+            body.addView(item);
+        }
         return Screen.of(top, body, null);
     }
 

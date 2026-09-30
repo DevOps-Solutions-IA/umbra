@@ -19,8 +19,10 @@ public final class ChatScreens {
 
     /** A location entry shown in the conversation (received or our own active share). */
     public record LocationEntry(String title, String detail, boolean live, boolean outgoing) {}
-    /** One row of the history list: a message or a location card. */
-    public record Entry(MessageItem message, LocationEntry location) {}
+    /** One row of the history list: a message, a location card or a received restricted object (metadata only). */
+    public record Entry(MessageItem message, LocationEntry location, RestrictedPresentation.Received restricted) {
+        public Entry(MessageItem message, LocationEntry location) { this(message, location, null); }
+    }
 
     public record ChatState(String peerId, String alias, TrustPresentation trust, List<Entry> entries, String expiryLabel,
                             String draft, boolean sharingLocation, String locationStatus, FeatureAvailability features,
@@ -28,7 +30,7 @@ public final class ChatScreens {
     public interface ChatActions {
         void back(); void contact(); void verify(); void unblock(); void voiceCall(); void videoCall(); void openCall();
         void attach(); void send(String text); void draft(String text); void message(MessageItem item);
-        void stopLocation(); void retry();
+        void stopLocation(); void retry(); void openRestricted(String id);
     }
 
     public static Screen direct(Ui ui, ChatState s, ChatActions a) {
@@ -74,9 +76,12 @@ public final class ChatScreens {
             }
             Entry e = (Entry) row;
             if (e.location() != null) return ui.locationCard(e.location().title(), e.location().detail(), e.location().live(), e.location().outgoing(), null);
+            if (e.restricted() != null) return restrictedRow(ui, e.restricted(), a);
             MessageItem m = e.message();
-            boolean exportable = m.kind() == MessageItem.Kind.FILE || m.kind() == MessageItem.Kind.IMAGE;
-            return ui.bubble(m, exportable ? () -> a.message(m) : null, null);
+            // Files: explicit export. Ordinary text: explicit copy through the private clipboard (one-use consent).
+            boolean actionable = m.kind() == MessageItem.Kind.FILE || m.kind() == MessageItem.Kind.IMAGE
+                || (m.kind() == MessageItem.Kind.TEXT && s.features().available(Feature.CLIPBOARD_PROTECTION));
+            return ui.bubble(m, actionable ? () -> a.message(m) : null, null);
         }, true);
         list.setContentDescription("Historial de mensajes con " + s.alias());
 
@@ -114,17 +119,31 @@ public final class ChatScreens {
         return c;
     }
 
-    // ------------------------------------------------------------------ attachments
-    public interface AttachActions { void file(); void photo(); void location(); }
+    /** Received restricted object: public metadata only (format, mode, expiry, domain state). No preview. */
+    static LinearLayout restrictedRow(Ui ui, RestrictedPresentation.Received r, ChatActions a) {
+        String title = (r.kind() == null ? "Contenido" : r.kind().label) + " protegido";
+        LinearLayout row = ui.listRow(ui.iconTile(r.kind() == null ? Glyph.WARNING : r.kind().glyph, r.tone()), title, r.detail(),
+            ui.chip(r.tone(), r.canOpen() ? Glyph.EYE : Glyph.LOCK, r.state()), r.canOpen() ? () -> a.openRestricted(r.id()) : null);
+        row.setContentDescription(title + ". " + r.detail() + ". " + r.state() + (r.canOpen() ? ". Abrir" : ""));
+        return row;
+    }
 
-    /** Attachment sheet content. Photo sending stays disabled until metadata cleaning exists. */
+    // ------------------------------------------------------------------ attachments
+    public interface AttachActions { void file(); void restricted(); void location(); }
+
+    /**
+     * Attachment sheet. "Archivo" is an ordinary stored file (exportable by the recipient). Protected content
+     * (photo, voice note, video, PDF) goes through the restricted service: not exportable, ONCE or Solo en UMBRA.
+     */
     public static LinearLayout attachSheet(Ui ui, FeatureAvailability f, boolean allowsLocation, AttachActions a) {
         LinearLayout box = ui.column();
         box.addView(ui.heading(UmbraType.TITLE, "Compartir"));
-        box.addView(ui.listRow(ui.iconTile(Glyph.FILE, Tone.ACCENT), "Archivo", "Máximo 256 KiB", ui.chevron(), a::file));
-        LinearLayout photo = ui.listRow(ui.iconTile(Glyph.PHOTO, Tone.NEUTRAL), "Foto",
-            null, ui.pendingChip(), null);
-        photo.setAlpha(0.75f); box.addView(photo);
+        // Same precondition the domain enforces (one verified, admitted recipient); shown, never decided, here.
+        LinearLayout restricted = ui.listRow(ui.iconTile(Glyph.SHIELD_CHECK, allowsLocation ? Tone.ACCENT : Tone.NEUTRAL), "Contenido protegido",
+            allowsLocation ? "Foto, nota, video o PDF" : "Requiere contacto verificado", ui.chevron(), allowsLocation ? a::restricted : null);
+        if (!allowsLocation) restricted.setAlpha(0.6f);
+        box.addView(restricted);
+        box.addView(ui.listRow(ui.iconTile(Glyph.FILE, Tone.NEUTRAL), "Archivo", "Máximo 256 KiB · exportable", ui.chevron(), a::file));
         LinearLayout location = ui.listRow(ui.iconTile(Glyph.LOCATION, allowsLocation ? Tone.ACCENT : Tone.NEUTRAL), "Ubicación",
             allowsLocation ? null : "Requiere contacto verificado", ui.chevron(), allowsLocation ? a::location : null);
         if (!allowsLocation) location.setAlpha(0.6f);

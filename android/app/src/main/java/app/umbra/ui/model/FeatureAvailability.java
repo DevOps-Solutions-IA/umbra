@@ -40,6 +40,15 @@ public final class FeatureAvailability {
         a.status.put(Feature.VAULT_PASSWORD, Status.AVAILABLE);
         a.status.put(Feature.PRIVATE_ADMISSION, Status.AVAILABLE);
         a.status.put(Feature.PRIVATE_STARTUP, Status.AVAILABLE);
+        // Contract UI_SECURITY_CONTENT_API_V1: coordinated emergency closure, private clipboard and the
+        // restricted content service exist in both editions. Capture is connected-only (RestrictedRecording).
+        a.status.put(Feature.EMERGENCY_LOCK, Status.AVAILABLE);
+        a.status.put(Feature.CLIPBOARD_PROTECTION, Status.AVAILABLE);
+        a.status.put(Feature.RESTRICTED_IMAGE, Status.AVAILABLE);
+        a.status.put(Feature.RESTRICTED_AUDIO, Status.AVAILABLE);
+        a.status.put(Feature.RESTRICTED_VIDEO, Status.AVAILABLE);
+        a.status.put(Feature.RESTRICTED_PDF, Status.AVAILABLE);
+        a.status.put(Feature.RESTRICTED_CAPTURE, connected ? Status.AVAILABLE : Status.NOT_IN_FLAVOR);
         return a;
     }
 

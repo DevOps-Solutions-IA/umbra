@@ -38,11 +38,14 @@ public final class HomeScreens {
     public interface ChatsActions {
         void open(ConversationItem item); void newMessage(); void newGroup(); void addContact();
         void filter(Filter filter); void openIncoming(String callId); void networkDetails(); void admission();
+        /** Coordinated emergency lock: one explicit tap, no password. */
+        void emergency();
     }
 
     public static Screen chats(Ui ui, ChatsState s, ChatsActions a, View nav) {
         LinearLayout top = ui.column();
         top.addView(ui.topBar(null, ui.titleBlock("Chats", ui.connectionChip(s.connectivity())),
+            s.features().available(Feature.EMERGENCY_LOCK) ? ui.iconButton(Glyph.EMERGENCY_LOCK, "Bloqueo de emergencia", a::emergency) : null,
             ui.iconButton(Glyph.PERSON_ADD, "Agregar contacto", a::addContact),
             ui.iconButton(Glyph.ADD, "Nuevo mensaje", a::newMessage)));
         if (s.incoming() != null)

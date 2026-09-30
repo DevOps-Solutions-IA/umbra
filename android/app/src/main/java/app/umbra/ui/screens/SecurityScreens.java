@@ -18,7 +18,7 @@ public final class SecurityScreens {
      * @param sharedFiles     files currently in the local conversation
      */
     public record ContactState(String peerId, String alias, TrustPresentation trust, int approvedDevices, int sharedFiles,
-                               boolean callsVisible, FeatureAvailability features) {}
+                               boolean callsVisible, FeatureAvailability features, PeerAdmissionPresentation admission) {}
     public interface ContactActions {
         void back(); void verify(); void block(boolean block); void clear(); void call(); void message();
     }
@@ -45,6 +45,12 @@ public final class SecurityScreens {
         info.addView(fact(ui, "ID", Fingerprints.shortId(s.peerId())));
         info.addView(fact(ui, "Dispositivos", s.approvedDevices() < 0 ? "Sin lista aprobada" : String.valueOf(s.approvedDevices())));
         info.addView(fact(ui, "Archivos", String.valueOf(s.sharedFiles())));
+        if (s.admission() != null) {
+            // Local admission evidence (peerStatus); shown apart from the trust badge and never as "Verificado".
+            LinearLayout adm = fact(ui, "Admisión", s.admission().value());
+            adm.setContentDescription(s.admission().description());
+            info.addView(adm);
+        }
         body.addView(info);
         body.addView(ui.sectionHeader("Acciones"));
         body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, s.trust().level() == TrustLevel.BLOCKED ? "Desbloquear" : "Bloquear", Glyph.BLOCK,

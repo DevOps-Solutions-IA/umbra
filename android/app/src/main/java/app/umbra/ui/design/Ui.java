@@ -415,9 +415,9 @@ public final class Ui {
         e.setPadding(dp(14), dp(12), dp(14), dp(12)); e.setMinHeight(dp(52));
         // setSingleLine() replaces TextView's line/pixel minimum; retain the View touch target.
         e.setMinimumHeight(dp(52));
-        e.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
-        e.setImeOptions(EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
-        e.setSaveEnabled(false); e.setSaveFromParentEnabled(false);
+        // Domain privacy adapter: no save/restore, autofill, content capture or personalized IME learning.
+        app.umbra.privacy.PrivateAndroidSurface.sensitiveInput(e);
+        e.setSaveFromParentEnabled(false);
         e.setFilterTouchesWhenObscured(true);
         e.setLayoutParams(margins(match(), 6, 6));
         return e;

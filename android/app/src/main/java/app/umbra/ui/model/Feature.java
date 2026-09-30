@@ -25,7 +25,12 @@ public enum Feature {
     NOTIFICATION_PRIVACY("Contenido de notificaciones"),
     CLIPBOARD_PROTECTION("Protección del portapapeles"),
     UNREAD_COUNTERS("Contadores de no leídos"),
-    CONVERSATION_MUTE("Silenciar conversaciones");
+    CONVERSATION_MUTE("Silenciar conversaciones"),
+    RESTRICTED_IMAGE("Foto protegida"),
+    RESTRICTED_AUDIO("Nota de voz protegida"),
+    RESTRICTED_VIDEO("Video protegido"),
+    RESTRICTED_PDF("PDF protegido"),
+    RESTRICTED_CAPTURE("Grabar nota protegida");
 
     public final String title;
     Feature(String title) { this.title = title; }

@@ -1,7 +1,5 @@
 package app.umbra.ui.model;
 
-import java.util.Locale;
-
 /**
  * Human error messages. Critical errors are never hidden; stack traces are never user text.
  * {@code technical} carries a bounded, secret-free diagnostic only for the optional
@@ -34,24 +32,6 @@ public record ErrorPresentation(ErrorKind kind, String title, String body, Glyph
             case OFFLINE_EDITION -> new ErrorPresentation(kind, "No disponible sin conexión", "No incluida en esta edición.", Glyph.OFFLINE_BLUETOOTH, Tone.OFFLINE, false, t);
             case GENERIC -> new ErrorPresentation(kind, "No completado", "Inténtalo de nuevo.", Glyph.WARNING, Tone.WARNING, true, t);
         };
-    }
-
-    /**
-     * Classifies an engine/service message into a user category. Messages come from Engine
-     * exceptions (already user-safe, bounded); anything unrecognized becomes GENERIC.
-     */
-    public static ErrorKind classify(String message) {
-        if (message == null) return ErrorKind.GENERIC;
-        String m = message.toLowerCase(Locale.ROOT);
-        if (m.contains("verifique") || m.contains("verify the") || m.contains("verificar")) return ErrorKind.CONTACT_UNVERIFIED;
-        if (m.contains("identity change") || m.contains("identidad cambi")) return ErrorKind.IDENTITY_CHANGED;
-        if (m.contains("bloquead") || m.contains("blocked")) return ErrorKind.CONTACT_BLOCKED;
-        if (m.contains("revoked") || m.contains("revocad") || m.contains("retired")) return ErrorKind.DEVICE_REVOKED;
-        if (m.contains("internet") && m.contains("edici")) return ErrorKind.OFFLINE_EDITION;
-        if (m.contains("relay") || m.contains("servidor")) return ErrorKind.RELAY_UNAVAILABLE;
-        if (m.contains("turn")) return ErrorKind.TURN_UNAVAILABLE;
-        if (m.contains("bluetooth")) return ErrorKind.BLUETOOTH_UNAVAILABLE;
-        return ErrorKind.GENERIC;
     }
 
     /** Same category with a context-specific explanation (still user-facing text, never a trace). */

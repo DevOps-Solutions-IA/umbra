@@ -95,6 +95,26 @@ public class UiCopyTest {
         for (LocationShareDraft.Precision pr : LocationShareDraft.Precision.values()) { check(p, pr.label, MAX_TITLE); check(p, pr.detail, MAX_LINE); }
         for (String[] line : LocationShareDraft.single(LocationShareDraft.Precision.ZONE).summary("Bruno", 2)) { check(p, line[0], MAX_TITLE); check(p, line[1], MAX_LINE); }
         for (TrustLevel l : TrustLevel.values()) check(p, ConversationItem.direct("x", "Ana", l, "").subtitle(), MAX_TITLE);
+        // Contract UI_SECURITY_CONTENT_API_V1 additions: typed failures, emergency, peer admission, restricted content.
+        for (app.umbra.privacy.OperationFailure f : app.umbra.privacy.OperationFailure.values()) check(p, FailurePresentation.text(f), MAX_LINE);
+        for (app.umbra.core.EmergencyLock.State st : app.umbra.core.EmergencyLock.State.values()) {
+            EmergencyPresentation e = EmergencyPresentation.of(new app.umbra.core.EmergencyLock.Status(st, 0, 0, 0, java.util.List.of()));
+            check(p, e.title(), MAX_TITLE); check(p, e.body(), MAX_LINE);
+        }
+        for (app.umbra.core.EmergencyLock.Outcome o : app.umbra.core.EmergencyLock.Outcome.values()) check(p, EmergencyPresentation.outcome(o), MAX_TITLE);
+        for (String st : new String[]{"VALID_LOCALLY", "EXPIRED", "REVOKED", "UNKNOWN", "INVALID"})
+            for (String src : new String[]{"UNKNOWN_LEGACY", "PUBLIC_CREDENTIAL", "CHALLENGE_PROOF", "NEARBY_PROOF"}) {
+                PeerAdmissionPresentation pa = PeerAdmissionPresentation.of(st, src);
+                check(p, pa.value(), MAX_TITLE); check(p, pa.description(), 80);
+            }
+        for (RestrictedPresentation.Kind k : RestrictedPresentation.Kind.values()) { check(p, k.label, MAX_TITLE); check(p, k.limits, MAX_LINE); }
+        for (String m : RestrictedPresentation.MODES) { check(p, RestrictedPresentation.modeLabel(m), MAX_TITLE); check(p, RestrictedPresentation.modeDetail(m), MAX_LINE); check(p, RestrictedPresentation.openWarning(m), MAX_LINE); }
+        for (String st : new String[]{"READY", "ROUTING", "PLAYING", "COMPLETED", "INTERRUPTED", "FAILED", "CLOSED"}) check(p, RestrictedPresentation.playbackLabel(st), MAX_TITLE);
+        for (String x : new String[]{RestrictedPresentation.SENT, RestrictedPresentation.NOT_SENT, RestrictedPresentation.SESSION_ENDED, RestrictedPresentation.CLOSURE_UNCONFIRMED}) check(p, x, MAX_LINE);
+        for (boolean c : new boolean[]{false, true}) for (boolean e : new boolean[]{false, true}) {
+            RestrictedPresentation.Received r = RestrictedPresentation.received("i", "PNG", "UMBRA_ONLY", c, e, "27/09 10:40");
+            check(p, r.state(), MAX_TITLE); check(p, r.detail(), MAX_LINE);
+        }
         assertClean(p);
     }
 

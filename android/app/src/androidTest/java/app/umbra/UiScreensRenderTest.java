@@ -163,7 +163,7 @@ public class UiScreensRenderTest {
     private static final ChatScreens.ChatActions CHAT = new ChatScreens.ChatActions() {
         public void back() {} public void contact() {} public void verify() {} public void unblock() {} public void voiceCall() {} public void videoCall() {}
         public void openCall() {} public void attach() {} public void send(String t) {} public void draft(String t) {} public void message(MessageItem m) {}
-        public void stopLocation() {} public void retry() {}
+        public void stopLocation() {} public void retry() {} public void openRestricted(String id) {}
     };
     private static final CallScreens.CallActions CALL = new CallScreens.CallActions() {
         public void minimize() {} public void authorizeMicrophone() {} public void mute(boolean m) {} public void audioOutput() {} public void toggleModulator() {}
@@ -214,6 +214,7 @@ public class UiScreensRenderTest {
         HomeScreens.ChatsActions a = new HomeScreens.ChatsActions() {
             public void open(ConversationItem i) {} public void newMessage() {} public void newGroup() {} public void addContact() {}
             public void filter(HomeScreens.Filter f) {} public void openIncoming(String id) {} public void networkDetails() {} public void admission() {}
+            public void emergency() {}
         };
         View v = render("03-home-chats", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(items, false, HomeScreens.Filter.ALL, FEATURES, !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, null, null, null), a, nav(ui, HomeTab.CHATS)));
         String text = visibleText(v);
@@ -279,7 +280,8 @@ public class UiScreensRenderTest {
 
     @Test public void contactAndVerificationUsePlainLanguage() {
         SecurityScreens.ContactActions ca = new SecurityScreens.ContactActions() { public void back() {} public void verify() {} public void block(boolean b) {} public void clear() {} public void call() {} public void message() {} };
-        View contact = render("06-contact-info", ui -> SecurityScreens.contact(ui, new SecurityScreens.ContactState(BRUNO, "Bruno", TrustPresentation.of(TrustLevel.VERIFIED), 2, 1, FEATURES.visible(Feature.VOICE_CALLS), FEATURES), ca));
+        View contact = render("06-contact-info", ui -> SecurityScreens.contact(ui, new SecurityScreens.ContactState(BRUNO, "Bruno", TrustPresentation.of(TrustLevel.VERIFIED), 2, 1, FEATURES.visible(Feature.VOICE_CALLS), FEATURES,
+            PeerAdmissionPresentation.of("VALID_LOCALLY", "NEARBY_PROOF")), ca));
         assertTrue(hasText(contact, "Verificado"));
         assertTrue(hasExact(contact, "Dispositivos")); assertTrue(hasExact(contact, "2"));
         assertAccessible(contact);
@@ -383,6 +385,7 @@ public class UiScreensRenderTest {
     }
 
     @Test public void settingsSectionsAreHonestAboutPendingControls() {
+        int[] emergencies = {0};
         HomeScreens.SettingsActions ra = new HomeScreens.SettingsActions() { public void open(SettingsSection s) {} public void lockNow() {} };
         View rootSettings = render("13-settings", ui -> HomeScreens.settings(ui, "Ana", OFFLINE_SESSION, ra, nav(ui, HomeTab.SETTINGS)));
         for (SettingsSection s : SettingsSection.values()) if (s != SettingsSection.PROFILE) assertTrue(s.title, hasText(rootSettings, s.title));
@@ -392,7 +395,7 @@ public class UiScreensRenderTest {
             public void back() {} public void createInvitation() {} public void importInvitation() {} public void revokeInvitations() {} public void lockNow() {}
             public void destroyIdentity() {} public void expiry(int i) {} public void register(String a, String i) {} public void syncNow() {} public void unregister() {}
             public void connect() {} public void disconnect() {} public void nearby() {} public void changePassword() {} public void enrollPassword() {}
-            public void admission() {} public void devices() {}
+            public void admission() {} public void devices() {} public void emergency() { emergencies[0]++; }
         };
         for (SettingsSection s : new SettingsSection[]{SettingsSection.PROFILE, SettingsSection.PRIVACY, SettingsSection.SECURITY, SettingsSection.NETWORK, SettingsSection.ABOUT}) {
             View v = render("13-settings-" + s.name().toLowerCase(Locale.ROOT), ui -> SettingsScreens.section(ui, new SettingsScreens.SettingsState(s, "Ana", ME, FEATURES,
@@ -402,8 +405,9 @@ public class UiScreensRenderTest {
             assertConcise(v);
             if (s == SettingsSection.SECURITY) {
                 Button emergency = button(v, "Bloqueo de emergencia"); assertNotNull(emergency);
-                assertEquals(FEATURES.available(Feature.EMERGENCY_LOCK), emergency.isEnabled());
-                assertTrue(hasText(v, "Próximamente"));
+                assertTrue("emergency lock is a real action now", FEATURES.available(Feature.EMERGENCY_LOCK) && emergency.isEnabled());
+                InstrumentationRegistry.getInstrumentation().runOnMainSync(emergency::performClick);
+                assertEquals("one tap, no password dialog in between", 1, emergencies[0]);
             }
             if (s == SettingsSection.PROFILE) assertFalse(visibleText(v).toLowerCase(Locale.ROOT).contains("private key"));
         }
@@ -500,11 +504,12 @@ public class UiScreensRenderTest {
         AdmissionScreens.RequestInfo info = request ? new AdmissionScreens.RequestInfo(Fingerprints.lines(FP, 4), Fingerprints.lines(ME, 4), REALM, "27/09 10:40", expired) : null;
         boolean configured = !"UNCONFIGURED".equals(state);
         return new AdmissionScreens.AdmissionState(AdmissionPresentation.of(state, request, expired), configured ? REALM : null, configured ? Fingerprints.lines(FP, 4) : null,
-            Fingerprints.lines(ME, 4), info, "ADMITTED".equals(state) ? "03/10 10:30" : null, !BuildConfig.ALLOW_RELAY, false);
+            Fingerprints.lines(ME, 4), info, "ADMITTED".equals(state) ? "03/10 10:30" : null, !BuildConfig.ALLOW_RELAY, false, "ADMITTED".equals(state));
     }
     @Test public void admissionScreensKeepEveryStateDistinctFromVerification() {
         AdmissionScreens.AdmissionActions aa = new AdmissionScreens.AdmissionActions() {
             public void back() {} public void importFile() {} public void createRequest() {} public void exportRequest() {} public void admin() {}
+            public void cancelRequest() {}
         };
         String[][] cases = {{"UNCONFIGURED", "0", "0"}, {"NOT_ADMITTED", "0", "0"}, {"REQUEST_PENDING", "1", "0"}, {"REJECTED", "0", "0"},
             {"ADMITTED", "0", "0"}, {"EXPIRED", "1", "1"}, {"EXPIRED", "0", "0"}, {"REVOKED", "0", "0"}, {"INVALID", "0", "0"}};
@@ -532,13 +537,15 @@ public class UiScreensRenderTest {
         AdmissionScreens.AdminActions ad = new AdmissionScreens.AdminActions() {
             public void back() {} public void createRealm() {} public void exportRealm() {} public void reviewRequest() {} public void revokeCredential() {}
         };
-        View admin = render("26a-admission-admin", ui -> AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(true, REALM, Fingerprints.lines(FP, 4), false), ad));
+        View admin = render("26a-admission-admin", ui -> AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(true, REALM, Fingerprints.lines(FP, 4), false, true,
+            List.of(new AdmissionScreens.IssuedRow("A1A1 A1A1", "27/09 10:40", "04/10 10:40", false, false),
+                new AdmissionScreens.IssuedRow("B2B2 B2B2", "20/09 09:00", "21/09 09:00", true, true))), ad));
         assertNotNull(help(admin, Help.ADMIN));
         assertTrue(Help.ADMIN.lines.contains("El motor lo comprueba en cada operación."));
         assertNotNull(button(admin, "Revisar solicitud"));
         assertAccessible(admin);
         assertConcise(admin);
-        View create = render("26b-admission-admin-create", ui -> AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(false, null, null, false), ad));
+        View create = render("26b-admission-admin-create", ui -> AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(false, null, null, false, false, List.of()), ad));
         assertTrue(hasText(create, "Sin recuperación ni rotación"));
         View review = render("26c-admission-review", ui -> Screen.of(null, AdmissionScreens.reviewSheet(ui, new AdmissionScreens.ReviewInfo(Fingerprints.lines(FP, 4),
             Fingerprints.lines(ANA, 4), REALM, "27/09 10:40", false), new AdmissionScreens.ReviewActions() { public void approve(long t) {} public void reject() {} public void cancel() {} }), null));
@@ -562,7 +569,7 @@ public class UiScreensRenderTest {
             public void back() {} public void createInvitation() {} public void importInvitation() {} public void revokeInvitations() {} public void lockNow() {}
             public void destroyIdentity() {} public void expiry(int i) {} public void register(String a, String i) {} public void syncNow() {} public void unregister() {}
             public void connect() {} public void disconnect() {} public void nearby() {} public void changePassword() {} public void enrollPassword() {}
-            public void admission() {} public void devices() {}
+            public void admission() {} public void devices() {} public void emergency() {}
         };
         java.util.function.BiFunction<ConnectivityPresentation, Boolean, SettingsScreens.SettingsState> state = (c, admitted) -> new SettingsScreens.SettingsState(
             SettingsSection.NETWORK, "Ana", ME, FEATURES, !BuildConfig.ALLOW_RELAY, c, true, BuildConfig.ALLOW_RELAY ? "https://servidor.ejemplo.test" : "", "24 horas", 1,
@@ -607,6 +614,119 @@ public class UiScreensRenderTest {
             !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, true, "", "24 horas", 1, BuildConfig.VERSION_NAME, false, "4 min", AdmissionPresentation.of("UNCONFIGURED", false, false)), sa));
         assertNotNull(button(legacy, "Añadir contraseña"));
         assertNull(button(legacy, "Cambiar contraseña"));
+    }
+
+    // ------------------------------------------------------------------ contract UI_SECURITY_CONTENT_API_V1 screens
+    private static app.umbra.core.EmergencyLock.Status emergencyStatus(app.umbra.core.EmergencyLock.State state, app.umbra.core.EmergencyLock.Outcome... outcomes) {
+        List<app.umbra.core.EmergencyLock.Result> results = new ArrayList<>();
+        app.umbra.core.EmergencyLock.Subsystem[] subsystems = {app.umbra.core.EmergencyLock.Subsystem.VAULT, app.umbra.core.EmergencyLock.Subsystem.DOCUMENTS,
+            app.umbra.core.EmergencyLock.Subsystem.NEARBY, app.umbra.core.EmergencyLock.Subsystem.MEDIA};
+        for (int i = 0; i < outcomes.length; i++) results.add(new app.umbra.core.EmergencyLock.Result(subsystems[i], outcomes[i], 1));
+        return new app.umbra.core.EmergencyLock.Status(state, 1, 2, 3, results);
+    }
+    @Test public void emergencyStatusOffersUnlockOnlyAfterConfirmedClosure() {
+        int[] unlocks = {0};
+        View closing = render("28a-emergency-closing", ui -> EntryScreens.emergencyStatus(ui, EmergencyPresentation.of(emergencyStatus(app.umbra.core.EmergencyLock.State.CLOSING,
+            app.umbra.core.EmergencyLock.Outcome.CLOSED, app.umbra.core.EmergencyLock.Outcome.CLOSING)), () -> unlocks[0]++));
+        assertTrue(hasText(closing, "Cerrando…"));
+        assertNull("no unlock while closing", button(closing, "Desbloquear"));
+        assertNotNull(help(closing, Help.EMERGENCY));
+        assertConcise(closing); assertAccessible(closing);
+        View closed = render("28b-emergency-closed", ui -> EntryScreens.emergencyStatus(ui, EmergencyPresentation.of(emergencyStatus(app.umbra.core.EmergencyLock.State.CLOSED,
+            app.umbra.core.EmergencyLock.Outcome.CLOSED, app.umbra.core.EmergencyLock.Outcome.CLOSED, app.umbra.core.EmergencyLock.Outcome.CLOSED)), () -> unlocks[0]++));
+        assertTrue(hasText(closed, "Cierre confirmado"));
+        Button unlock = button(closed, "Desbloquear"); assertNotNull(unlock);
+        InstrumentationRegistry.getInstrumentation().runOnMainSync(unlock::performClick);
+        assertEquals(1, unlocks[0]);
+        assertConcise(closed); assertAccessible(closed);
+        View incomplete = render("28c-emergency-incomplete", ui -> EntryScreens.emergencyStatus(ui, EmergencyPresentation.of(emergencyStatus(app.umbra.core.EmergencyLock.State.INCOMPLETE,
+            app.umbra.core.EmergencyLock.Outcome.CLOSED, app.umbra.core.EmergencyLock.Outcome.TIMED_OUT)), () -> unlocks[0]++));
+        assertTrue(hasText(incomplete, "Cierre incompleto"));
+        assertTrue(hasText(incomplete, "Sin confirmar"));
+        assertNull("INCOMPLETE keeps access denied", button(incomplete, "Desbloquear"));
+        assertFalse(visibleText(incomplete).toLowerCase(Locale.ROOT).contains("borrad"));
+        assertConcise(incomplete);
+    }
+    @Test public void protectedContentSheetOffersDomainFormatsModesAndExpiryOnly() {
+        List<RestrictedPresentation.Kind> picked = new ArrayList<>();
+        ContentScreens.SendActions actions = new ContentScreens.SendActions() {
+            public void mode(String m) {} public void ttl(int i) {} public void session(int i) {} public void pick(RestrictedPresentation.Kind k) { picked.add(k); } public void capture() {}
+        };
+        View sheet = render("29a-protected-send-sheet", ui -> Screen.of(null, ContentScreens.sendSheet(ui, new ContentScreens.SendState("Bruno",
+            RestrictedPresentation.defaultChoice(), FEATURES.available(Feature.RESTRICTED_CAPTURE), false), actions), null));
+        for (RestrictedPresentation.Kind k : RestrictedPresentation.Kind.values()) assertTrue(k.label, hasText(sheet, k.label));
+        assertEquals("capture only where the edition declares the microphone", BuildConfig.ALLOW_RELAY, hasText(sheet, "Grabar nota"));
+        assertNotNull(button(sheet, "Una vez")); assertNotNull(button(sheet, "Solo en UMBRA"));
+        for (String t : RestrictedPresentation.TTL_LABELS) assertNotNull(t, button(sheet, t));
+        for (String t : RestrictedPresentation.SESSION_LABELS) assertNotNull(t, button(sheet, t));
+        assertNotNull(help(sheet, Help.PROTECTED));
+        for (View x : all(sheet)) if (x.isClickable() && x.getContentDescription() != null && x.getContentDescription().toString().startsWith("Foto protegido"))
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(x::performClick);
+        assertEquals(List.of(RestrictedPresentation.Kind.PHOTO), picked);
+        assertConcise(sheet); assertAccessible(sheet);
+        View capture = render("29b-protected-capture", ui -> Screen.of(null, ContentScreens.captureSheet(ui, new ContentScreens.CaptureState(true, "Micrófono activo"),
+            new ContentScreens.CaptureActions() { public void stop() {} public void cancel() {} }), null));
+        assertNotNull(button(capture, "Detener")); assertNotNull(button(capture, "Descartar"));
+        assertConcise(capture);
+    }
+    @Test public void receivedProtectedObjectsShowDomainStateAndOpenOnlyWhenAvailable() {
+        List<String> opened = new ArrayList<>();
+        ChatScreens.ChatActions actions = new ChatScreens.ChatActions() {
+            public void back() {} public void contact() {} public void verify() {} public void unblock() {} public void voiceCall() {} public void videoCall() {}
+            public void openCall() {} public void attach() {} public void send(String t) {} public void draft(String t) {} public void message(MessageItem m) {}
+            public void stopLocation() {} public void retry() {} public void openRestricted(String id) { opened.add(id); }
+        };
+        List<ChatScreens.Entry> entries = new ArrayList<>(conversation());
+        entries.add(new ChatScreens.Entry(null, null, RestrictedPresentation.received("r-open", "PNG", "ONCE", false, false, "27/09 22:40")));
+        entries.add(new ChatScreens.Entry(null, null, RestrictedPresentation.received("r-used", "PDF_PAGES", "ONCE", true, false, "27/09 22:40")));
+        entries.add(new ChatScreens.Entry(null, null, RestrictedPresentation.received("r-old", "AVC_MP4", "UMBRA_ONLY", false, true, "26/09 10:00")));
+        View v = render("30-chat-protected-objects", ui -> ChatScreens.direct(ui, new ChatScreens.ChatState(BRUNO, "Bruno", TrustPresentation.of(TrustLevel.VERIFIED), entries,
+            "24 horas", "", false, "", FEATURES, !BuildConfig.ALLOW_RELAY, false), actions));
+        String text = visibleText(v);
+        assertTrue(text.contains("Disponible")); assertTrue(text.contains("Ya abierto")); assertTrue(text.contains("Caducado"));
+        assertFalse(text.toLowerCase(Locale.ROOT).contains("visto"));
+        for (View x : all(v)) if (x.isClickable() && x.getContentDescription() != null && x.getContentDescription().toString().startsWith("Foto protegido"))
+            InstrumentationRegistry.getInstrumentation().runOnMainSync(x::performClick);
+        for (View x : all(v)) if (x.getContentDescription() != null && x.getContentDescription().toString().startsWith("PDF protegido")) assertFalse("consumed rows are not actionable", x.isClickable());
+        assertEquals(List.of("r-open"), opened);
+        assertConcise(v); assertAccessible(v);
+        View attach = render("30b-attach-sheet", ui -> Screen.of(null, ChatScreens.attachSheet(ui, FEATURES, true, new ChatScreens.AttachActions() {
+            public void file() {} public void restricted() {} public void location() {} }), null));
+        assertTrue(hasText(attach, "Contenido protegido")); assertTrue(hasText(attach, "Máximo 256 KiB · exportable"));
+        assertConcise(attach);
+    }
+    @Test public void protectedViewerChromeHasNoExportAndSeparatesObjectAndSessionExpiry() {
+        ContentScreens.ViewerActions actions = new ContentScreens.ViewerActions() { public void close() {} public void previous() {} public void next() {} public void emergency() {} };
+        View pdf = render("31a-protected-viewer-pdf", ui -> ContentScreens.viewer(ui, new ContentScreens.ViewerState(RestrictedPresentation.Kind.PDF, "ONCE", "Bruno",
+            "Abierto", Tone.ACCENT, "27/09 22:40", "Sesión limitada", 0, 3, false), new app.umbra.ui.design.ProtectedFrameView(ui.context()), actions, new ContentScreens.Handles()));
+        assertTrue(hasText(pdf, "PDF protegido")); assertTrue(hasText(pdf, "caduca 27/09 22:40")); assertTrue(hasText(pdf, "Sesión limitada"));
+        assertFalse("first page: no previous", button(pdf, "Anterior").isEnabled());
+        assertTrue(button(pdf, "Siguiente").isEnabled());
+        assertTrue(hasText(pdf, "Sin exportar · sin compartir"));
+        for (View x : all(pdf)) if (x instanceof Button b) for (String f : new String[]{"Compartir", "Guardar", "Exportar", "Imprimir", "Reenviar", "Copiar"}) assertFalse(b.getText().toString().contains(f));
+        boolean emergency = false; for (View x : all(pdf)) if ("Bloqueo de emergencia".contentEquals(String.valueOf(x.getContentDescription()))) emergency = true;
+        assertTrue("emergency stays one tap away while content is shown", emergency);
+        assertConcise(pdf); assertAccessible(pdf);
+        View note = render("31b-protected-viewer-note", ui -> ContentScreens.viewer(ui, new ContentScreens.ViewerState(RestrictedPresentation.Kind.NOTE, "UMBRA_ONLY", "Bruno",
+            RestrictedPresentation.playbackLabel("COMPLETED"), Tone.NEUTRAL, "27/09 22:40", "Sesión limitada", 0, 1, false), null, actions, new ContentScreens.Handles()));
+        assertTrue(hasText(note, "Terminó")); assertTrue(hasText(note, "Solo en UMBRA"));
+        assertFalse(visibleText(note).toLowerCase(Locale.ROOT).contains("escuchad"));
+        assertConcise(note);
+    }
+    @Test public void adminToolsFollowTheAuthoritySnapshot() {
+        AdmissionScreens.AdminActions ad = new AdmissionScreens.AdminActions() {
+            public void back() {} public void createRealm() {} public void exportRealm() {} public void reviewRequest() {} public void revokeCredential() {}
+        };
+        View member = render("26e-admission-admin-member", ui -> AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(true, REALM, Fingerprints.lines(FP, 4), false, false, List.of()), ad));
+        assertTrue(hasText(member, "Este teléfono no es la autoridad"));
+        assertNull("no decision tools without authority", button(member, "Revisar solicitud"));
+        assertNull(button(member, "Revocar credencial"));
+        assertNotNull(button(member, "Exportar entorno"));
+        View authority = render("26f-admission-admin-issued", ui -> AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(true, REALM, Fingerprints.lines(FP, 4), false, true,
+            List.of(new AdmissionScreens.IssuedRow("A1A1 A1A1", "27/09 10:40", "04/10 10:40", false, false),
+                new AdmissionScreens.IssuedRow("B2B2 B2B2", "20/09 09:00", "21/09 09:00", true, true))), ad));
+        assertTrue(hasText(authority, "Credenciales emitidas")); assertTrue(hasText(authority, "Vigente")); assertTrue(hasText(authority, "Revocada"));
+        assertConcise(authority); assertAccessible(authority);
     }
 
     @Test public void errorsAreHumanWithOptionalTechnicalDetails() {

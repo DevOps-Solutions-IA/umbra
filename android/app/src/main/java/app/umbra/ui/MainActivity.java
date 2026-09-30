@@ -15,6 +15,15 @@ import android.view.*;
 import android.widget.*;
 import app.umbra.core.Bytes;
 import app.umbra.core.AccessGate;
+import app.umbra.core.EmergencyLock;
+import app.umbra.privacy.OrdinaryTextExport;
+import app.umbra.privacy.PrivateAndroidSurface;
+import app.umbra.privacy.PrivateClipboard;
+import app.umbra.ui.flow.RestrictedFlow;
+import app.umbra.ui.media.NoteCapture;
+import app.umbra.ui.model.RestrictedPresentation.Kind;
+import android.media.AudioDeviceInfo;
+import android.media.AudioManager;
 import app.umbra.core.DocumentIO;
 import app.umbra.protocol.Wire;
 import app.umbra.BuildConfig;
@@ -48,7 +57,7 @@ import java.util.function.Consumer;
  */
 public final class MainActivity extends Activity {
     private static final int PICK_CONTACT = 201, EXPORT_CONTACT = 202, PICK_FILE = 203, EXPORT_FILE = 204,
-        PICK_ADMISSION = 205, PICK_ADMIN_REVIEW = 206, PICK_ADMIN_REVOKE = 207, EXPORT_ADMISSION = 208;
+        PICK_ADMISSION = 205, PICK_ADMIN_REVIEW = 206, PICK_ADMIN_REVOKE = 207, EXPORT_ADMISSION = 208, PICK_RESTRICTED = 209;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private final AtomicBoolean syncBusy = new AtomicBoolean(false);
@@ -109,6 +118,7 @@ public final class MainActivity extends Activity {
     private boolean changeBusy; private String changeProblem;
     // Last domain snapshots (refreshed on the worker); never persisted or restored as authorization.
     private AdmissionFlow.Snapshot admission;
+    private PeerAdmissionPresentation peerAdmission;
     private boolean admissionUnreadable;
     private String connectivityState = "LOCKED_PRIVATE";
     private boolean canConnect, nearbyActive, connectBusy, adminBusy;
@@ -116,14 +126,31 @@ public final class MainActivity extends Activity {
     /** Authority review held only in memory between the review sheet and the decision; cleared on lock. */
     private record PendingReview(AdmissionService.Review review, String oldCredential, AdmissionScreens.ReviewInfo info, boolean own) {}
     private PendingReview pendingReview;
+    // Private clipboard: ordinary text only, one-use consent, performed once this window has focus again.
+    private final PrivateClipboard clipboard = new PrivateClipboard(this);
+    private OrdinaryTextExport.Review pendingCopy; private boolean pendingCopyConfirmed;
+    // Emergency: ticket prepared before NEW Android authentication after a confirmed (CLOSED) closure.
+    private EmergencyLock.Authentication emergencyTicket;
+    private volatile boolean replaceVault;
+    // Restricted content: metadata only (never bytes/URI), one open viewer at a time, nothing restored.
+    private RestrictedPresentation.Choice restrictedChoice = RestrictedPresentation.defaultChoice();
+    private Kind pendingRestrictedKind; private String pendingRestrictedPeer;
+    private final Set<byte[]> restrictedInputs = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private List<RestrictedPresentation.Received> restrictedReceived = List.of();
+    private RestrictedFlow.Viewer viewer; private String viewerId, viewerPeer; private int viewerTicket;
+    private RestrictedPresentation.Received viewerItem;
+    private ProtectedFrameView viewerFrame; private SurfaceView viewerSurface;
+    private int viewerPage; private String viewerStatus = ""; private Tone viewerTone = Tone.NEUTRAL;
+    private AudioDeviceInfo viewerSink; private boolean viewerRendering, viewerRenderAgain;
+    private final ContentScreens.Handles viewerHandles = new ContentScreens.Handles();
+    private volatile boolean captureStop, captureDiscarded; private Dialog captureDialog;
     /** Posts a UI lock when the domain closes the gate (vault auto-lock, create/change password, key loss). */
     private final Runnable gateInvalidated = () -> main.post(this::gateCheck);
 
     @Override public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-        getWindow().setHideOverlayWindows(true);
-        if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false);
+        // Domain privacy adapter before any content: FLAG_SECURE, hidden overlays, no Recents screenshot.
+        PrivateAndroidSurface.protect(this);
         ui = new Ui(this);
         ui.onHelp(this::showHelp);
         gate.onInvalidation(gateInvalidated);
@@ -137,6 +164,8 @@ public final class MainActivity extends Activity {
             if (SystemClock.elapsedRealtime() - grantedAt < 15_000) { completeAuthentication(); return; }
         }
         boolean wasExternal = externalUi; externalUi = false;
+        // After an emergency closure a new authentication needs an explicit tap (and CLOSED); INCOMPLETE stays denied.
+        if (!unlocked && !authenticating && emergencyState() != EmergencyLock.State.READY) { showLocked(); return; }
         if (!unlocked && !authenticating) authenticate();
         else if (unlocked && wasExternal) refresh();
     }
@@ -155,7 +184,13 @@ public final class MainActivity extends Activity {
     }
     private void completeAuthentication() {
         if (!resumed || destroyed || isFinishing()) return;
-        authenticationGranted = false; externalUi = false; gate.unlock(); unlocked = true; authAt = SystemClock.elapsedRealtime();
+        authenticationGranted = false; externalUi = false;
+        EmergencyLock.Authentication emergencyAuth = emergencyTicket; emergencyTicket = null;
+        try {
+            // Only a ticket prepared before this authentication (state CLOSED) can reopen the gate after an emergency.
+            if (emergencyAuth != null) { gate.unlock(emergencyAuth); replaceVault = true; } else gate.unlock();
+        } catch (AccessGate.LockedException denied) { showLocked(); return; }
+        unlocked = true; authAt = SystemClock.elapsedRealtime();
         lockNotice = null; accessProblem = null; accessBusy = false; accessStep = null; engine = null; initialised = false;
         int ticket = generation;
         mount(Screen.of(null, ui.skeleton(3), null));
@@ -164,6 +199,8 @@ public final class MainActivity extends Activity {
             try {
                 if (!unlocked || ticket != generation) return;
                 gate.requireUnlocked();
+                // The emergency coordinator closed the previous Vault: rebuild services instead of reusing them.
+                if (replaceVault) { replaceVault = false; vault = null; }
                 if (vault == null) vault = new Vault(getApplicationContext(), gate);
                 step = VaultFlow.step(vault);
                 if (step == AccessStep.LEGACY_ENROLLMENT) {
@@ -341,21 +378,33 @@ public final class MainActivity extends Activity {
         if (!unlocked || destroyed) return;
         try { gate.requireUnlocked(); } catch (AccessGate.LockedException closed) { lock(); }
     }
-    private void lock() {
+    private void lock() { lockState(); showLocked(); }
+    /** Everything lock() does except choosing the screen (the emergency action shows its own status). */
+    private void lockState() {
+        releaseViewer(); cancelCapture(); eraseRestrictedInputs();
+        pendingCopy = null; pendingCopyConfirmed = false;
+        try { clipboard.clearOwned(); } catch (RuntimeException notForeground) { /* only in the focused window; never a global clear */ }
+        restrictedReceived = List.of(); pendingRestrictedKind = null; pendingRestrictedPeer = null;
         stopLocationLocally(); authenticationGranted = false; gate.lock(); unlocked = false; networkPaused = true; networkStateLoaded = false; generation++; cancelRelay();
         engine = null; initialised = false; accessStep = null; accessBusy = false; accessProblem = null; changeBusy = false; changeProblem = null;
-        admission = null; admissionUnreadable = false; connectivityState = "LOCKED_PRIVATE"; canConnect = false; nearbyActive = false; connectBusy = false; adminBusy = false;
+        admission = null; peerAdmission = null; admissionUnreadable = false; connectivityState = "LOCKED_PRIVATE"; canConnect = false; nearbyActive = false; connectBusy = false; adminBusy = false;
         pendingReview = null; relayResponded = false; relayUnreachable = false;
         for (Dialog dialog : new ArrayList<>(dialogs)) dialog.dismiss(); dialogs.clear();
         nav.lock(); drafts.clear(); messages = List.of(); locations = List.of(); contacts = List.of(); callSessions = List.of(); trust = Map.of(); contactDevices = Map.of();
         devicesState = null; profile = null; loadedPeer = null; groupSelection.clear(); groupName = ""; qrCache.clear(); videoIntent.clear(); modulatorOpen = false; verifyTechnical = false;
         BluetoothLink link = bluetooth; bluetooth = null; if (link != null) link.close();
-        transportStatus = "Bloqueado"; showLocked();
+        transportStatus = "Bloqueado";
     }
     private void authenticate() {
         if (authenticating || destroyed) return;
         KeyguardManager manager = getSystemService(KeyguardManager.class);
         if (manager == null || !manager.isDeviceSecure()) { deviceSecure = false; showLocked(); return; }
+        EmergencyLock.State emergency = emergencyState();
+        if (emergency != EmergencyLock.State.READY) {
+            if (emergency != EmergencyLock.State.CLOSED) { showLocked(); return; } // closing or INCOMPLETE: denied
+            try { emergencyTicket = gate.emergency().prepareAuthentication(); }
+            catch (AccessGate.LockedException denied) { emergencyTicket = null; showLocked(); return; }
+        }
         deviceSecure = true;
         authenticating = true;
         int ticket = generation;
@@ -445,16 +494,8 @@ public final class MainActivity extends Activity {
                 return true;
         return false;
     }
-    /** Human text only: known engine messages pass through; everything else maps to a category. */
-    private static String safeError(Exception e) {
-        String message = e.getMessage();
-        ErrorKind kind = ErrorPresentation.classify(message);
-        if (kind != ErrorKind.GENERIC) { ErrorPresentation p = ErrorPresentation.of(kind); return p.title() + ". " + p.body(); }
-        // Domain/transport messages are often English: show them only when they are clean Spanish.
-        if ((e instanceof IllegalArgumentException || e instanceof SecurityException || e instanceof IllegalStateException)
-            && message != null && message.length() < 120 && !message.contains("\n") && SpanishText.isSpanish(message)) return message;
-        return ErrorPresentation.of(ErrorKind.GENERIC).body();
-    }
+    /** Typed failure text only (OperationFailure.classify); exception messages are never parsed or shown. */
+    private static String safeError(Exception e) { return FailurePresentation.text(e); }
     private void syncNow() {
         if (!unlocked || !initialised || !syncBusy.compareAndSet(false, true)) return;
         int ticket = generation;
@@ -554,7 +595,7 @@ public final class MainActivity extends Activity {
         RelayClient relay = activeRelay; activeRelay = null; if (relay != null) relay.close();
     }
     private RelayClient openRelay(String address, int ticket, boolean requireOnline) throws Exception {
-        if (!BuildConfig.ALLOW_RELAY) throw new SecurityException("Esta edición no tiene acceso a internet");
+        if (!BuildConfig.ALLOW_RELAY) throw new FailurePresentation.UiRefusal("No incluido en esta edición.");
         RelayClient relay = new RelayClient(address, () -> unlocked && ticket == generation && (!requireOnline || !networkPaused), engine.admission());
         activeRelay = relay;
         if (!unlocked || ticket != generation) { relay.close(); throw new AccessGate.LockedException(); }
@@ -572,7 +613,7 @@ public final class MainActivity extends Activity {
     /** The active Nearby link. Radio actions never create consent implicitly: Nearby must be started first. */
     private BluetoothLink link() {
         BluetoothLink active = bluetooth;
-        if (active == null) throw new SecurityException("Activa la cercanía");
+        if (active == null) throw new FailurePresentation.UiRefusal("Activa la cercanía");
         return active;
     }
     /** Explicit user action only (never from onCreate/onResume, render, network callbacks or restored state). */
@@ -638,14 +679,14 @@ public final class MainActivity extends Activity {
         if (!granted) {
             ErrorKind kind = switch (request) { case 301 -> ErrorKind.BLUETOOTH_DENIED; case 302 -> ErrorKind.LOCATION_DENIED; case 303 -> ErrorKind.MICROPHONE_DENIED; case 304 -> ErrorKind.CAMERA_DENIED; default -> ErrorKind.GENERIC; };
             ErrorPresentation p = ErrorPresentation.of(kind); notice(p.title() + ". " + p.body());
-        } else notice("Permiso concedido. Repite la acción.");
+        } else notice("Permiso concedido. Repite la acción."); // A grant never starts capture or sensors by itself.
     }
 
     // ================================================================== state snapshot
     private record Snapshot(JSONObject profile, List<JSONObject> contacts, Map<String, TrustLevel> trust, List<JSONObject> messages,
                             List<JSONObject> locations, List<JSONObject> calls, Map<String, Integer> devices, DeviceScreens.DevicesState own,
                             String connectivity, boolean canConnect, boolean nearby, AdmissionFlow.Snapshot admission, boolean admissionUnreadable,
-                            boolean passwordConfigured) {}
+                            boolean passwordConfigured, PeerAdmissionPresentation peerAdmission, List<RestrictedPresentation.Received> restricted) {}
 
     private String currentPeer() {
         Route r = nav.current();
@@ -676,9 +717,16 @@ public final class MainActivity extends Activity {
                 counts.put(id, rosterSize(id));
             }
             List<JSONObject> calls = BuildConfig.ALLOW_RELAY && app.umbra.calls.CallPlatform.ENABLED ? engine.calls().sessions() : List.of();
+            PeerAdmissionPresentation peerAdm = null;
+            if (selected != null && adm != null && adm.realmId() != null) {
+                // Local evidence only (peerStatus); a read failure is shown as "No válida", never as admitted.
+                try { var ps = engine.admission().peerStatus(selected); peerAdm = PeerAdmissionPresentation.of(ps.state().name(), ps.source().name()); }
+                catch (Exception e) { if (hasVaultFailure(e)) throw e; peerAdm = PeerAdmissionPresentation.of(null, null); }
+            }
+            List<RestrictedPresentation.Received> restricted = selected == null ? List.of() : restrictedFor(selected);
             return new Snapshot(me, all, levels, selected == null ? List.of() : engine.messages(selected),
                 selected == null ? List.of() : engine.locations().received(selected), calls, counts, wantDevices ? ownDevices(all, counts) : null,
-                connState, connectable, near, adm, admUnreadable, enrolled);
+                connState, connectable, near, adm, admUnreadable, enrolled, peerAdm, restricted);
         }, s -> {
             profile = s.profile();
             connectivityState = s.connectivity(); canConnect = s.canConnect(); nearbyActive = s.nearby();
@@ -686,9 +734,9 @@ public final class MainActivity extends Activity {
             networkStateLoaded = true;
             contacts = s.contacts(); trust = s.trust(); contactDevices = s.devices(); callSessions = s.calls();
             if (s.own() != null) devicesState = s.own();
-            if (Objects.equals(currentPeer(), selected)) { messages = s.messages(); locations = s.locations(); loadedPeer = selected; }
-            // Never rebuild a screen that holds typed secrets; its own actions re-render it.
-            if (accessStep == AccessStep.OPEN && !onRoute(Route.Kind.CHANGE_PASSWORD)) render();
+            if (Objects.equals(currentPeer(), selected)) { messages = s.messages(); locations = s.locations(); loadedPeer = selected; peerAdmission = s.peerAdmission(); restrictedReceived = s.restricted(); }
+            // Never rebuild a screen that holds typed secrets or a live protected surface; their own actions re-render them.
+            if (accessStep == AccessStep.OPEN && !onRoute(Route.Kind.CHANGE_PASSWORD) && !onRoute(Route.Kind.CONTENT)) render();
         });
     }
     /** Active members in the contact's signed roster; -1 if no roster was approved or it is stale. Worker thread. */
@@ -745,6 +793,8 @@ public final class MainActivity extends Activity {
     }
     private void showLocked() {
         nav.lock();
+        EmergencyLock.Status emergency = gate.emergency().status();
+        if (emergency.state() != EmergencyLock.State.READY) { showEmergency(emergency); return; }
         mount(EntryScreens.lock(ui, new EntryScreens.LockState(deviceSecure, !BuildConfig.ALLOW_RELAY, lockProblem, lockNotice), new EntryScreens.LockActions() {
             @Override public void unlock() { authenticate(); }
             @Override public void openSecuritySettings() { external(new Intent(Settings.ACTION_SECURITY_SETTINGS), 0); }
@@ -773,6 +823,7 @@ public final class MainActivity extends Activity {
             case ADMISSION -> renderAdmission();
             case ADMISSION_ADMIN -> renderAdmin();
             case CHANGE_PASSWORD -> renderChangePassword();
+            case CONTENT -> renderViewer(route.arg());
             default -> { nav.home(); renderHome(); }
         }
     }
@@ -826,6 +877,7 @@ public final class MainActivity extends Activity {
                     @Override public void openIncoming(String id) { go(Route.of(Route.Kind.INCOMING_CALL, id)); }
                     @Override public void networkDetails() { go(Route.of(Route.Kind.SETTINGS_SECTION, SettingsSection.NETWORK.name())); }
                     @Override public void admission() { go(Route.of(Route.Kind.ADMISSION)); refresh(); }
+                    @Override public void emergency() { MainActivity.this.emergency(); }
                 }, bar));
             }
         }
@@ -943,6 +995,7 @@ public final class MainActivity extends Activity {
                 String.format(Locale.ROOT, " · %.5f, %.5f · medida %s", point.optLong("latE7") / 1e7, point.optLong("lonE7") / 1e7, time(point.optLong("measured"))));
             entries.add(new ChatScreens.Entry(null, new ChatScreens.LocationEntry(title, detail, "RECENT".equals(display), false)));
         }
+        if (loaded) for (RestrictedPresentation.Received r : restrictedReceived) entries.add(new ChatScreens.Entry(null, null, r));
         var capture = locationCapture; boolean sharing = capture != null && capture.activeSession() != null;
         VoiceSnapshotView voice = voice();
         mount(ChatScreens.direct(ui, new ChatScreens.ChatState(peer, alias(contact), t, entries, ttlName(), drafts.get(peer), sharing, locationStatus, features, !BuildConfig.ALLOW_RELAY, voice != null), new ChatScreens.ChatActions() {
@@ -956,9 +1009,12 @@ public final class MainActivity extends Activity {
             @Override public void attach() { attachSheet(peer, t); }
             @Override public void send(String text) { action(() -> engine.sendText(peer, text, ttl), id -> { drafts.remove(peer); refresh(); syncNow(); }); }
             @Override public void draft(String text) { drafts.put(peer, text); }
-            @Override public void message(MessageItem item) { exportFile(byId.get(item.id())); }
+            @Override public void message(MessageItem item) {
+                if (item.kind() == MessageItem.Kind.TEXT) copyText(peer, item); else exportFile(byId.get(item.id()));
+            }
             @Override public void stopLocation() { stopLocationSharing(); }
             @Override public void retry() { syncNow(); }
+            @Override public void openRestricted(String id) { MainActivity.this.openRestricted(peer, id); }
         }));
     }
     private static String precisionLabel(String mode) {
@@ -979,7 +1035,7 @@ public final class MainActivity extends Activity {
                 sheet[0].dismiss(); pendingAttachmentPeer = peer; pendingAttachmentTtl = ttl;
                 external(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_FILE);
             }
-            @Override public void photo() { notice(ErrorPresentation.of(ErrorKind.FEATURE_PENDING).body()); }
+            @Override public void restricted() { sheet[0].dismiss(); restrictedSendSheet(peer); }
             @Override public void location() { sheet[0].dismiss(); locationSheet(peer); }
         }));
     }
@@ -1005,7 +1061,7 @@ public final class MainActivity extends Activity {
         JSONObject contact = uiContact(peer); if (contact == null) { nav.back(); render(); return; }
         int files = 0; if (peer.equals(loadedPeer)) for (JSONObject m : messages) if ("file".equals(m.optString("kind"))) files++;
         mount(SecurityScreens.contact(ui, new SecurityScreens.ContactState(peer, alias(contact), trustOf(peer), contactDevices.getOrDefault(peer, -1), files,
-            features.visible(Feature.VOICE_CALLS), features), new SecurityScreens.ContactActions() {
+            features.visible(Feature.VOICE_CALLS), features, peer.equals(loadedPeer) ? peerAdmission : null), new SecurityScreens.ContactActions() {
             @Override public void back() { MainActivity.this.back(); }
             @Override public void verify() { verifyMethod = SecurityScreens.Method.CODE; go(Route.of(Route.Kind.VERIFY, peer)); }
             @Override public void block(boolean block) { setBlocked(peer, block); }
@@ -1136,6 +1192,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void admission() { go(Route.of(Route.Kind.ADMISSION)); refresh(); }
             @Override public void devices() { go(Route.of(Route.Kind.DEVICES)); refresh(); }
+            @Override public void emergency() { MainActivity.this.emergency(); }
         }));
     }
 
@@ -1149,7 +1206,8 @@ public final class MainActivity extends Activity {
         AdmissionScreens.RequestInfo request = r == null ? null
             : new AdmissionScreens.RequestInfo(fp(r.deviceFingerprint()), fp(r.identityFingerprint()), r.realmId(), when(r.expiresAt()), r.expired());
         mount(AdmissionScreens.status(ui, new AdmissionScreens.AdmissionState(admissionPresentation(), a.realmId(), fp(a.authorityKeyId()),
-            fp(profile.optString("id")), request, a.credentialExpiresAt() == null ? null : when(a.credentialExpiresAt()), !BuildConfig.ALLOW_RELAY, adminBusy),
+            fp(profile.optString("id")), request, a.credentialExpiresAt() == null ? null : when(a.credentialExpiresAt()), !BuildConfig.ALLOW_RELAY, adminBusy,
+            a.credentialWire() != null),
             new AdmissionScreens.AdmissionActions() {
                 @Override public void back() { MainActivity.this.back(); }
                 @Override public void importFile() { external(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_ADMISSION); }
@@ -1157,7 +1215,18 @@ public final class MainActivity extends Activity {
                     if (adminBusy) return; adminBusy = true;
                     action(() -> { engine.admission().createAdmissionRequest(); return true; },
                         ok -> { adminBusy = false; notice("Solicitud generada. Expórtala."); refresh(); },
-                        failure -> { adminBusy = false; notice("No se generó la solicitud."); refresh(); });
+                        failure -> { adminBusy = false; notice(FailurePresentation.text(failure)); refresh(); });
+                }
+                @Override public void cancelRequest() {
+                    AdmissionFlow.Snapshot current = admission;
+                    if (adminBusy || current == null || current.request() == null) return;
+                    String requestId = current.request().requestId();
+                    confirm("Cancelar solicitud", "Solo en este teléfono. No retira un archivo ya compartido.", "Cancelar solicitud", true, () -> {
+                        if (adminBusy) return; adminBusy = true;
+                        action(() -> { AdmissionFlow.cancelRequest(engine.admission(), requestId); return true; },
+                            ok -> { adminBusy = false; notice("Solicitud cancelada en este teléfono."); refresh(); },
+                            failure -> { adminBusy = false; notice(FailurePresentation.text(failure)); refresh(); });
+                    });
                 }
                 @Override public void exportRequest() {
                     AdmissionFlow.Snapshot current = admission;
@@ -1178,7 +1247,12 @@ public final class MainActivity extends Activity {
     private void renderAdmin() {
         AdmissionFlow.Snapshot a = admission;
         boolean configured = a != null && a.realmId() != null;
-        mount(AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(configured, a == null ? null : a.realmId(), a == null ? null : fp(a.authorityKeyId()), adminBusy),
+        List<AdmissionScreens.IssuedRow> issued = new ArrayList<>();
+        long now = Bytes.now();
+        if (a != null) for (AdmissionFlow.Issued c : a.issued())
+            issued.add(new AdmissionScreens.IssuedRow(Fingerprints.shortId(c.deviceId()), when(c.issuedAt()), when(c.expiresAt()), c.revoked(), now >= c.expiresAt()));
+        mount(AdmissionScreens.admin(ui, new AdmissionScreens.AdminState(configured, a == null ? null : a.realmId(), a == null ? null : fp(a.authorityKeyId()), adminBusy,
+            a != null && a.authority(), issued),
             new AdmissionScreens.AdminActions() {
                 @Override public void back() { MainActivity.this.back(); }
                 @Override public void createRealm() {
@@ -1206,7 +1280,6 @@ public final class MainActivity extends Activity {
                 @Override public void revokeCredential() { external(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE), PICK_ADMIN_REVOKE); }
             }));
     }
-    private static final String REVIEW_REJECTED = "Solicitud no válida para revisar.";
     /** Authority review: the domain validates signature, realm, expiry, consumption and authority before showing anything. */
     private void reviewWire(AdmissionImport.Parsed parsed, boolean own) {
         if (parsed.kind() != AdmissionImport.Kind.REQUEST && parsed.kind() != AdmissionImport.Kind.RENEWAL_REQUEST) { notice(AdmissionPresentation.IMPORT_REJECTED); return; }
@@ -1216,7 +1289,7 @@ public final class MainActivity extends Activity {
             String old = parsed.kind() == AdmissionImport.Kind.RENEWAL_REQUEST ? parsed.parts().get(1) : null;
             return new PendingReview(review, old, new AdmissionScreens.ReviewInfo(fp(review.deviceFingerprint()), fp(review.identityFingerprint()),
                 review.realmId(), when(review.expiresAt()), old != null), own);
-        }, holder -> { pendingReview = holder; showReviewSheet(holder); }, failure -> notice(REVIEW_REJECTED));
+        }, holder -> { pendingReview = holder; showReviewSheet(holder); }, failure -> notice(FailurePresentation.text(failure)));
     }
     private void showReviewSheet(PendingReview holder) {
         Dialog[] sheet = new Dialog[1];
@@ -1248,8 +1321,8 @@ public final class MainActivity extends Activity {
                     "Renovación firmada. Entrégala.");
             }
             if (holder.own()) {
-                // Approve and install in one vault transaction: either this phone is admitted or nothing changed.
-                vault.transaction(() -> { service.installAdmissionCredential(service.approveAdmission(holder.review(), true, ttl).wire()); return null; });
+                // The domain approves and installs atomically: either this phone is admitted or nothing changed.
+                AdmissionFlow.approveOwn(service, holder.review(), ttl);
                 return new Decision(null, null, "Este teléfono quedó admitido.");
             }
             var credential = service.approveAdmission(holder.review(), true, ttl);
@@ -1257,7 +1330,7 @@ public final class MainActivity extends Activity {
         }, decision -> {
             adminBusy = false; notice(decision.notice()); refresh();
             if (decision.exportText() != null) exportAdmission(decision.exportText(), decision.fileName());
-        }, failure -> { adminBusy = false; notice("No se firmó. Sin cambios."); refresh(); });
+        }, failure -> { adminBusy = false; notice(FailurePresentation.text(failure) + " Sin cambios."); refresh(); });
     }
     private void revokeWire(AdmissionImport.Parsed parsed) {
         if (parsed.kind() != AdmissionImport.Kind.CREDENTIAL) { notice(AdmissionPresentation.IMPORT_REJECTED); return; }
@@ -1272,7 +1345,7 @@ public final class MainActivity extends Activity {
                             if (adminBusy) return; adminBusy = true;
                             action(() -> AdmissionImport.file(engine.admission().revokeAdmission(wire, true, reason).wire()),
                                 text -> { adminBusy = false; notice("Revocación firmada. Distribúyela."); refresh(); exportAdmission(text, "umbra-revocacion.txt"); },
-                                failure -> { adminBusy = false; notice("No se firmó. Sin cambios."); });
+                                failure -> { adminBusy = false; notice(FailurePresentation.text(failure) + " Sin cambios."); });
                         });
                     }
                     @Override public void cancel() { sheet[0].dismiss(); }
@@ -1303,13 +1376,13 @@ public final class MainActivity extends Activity {
                 ? preview.detail() + "\n\nCompara la huella con la del administrador."
                 : "UMBRA comprobará la firma.";
             confirm(AdmissionImport.describe(kind), body, "Importar", false, () -> action(() -> {
-                AdmissionFlow.applyMember(vault, engine.admission(), preview.parsed(), true);
+                AdmissionFlow.applyMember(engine.admission(), preview.parsed(), true);
                 return AdmissionFlow.read(engine.admission(), Bytes.now());
             }, after -> {
                 admission = after;
                 notice(kind == AdmissionImport.Kind.REALM ? "Entorno configurado. Sin admisión aún." : admissionPresentation().title());
                 refresh();
-            }, failure -> notice(kind == AdmissionImport.Kind.REALM ? AdmissionPresentation.REALM_IMPORT_REJECTED : AdmissionPresentation.IMPORT_REJECTED)));
+            }, failure -> notice(FailurePresentation.text(failure))));
         }, failure -> notice(AdmissionPresentation.IMPORT_REJECTED));
     }
     /** Admin file picks: read the bounded file, then hand it to the domain-validated review or revocation flow. */
@@ -1351,7 +1424,7 @@ public final class MainActivity extends Activity {
         if (!trustOf(peer).allowsCalls()) { notice(trustOf(peer).blockedReason()); return; }
         action(() -> {
             JSONObject index=engine.get("device-index",peer);
-            if(index==null) throw new SecurityException("Aprueba primero sus dispositivos");
+            if(index==null) throw new FailurePresentation.UiRefusal("Aprueba primero sus dispositivos.");
             return engine.calls().reviewInvite(index.getString("root"),app.umbra.calls.CallPayload.NetworkPolicy.RELAY_ONLY);
         }, consent -> confirm(video ? "Videollamada a " + aliasFor(peer) : "Llamar a " + aliasFor(peer),
             video ? "Micrófono y cámara se confirman después." : "El micrófono se confirma después.",
@@ -1473,7 +1546,7 @@ public final class MainActivity extends Activity {
     private void reviewLocation(String peer, app.umbra.location.LocationPayload.Mode mode,long duration,boolean live,double lat,double lon) {
         action(() -> {
             JSONObject index=engine.get("device-index",peer);
-            if(index==null) throw new SecurityException("Aprueba primero sus dispositivos");
+            if(index==null) throw new FailurePresentation.UiRefusal("Aprueba primero sus dispositivos.");
             return engine.locations().review(index.getString("root"),mode,duration,live);
         },consent -> {
             LocationShareDraft draft = new LocationShareDraft(LocationShareDraft.Precision.valueOf(mode.name()), live, duration);
@@ -1483,7 +1556,7 @@ public final class MainActivity extends Activity {
             text.append("\nBloquear o salir la detiene.");
             confirm("Ubicación", text.toString(), live ? "Compartir en vivo" : "Compartir", false, () -> action(() -> {
                 if(mode==app.umbra.location.LocationPayload.Mode.MANUAL) return engine.locations().manual(consent,true,lat,lon);
-                if(locationCapture!=null && locationCapture.activeSession()!=null) throw new SecurityException("Detén primero la ubicación actual");
+                if(locationCapture!=null && locationCapture.activeSession()!=null) throw new FailurePresentation.UiRefusal("Detén primero la ubicación actual.");
                 String session=engine.locations().start(consent,true);
                 locationCapture=new app.umbra.location.AndroidLocationCapture(this,worker,() -> resumed && unlocked && !destroyed,engine.locations(),status -> main.post(() -> { if(unlocked) { locationStatus=app.umbra.ui.model.ShortStatus.location(status); refresh(); syncNow(); } }));
                 locationCapture.start(session,mode,live); return session;
@@ -1518,6 +1591,7 @@ public final class MainActivity extends Activity {
         super.onActivityResult(request, result, data); externalUi = false;
         if (result != RESULT_OK || data == null || data.getData() == null) {
             if (request == EXPORT_CONTACT || request == EXPORT_FILE || request == EXPORT_ADMISSION) pendingExportKey = null;
+            if (request == PICK_RESTRICTED) { pendingRestrictedKind = null; pendingRestrictedPeer = null; }
             return;
         }
         pendingResult = new PendingResult(request, data.getData());
@@ -1532,6 +1606,7 @@ public final class MainActivity extends Activity {
             else { verifyMethod = SecurityScreens.Method.CODE; nav.push(Route.of(Route.Kind.VERIFY, processed.peer())); refresh(); }
         }));
         else if (request == PICK_ADMISSION) importAdmission(uri);
+        else if (request == PICK_RESTRICTED) reviewRestrictedSend(uri);
         else if (request == PICK_ADMIN_REVIEW || request == PICK_ADMIN_REVOKE) importAdmin(uri, request == PICK_ADMIN_REVIEW);
         else if (request == PICK_FILE) {
             String recipient = pendingAttachmentPeer; long lifetime = pendingAttachmentTtl;
@@ -1606,5 +1681,358 @@ public final class MainActivity extends Activity {
     @Override public boolean dispatchTouchEvent(MotionEvent event) {
         int obscured = MotionEvent.FLAG_WINDOW_IS_OBSCURED | MotionEvent.FLAG_WINDOW_IS_PARTIALLY_OBSCURED;
         return (event.getFlags() & obscured) != 0 || super.dispatchTouchEvent(event);
+    }
+
+    // ================================================================== emergency lock (docs/EMERGENCY_LOCK.md)
+    private EmergencyLock.State emergencyState() { return gate.emergency().status().state(); }
+    /**
+     * Explicit emergency action. Order: hide sensitive presentation, request the domain closure without password
+     * or server round-trip, close UI-owned handles, then observe the coordinator. Never unlocks to clean up.
+     */
+    private void emergency() {
+        if (destroyed) return;
+        Engine current = engine;
+        releaseViewer();
+        if (root != null) { clearSecrets(root); root.setVisibility(View.INVISIBLE); }
+        for (Dialog dialog : new ArrayList<>(dialogs)) dialog.dismiss();
+        EmergencyLock.Status status = current != null ? current.emergencyLock() : gate.emergency().request();
+        lockState();
+        showEmergency(status);
+        main.removeCallbacks(emergencyPoll); main.postDelayed(emergencyPoll, 150);
+    }
+    private void showEmergency(EmergencyLock.Status status) {
+        mount(EntryScreens.emergencyStatus(ui, EmergencyPresentation.of(status), () -> { if (emergencyState() == EmergencyLock.State.CLOSED) authenticate(); }));
+    }
+    /** Coordinator status only (no vault access); stops once CLOSED or INCOMPLETE. */
+    private final Runnable emergencyPoll = new Runnable() {
+        @Override public void run() {
+            if (destroyed || unlocked) return;
+            EmergencyLock.Status status = gate.emergency().status();
+            if (status.state() == EmergencyLock.State.READY) return;
+            if (!authenticating) showEmergency(status);
+            if (!EmergencyPresentation.of(status).finished()) main.postDelayed(this, 200);
+        }
+    };
+
+    // ================================================================== private clipboard (ordinary text only)
+    /** Review is captured before the confirmation; the copy runs once this window has focus again (PrivateClipboard). */
+    private void copyText(String peer, MessageItem item) {
+        if (!features.available(Feature.CLIPBOARD_PROTECTION) || engine == null) return;
+        OrdinaryTextExport.Review review;
+        try { review = clipboard.reviewMessage(engine, peer, item.id()); }
+        catch (Exception e) { if (hasVaultFailure(e)) { lock(); return; } notice(FailurePresentation.text(e)); return; }
+        pendingCopy = review; pendingCopyConfirmed = false;
+        confirm("Copiar texto", "Sale de UMBRA al portapapeles de Android.", "Copiar", false, () -> pendingCopyConfirmed = true);
+    }
+    @Override public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus || !unlocked || pendingCopy == null || !pendingCopyConfirmed) return;
+        OrdinaryTextExport.Review review = pendingCopy; pendingCopy = null; pendingCopyConfirmed = false;
+        try { clipboard.copyMessage(review, true); notice("Copiado. Se borra al bloquear."); }
+        catch (Exception e) { notice(FailurePresentation.text(e)); }
+    }
+
+    // ================================================================== restricted content: send (F01–F05)
+    /** Worker thread: public metadata of objects received from this peer (no bytes, no preview). */
+    private List<RestrictedPresentation.Received> restrictedFor(String peer) throws Exception {
+        List<RestrictedPresentation.Received> result = new ArrayList<>();
+        List<app.umbra.content.RestrictedContentService.Status> received;
+        try { received = engine.restricted().received(peer); }
+        catch (Exception e) { if (hasVaultFailure(e)) throw e; return List.of(); } // not verified/admitted: nothing listed
+        for (var st : received)
+            result.add(RestrictedPresentation.received(st.id(), st.format().name(), st.mode().name(), st.consumed(), st.expired(), when(st.expires())));
+        return List.copyOf(result);
+    }
+    private void eraseRestrictedInputs() { for (byte[] b : restrictedInputs) Arrays.fill(b, (byte) 0); restrictedInputs.clear(); }
+    private void restrictedSendSheet(String peer) {
+        LinearLayout box = ui.column();
+        Dialog sheet = SecureDialogs.sheet(this, this::track, box);
+        fillRestrictedSheet(peer, sheet, box);
+    }
+    private void fillRestrictedSheet(String peer, Dialog sheet, LinearLayout box) {
+        box.removeAllViews();
+        boolean capture = NoteCapture.AVAILABLE && features.available(Feature.RESTRICTED_CAPTURE);
+        box.addView(ContentScreens.sendSheet(ui, new ContentScreens.SendState(aliasFor(peer), restrictedChoice, capture, false), new ContentScreens.SendActions() {
+            @Override public void mode(String mode) { restrictedChoice = new RestrictedPresentation.Choice(mode, restrictedChoice.ttlIndex(), restrictedChoice.sessionIndex()); fillRestrictedSheet(peer, sheet, box); }
+            @Override public void ttl(int i) { restrictedChoice = new RestrictedPresentation.Choice(restrictedChoice.mode(), i, restrictedChoice.sessionIndex()); fillRestrictedSheet(peer, sheet, box); }
+            @Override public void session(int i) { restrictedChoice = new RestrictedPresentation.Choice(restrictedChoice.mode(), restrictedChoice.ttlIndex(), i); fillRestrictedSheet(peer, sheet, box); }
+            @Override public void pick(Kind kind) {
+                sheet.dismiss(); pendingRestrictedKind = kind; pendingRestrictedPeer = peer;
+                external(new Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE)
+                    .putExtra(Intent.EXTRA_MIME_TYPES, kind.mimeTypes()), PICK_RESTRICTED);
+            }
+            @Override public void capture() { sheet.dismiss(); startCapture(peer); }
+        }));
+    }
+    private record PendingSend(Kind kind, String peer, RestrictedPresentation.Choice choice, byte[] input,
+                               app.umbra.content.RestrictedContentService.Review review) {}
+    /** After the picker (and re-authentication): bounded read + domain review on the worker, then explicit confirmation. */
+    private void reviewRestrictedSend(Uri uri) {
+        Kind kind = pendingRestrictedKind; String peer = pendingRestrictedPeer; RestrictedPresentation.Choice choice = restrictedChoice;
+        pendingRestrictedKind = null; pendingRestrictedPeer = null;
+        if (kind == null || peer == null) return;
+        action(() -> {
+            byte[] input = readBounded(uri, kind.maxInputBytes());
+            restrictedInputs.add(input);
+            try { return new PendingSend(kind, peer, choice, input, RestrictedFlow.reviewSend(engine, peer, choice.mode(), choice.ttlSeconds(), choice.sessionSeconds())); }
+            catch (Exception e) { Arrays.fill(input, (byte) 0); restrictedInputs.remove(input); throw e; }
+        }, this::confirmRestrictedSend, failure -> notice(FailurePresentation.text(failure)));
+    }
+    private void confirmRestrictedSend(PendingSend p) {
+        StringBuilder text = new StringBuilder();
+        for (String[] line : p.choice().summary(aliasFor(p.peer()), p.kind())) text.append(line[0]).append(": ").append(line[1]).append('\n');
+        text.append("No se podrá exportar.");
+        // The review expires after 60 s: an unconfirmed input is erased then, or at lock.
+        main.postDelayed(() -> { Arrays.fill(p.input(), (byte) 0); restrictedInputs.remove(p.input()); }, 61_000);
+        confirm("Enviar " + p.kind().label.toLowerCase(Locale.ROOT) + " protegido", text.toString(), "Enviar", false, () -> action(() -> {
+            try { return RestrictedFlow.prepareAndSend(this, engine, p.review(), p.kind(), p.input()); }
+            finally { restrictedInputs.remove(p.input()); }
+        }, id -> { notice(RestrictedPresentation.SENT); refresh(); syncNow(); },
+           failure -> notice(FailurePresentation.text(failure) + " " + RestrictedPresentation.NOT_SENT)));
+    }
+
+    // ------------------------------------------------------------------ capture (connected edition only)
+    private static boolean captureInput(AudioDeviceInfo d) {
+        int t = d.getType();
+        return d.isSource() && (t == AudioDeviceInfo.TYPE_BUILTIN_MIC || t == AudioDeviceInfo.TYPE_WIRED_HEADSET
+            || t == AudioDeviceInfo.TYPE_USB_HEADSET || t == AudioDeviceInfo.TYPE_BLUETOOTH_SCO || t == AudioDeviceInfo.TYPE_BLE_HEADSET);
+    }
+    private static String deviceName(AudioDeviceInfo d) {
+        String type = switch (d.getType()) {
+            case AudioDeviceInfo.TYPE_BUILTIN_MIC -> "Micrófono del teléfono";
+            case AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Altavoz";
+            case AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "Auricular del teléfono";
+            case AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "Auriculares con cable";
+            case AudioDeviceInfo.TYPE_USB_HEADSET -> "Auriculares USB";
+            case AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLE_HEADSET -> "Bluetooth";
+            default -> "Dispositivo de audio";
+        };
+        return type + " · " + d.getId();
+    }
+    /** Explicit local action: permission request, then input choice, review and consent. No background capture. */
+    private void startCapture(String peer) {
+        if (!NoteCapture.AVAILABLE || !features.available(Feature.RESTRICTED_CAPTURE) || engine == null) return;
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            externalUi = true; requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 303); return;
+        }
+        List<AudioDeviceInfo> inputs = new ArrayList<>();
+        for (AudioDeviceInfo d : getSystemService(AudioManager.class).getDevices(AudioManager.GET_DEVICES_INPUTS)) if (captureInput(d)) inputs.add(d);
+        if (inputs.isEmpty()) { notice("Sin micrófono disponible."); return; }
+        String[] names = new String[inputs.size()]; for (int i = 0; i < names.length; i++) names[i] = deviceName(inputs.get(i));
+        RestrictedPresentation.Choice choice = restrictedChoice;
+        new SecureDialogBuilder().setTitle("Micrófono").setItems(names, (d, index) -> {
+            AudioDeviceInfo input = inputs.get(index);
+            action(() -> RestrictedFlow.reviewSend(engine, peer, choice.mode(), choice.ttlSeconds(), choice.sessionSeconds()),
+                review -> confirm("Grabar nota", "Para " + aliasFor(peer) + " · hasta 8 s · " + RestrictedPresentation.modeLabel(choice.mode()) + ".",
+                    "Grabar", false, () -> record(peer, review, input)),
+                failure -> notice(FailurePresentation.text(failure)));
+        }).setNegativeButton("Cancelar", null).show();
+    }
+    private void record(String peer, app.umbra.content.RestrictedContentService.Review review, AudioDeviceInfo input) {
+        captureStop = false; captureDiscarded = false;
+        LinearLayout box = ui.column();
+        ContentScreens.CaptureActions actions = new ContentScreens.CaptureActions() {
+            @Override public void stop() { captureStop = true; }
+            @Override public void cancel() { cancelCapture(); }
+        };
+        box.addView(ContentScreens.captureSheet(ui, new ContentScreens.CaptureState(true, "Micrófono activo"), actions));
+        captureDialog = SecureDialogs.sheet(this, this::track, box);
+        action(() -> NoteCapture.record(this, engine, review, input, () -> captureStop),
+            prepared -> {
+                Dialog open = captureDialog; captureDialog = null; if (open != null) open.dismiss();
+                if (captureDiscarded) { prepared.close(); return; } // discarded meanwhile: never sent
+                confirm("Enviar nota protegida", "Para " + aliasFor(peer) + ". No se podrá exportar.", "Enviar",
+                    false, () -> action(() -> RestrictedFlow.send(engine, review, prepared), id -> { notice(RestrictedPresentation.SENT); refresh(); syncNow(); },
+                        failure -> notice(FailurePresentation.text(failure) + " " + RestrictedPresentation.NOT_SENT)));
+            },
+            failure -> { Dialog open = captureDialog; captureDialog = null; if (open != null) open.dismiss(); if (!captureDiscarded) notice(FailurePresentation.text(failure)); });
+    }
+    private void cancelCapture() {
+        captureStop = true; captureDiscarded = true;
+        Dialog open = captureDialog; captureDialog = null; if (open != null) open.dismiss();
+    }
+
+    // ================================================================== restricted content: open and present (F01–F06)
+    private static boolean playbackSink(AudioDeviceInfo d) {
+        int t = d.getType();
+        return d.isSink() && (t == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER || t == AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
+            || t == AudioDeviceInfo.TYPE_WIRED_HEADSET || t == AudioDeviceInfo.TYPE_WIRED_HEADPHONES || t == AudioDeviceInfo.TYPE_USB_HEADSET
+            || t == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || t == AudioDeviceInfo.TYPE_BLE_HEADSET);
+    }
+    /** Tap on a received object: audio/video first choose an explicit output (no speaker fallback), then consent, then open. */
+    private void openRestricted(String peer, String id) {
+        RestrictedPresentation.Received item = null;
+        for (RestrictedPresentation.Received r : restrictedReceived) if (r.id().equals(id)) item = r;
+        if (item == null || !item.canOpen() || item.kind() == null) return;
+        final RestrictedPresentation.Received chosen = item;
+        if (chosen.kind() == Kind.NOTE || chosen.kind() == Kind.VIDEO) {
+            List<AudioDeviceInfo> sinks = new ArrayList<>();
+            for (AudioDeviceInfo d : getSystemService(AudioManager.class).getDevices(AudioManager.GET_DEVICES_OUTPUTS)) if (playbackSink(d)) sinks.add(d);
+            if (sinks.isEmpty()) { notice("Sin salida de audio disponible."); return; }
+            String[] names = new String[sinks.size()]; for (int i = 0; i < names.length; i++) names[i] = deviceName(sinks.get(i));
+            new SecureDialogBuilder().setTitle("Salida de audio").setItems(names, (d, index) -> confirmOpen(peer, chosen, sinks.get(index)))
+                .setNegativeButton("Cancelar", null).show();
+        } else confirmOpen(peer, chosen, null);
+    }
+    private void confirmOpen(String peer, RestrictedPresentation.Received item, AudioDeviceInfo sink) {
+        confirm("Abrir " + item.kind().label.toLowerCase(Locale.ROOT), RestrictedPresentation.openWarning(item.mode()), "Abrir", false, () -> startViewer(peer, item, sink));
+    }
+    /**
+     * Protect first, then consume: the window is already secure and the surface is protected before the
+     * domain opens (ONCE is consumed before anything is presented). Nothing here is restored after lock.
+     */
+    private void startViewer(String peer, RestrictedPresentation.Received item, AudioDeviceInfo sink) {
+        releaseViewer();
+        viewerId = item.id(); viewerPeer = peer; viewerItem = item; viewerSink = sink; viewerPage = 0;
+        viewerStatus = "Abriendo…"; viewerTone = Tone.NEUTRAL; viewerTicket = generation;
+        if (item.kind() == Kind.PHOTO || item.kind() == Kind.PDF) {
+            viewerFrame = new ProtectedFrameView(this);
+            viewerFrame.setContentDescription(item.kind().label + " protegido de " + aliasFor(peer));
+            viewerFrame.setViewportListener((scale, x, y) -> requestRender());
+            viewerFrame.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> { if (r - l != or - ol || b - t != ob - ot) requestRender(); });
+        } else if (item.kind() == Kind.VIDEO) {
+            viewerSurface = new SurfaceView(this);
+            PrivateAndroidSurface.protect(viewerSurface); // before the surface is attached or any frame exists
+            viewerSurface.setContentDescription("Video protegido de " + aliasFor(peer));
+        }
+        if (!nav.push(Route.of(Route.Kind.CONTENT, item.id()))) { closeViewer(null); return; }
+        render();
+        final int ticket = viewerTicket; final String id = item.id();
+        worker.submit(() -> {
+            RestrictedFlow.Viewer opened = null; Exception failure = null;
+            try {
+                if (!unlocked || ticket != generation) return;
+                opened = RestrictedFlow.Viewer.open(engine, RestrictedFlow.reviewOpen(engine, id));
+            } catch (Exception e) { failure = e; }
+            final RestrictedFlow.Viewer result = opened; final Exception problem = failure;
+            main.post(() -> {
+                boolean current = !destroyed && unlocked && ticket == generation && id.equals(viewerId);
+                if (!current) { if (result != null) result.close(); return; } // stale callback: never presented
+                if (problem != null) { if (hasVaultFailure(problem)) { lock(); return; } closeViewer(FailurePresentation.text(problem)); return; }
+                viewer = result; viewerStatus = "Abierto"; viewerTone = Tone.ACCENT;
+                present();
+            });
+        });
+    }
+    private void present() {
+        RestrictedFlow.Viewer v = viewer; if (v == null) return;
+        main.removeCallbacks(viewerPoll); main.postDelayed(viewerPoll, 250);
+        switch (v.kind) {
+            case PHOTO, PDF -> { render(); requestRender(); }
+            case NOTE -> startPlayback(v, null);
+            case VIDEO -> {
+                render();
+                SurfaceView surface = viewerSurface; if (surface == null) return;
+                surface.getHolder().addCallback(new SurfaceHolder.Callback() {
+                    @Override public void surfaceCreated(SurfaceHolder holder) { if (viewer == v && v.playbackState() == null) startPlayback(v, holder); }
+                    @Override public void surfaceChanged(SurfaceHolder holder, int f, int w, int h) {}
+                    // Losing the surface (pause, detach) ends this presentation; it is never re-attached.
+                    @Override public void surfaceDestroyed(SurfaceHolder holder) { if (viewer == v) closeViewer(null); }
+                });
+                if (surface.getHolder().getSurface() != null && surface.getHolder().getSurface().isValid() && v.playbackState() == null) startPlayback(v, surface.getHolder());
+            }
+        }
+    }
+    private void startPlayback(RestrictedFlow.Viewer v, SurfaceHolder holder) {
+        final int ticket = viewerTicket; AudioDeviceInfo sink = viewerSink; final SurfaceView surface = viewerSurface;
+        worker.submit(() -> {
+            Exception failure = null;
+            try {
+                if (!unlocked || ticket != generation || viewer != v) return;
+                if (holder == null) v.startAudio(getApplicationContext(), sink);
+                else v.startVideo(getApplicationContext(), sink, new app.umbra.content.RestrictedPlayback.VideoOutput() {
+                    @Override public android.view.Surface surface() { return holder.getSurface(); }
+                    // Graphics cleanup is marshalled to the UI thread; nothing waits here while holding storage.
+                    @Override public void close() { main.post(() -> { if (surface != null) surface.setVisibility(View.GONE); }); }
+                });
+            } catch (Exception e) { failure = e; }
+            final Exception problem = failure;
+            if (problem != null) main.post(() -> {
+                if (ticket == generation && viewer == v) { if (hasVaultFailure(problem)) lock(); else closeViewer(FailurePresentation.text(problem)); }
+            });
+        });
+    }
+    /** Debounced render of the current page into a new presentation-owned frame (worker), shown only if still current. */
+    private void requestRender() {
+        RestrictedFlow.Viewer v = viewer; ProtectedFrameView frame = viewerFrame;
+        if (v == null || frame == null || frame.getWidth() < 1 || frame.getHeight() < 1) return;
+        if (viewerRendering) { viewerRenderAgain = true; return; }
+        viewerRendering = true; viewerRenderAgain = false;
+        final int ticket = viewerTicket, page = viewerPage, w = frame.getWidth(), h = frame.getHeight();
+        final float scale = frame.scale(), ox = frame.offsetX(), oy = frame.offsetY();
+        worker.submit(() -> {
+            Bitmap rendered = null; Exception failure = null;
+            try { if (unlocked && ticket == generation && viewer == v) rendered = v.render(page, w, h, scale, ox, oy); }
+            catch (Exception e) { failure = e; }
+            final Bitmap result = rendered; final Exception problem = failure;
+            main.post(() -> {
+                viewerRendering = false;
+                boolean current = !destroyed && unlocked && ticket == generation && viewer == v && viewerFrame == frame;
+                if (!current) { if (result != null) { result.eraseColor(Color.TRANSPARENT); result.recycle(); } return; }
+                if (problem != null) { if (hasVaultFailure(problem)) lock(); else closeViewer(RestrictedPresentation.SESSION_ENDED); return; }
+                if (result != null) frame.show(result);
+                if (viewerRenderAgain) requestRender();
+            });
+        });
+    }
+    /**
+     * Observation loop while a viewer is open: playback state on the UI thread (atomic, no storage) and the
+     * session validity on the worker. When the domain says expired/denied, the presentation closes (F06).
+     */
+    private final Runnable viewerPoll = new Runnable() {
+        @Override public void run() {
+            RestrictedFlow.Viewer v = viewer; if (v == null || destroyed || !unlocked) return;
+            String state = v.playbackState();
+            if (state != null) {
+                viewerStatus = RestrictedPresentation.playbackLabel(state);
+                viewerTone = "PLAYING".equals(state) ? Tone.ACCENT : RestrictedPresentation.playbackTerminal(state) ? Tone.NEUTRAL : Tone.WARNING;
+                TextView status = viewerHandles.status;
+                if (status != null) { status.setText(viewerStatus); status.setTextColor(Ui.toneColor(viewerTone)); }
+                if (RestrictedPresentation.playbackTerminal(state)) { closeViewer(viewerStatus); return; }
+            }
+            final int ticket = viewerTicket;
+            worker.submit(() -> {
+                try { if (viewer == v && ticket == generation) v.check(); }
+                catch (Exception ended) { main.post(() -> { if (viewer == v && ticket == generation) { if (hasVaultFailure(ended)) lock(); else closeViewer(RestrictedPresentation.SESSION_ENDED); } }); }
+            });
+            main.postDelayed(this, 1000);
+        }
+    };
+    private void renderViewer(String id) {
+        RestrictedPresentation.Received item = viewerItem;
+        if (item == null || !id.equals(viewerId)) { nav.back(); render(); return; } // nothing is restored from a route
+        View frame = item.kind() == Kind.VIDEO ? viewerSurface : viewerFrame;
+        RestrictedFlow.Viewer v = viewer;
+        mount(ContentScreens.viewer(ui, new ContentScreens.ViewerState(item.kind(), item.mode(), aliasFor(viewerPeer), viewerStatus, viewerTone,
+            item.expires(), "Sesión limitada", viewerPage, v == null ? 1 : v.pageCount(),
+            "Reproduciendo".equals(viewerStatus)), frame, new ContentScreens.ViewerActions() {
+            @Override public void close() { closeViewer(null); }
+            @Override public void previous() { if (viewerPage > 0) { viewerPage--; if (viewerFrame != null) viewerFrame.resetViewport(); render(); requestRender(); } }
+            @Override public void next() { RestrictedFlow.Viewer cur = viewer; if (cur != null && viewerPage < cur.pageCount() - 1) { viewerPage++; if (viewerFrame != null) viewerFrame.resetViewport(); render(); requestRender(); } }
+            @Override public void emergency() { MainActivity.this.emergency(); }
+        }, viewerHandles));
+    }
+    /**
+     * Closes the open presentation: frame erased and surfaces hidden immediately, domain handles closed
+     * (immediate denial), closure observed separately. Never reopens; a failed closure stays denied.
+     */
+    private void closeViewer(String reason) {
+        boolean wasOpen = releaseViewer();
+        if (wasOpen && unlocked && onRoute(Route.Kind.CONTENT)) { nav.back(); if (reason != null) notice(reason); refresh(); render(); }
+        else if (reason != null && unlocked) notice(reason);
+    }
+    /** Non-navigating core of {@link #closeViewer}: used by lock and emergency, which choose their own screen. */
+    private boolean releaseViewer() {
+        main.removeCallbacks(viewerPoll);
+        RestrictedFlow.Viewer v = viewer; viewer = null;
+        boolean wasOpen = viewerId != null;
+        viewerId = null; viewerItem = null; viewerSink = null; viewerRendering = false; viewerRenderAgain = false; viewerHandles.status = null;
+        ProtectedFrameView frame = viewerFrame; viewerFrame = null; if (frame != null) frame.clear();
+        SurfaceView surface = viewerSurface; viewerSurface = null; if (surface != null) surface.setVisibility(View.GONE);
+        if (v != null) {
+            v.close();
+            v.closure().whenComplete((ok, error) -> { if (error != null) main.post(() -> notice(RestrictedPresentation.CLOSURE_UNCONFIRMED)); });
+        }
+        return wasOpen;
     }
 }

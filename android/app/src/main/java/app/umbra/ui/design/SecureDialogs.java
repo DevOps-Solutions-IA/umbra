@@ -24,10 +24,8 @@ public final class SecureDialogs {
 
     public static void protect(Dialog dialog) {
         Window w = dialog.getWindow();
-        if (w != null) {
-            w.addFlags(WindowManager.LayoutParams.FLAG_SECURE);
-            w.setHideOverlayWindows(true);
-        }
+        // Domain privacy adapter (FLAG_SECURE + hidden overlays), applied before the dialog is shown.
+        if (w != null) app.umbra.privacy.PrivateAndroidSurface.protect(w);
     }
     public static void show(Dialog dialog, Consumer<Dialog> track) {
         protect(dialog);

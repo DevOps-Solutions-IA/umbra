@@ -77,6 +77,19 @@ public enum Help {
         "Todo se guarda cifrado en este teléfono.",
         "Sin copias de seguridad automáticas.",
         "La caducidad no impide copias del destinatario.")),
+    PROTECTED("Contenido protegido", List.of(
+        "Solo para un contacto verificado y admitido.",
+        "Una vez: se consume al abrirse.",
+        "Solo en UMBRA: se abre aquí hasta que caduque.",
+        "No se exporta, comparte, reenvía ni imprime.",
+        "Enviado significa en cola cifrada, no entregado.",
+        "No impide fotos de la pantalla con otro equipo.")),
+    EMERGENCY("Emergencia", List.of(
+        "Oculta el contenido y cierra al instante.",
+        "No pide contraseña.",
+        "No avisa al servidor ni espera respuesta.",
+        "Lo ya entregado no se retira.",
+        "Para volver: desbloqueo completo.")),
     DEVELOPMENT("Versión de desarrollo", List.of(
         "Pendiente de auditoría independiente.",
         "No usar todavía para secretos reales."));

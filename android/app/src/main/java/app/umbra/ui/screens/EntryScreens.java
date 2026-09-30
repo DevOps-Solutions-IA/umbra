@@ -95,7 +95,10 @@ public final class EntryScreens {
         return r;
     }
 
-    /** Future emergency lock control. Rendered disabled until the engine provides the domain action. */
+    /**
+     * Emergency lock control: one explicit action, no password. The trigger must hide sensitive content
+     * first and then request the domain closure (engine.emergencyLock()); it never waits for a server.
+     */
     public static LinearLayout emergencyLock(Ui ui, FeatureAvailability features, Runnable trigger) {
         LinearLayout box = ui.column();
         android.widget.Button b = ui.button(Ui.ButtonKind.DESTRUCTIVE, "Bloqueo de emergencia", Glyph.EMERGENCY_LOCK, trigger);
@@ -104,5 +107,34 @@ public final class EntryScreens {
             box.addView(b); box.addView(ui.pendingChip());
         } else box.addView(b);
         return box;
+    }
+
+    /**
+     * Closure progress reported by the domain coordinator. Content is already hidden when this is shown.
+     * "Desbloquear" is offered only after CLOSED; INCOMPLETE keeps access denied.
+     */
+    public static Screen emergencyStatus(Ui ui, EmergencyPresentation p, Runnable unlock) {
+        LinearLayout body = ui.column(); body.setGravity(Gravity.CENTER_HORIZONTAL); body.setPadding(ui.dp(8), ui.dp(56), ui.dp(8), ui.dp(8));
+        body.addView(ui.logo(56, UmbraColors.ACCENT_MUTED));
+        TextView title = ui.heading(UmbraType.DISPLAY, p.title()); title.setGravity(Gravity.CENTER);
+        title.setAccessibilityLiveRegion(android.view.View.ACCESSIBILITY_LIVE_REGION_ASSERTIVE);
+        body.addView(title, ui.margins(Ui.match(), 20, 6));
+        LinearLayout chipRow = ui.row(); chipRow.setGravity(Gravity.CENTER);
+        chipRow.addView(ui.chip(p.tone(), p.glyph(), "Emergencia"));
+        body.addView(chipRow, Ui.match());
+        if (!p.body().isEmpty()) { TextView line = ui.text(UmbraType.BODY_SECONDARY, p.body()); line.setGravity(Gravity.CENTER); body.addView(line, ui.margins(Ui.match(), 10, 0)); }
+        LinearLayout card = ui.card();
+        for (EmergencyPresentation.Line line : p.lines()) {
+            LinearLayout r = ui.row(); r.setPadding(0, ui.dp(6), 0, ui.dp(6));
+            r.addView(ui.text(UmbraType.CAPTION, line.subsystem()), Ui.weight());
+            r.addView(ui.chip(line.tone(), line.tone() == Tone.SUCCESS ? Glyph.CHECK : line.tone() == Tone.DANGER ? Glyph.WARNING : Glyph.TIMER, line.outcome()));
+            r.setContentDescription(line.subsystem() + ": " + line.outcome());
+            card.addView(r);
+        }
+        if (!p.lines().isEmpty()) body.addView(card, ui.margins(Ui.match(), 16, 0));
+        LinearLayout bottom = ui.column();
+        LinearLayout help = ui.row(); help.setGravity(Gravity.CENTER); help.addView(ui.helpButton(Help.EMERGENCY)); bottom.addView(help, Ui.match());
+        if (p.allowsNewAuthentication()) bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Desbloquear", Glyph.UNLOCK, unlock));
+        return Screen.of(null, body, bottom);
     }
 }

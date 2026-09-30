@@ -30,6 +30,8 @@ public final class SettingsScreens {
         void connect(); void disconnect(); void nearby();
         void changePassword(); void enrollPassword(); void admission();
         void devices();
+        /** Coordinated emergency lock (engine.emergencyLock()); no password. */
+        void emergency();
     }
 
     public static Screen section(Ui ui, SettingsState s, SettingsActions a) {
@@ -112,8 +114,8 @@ public final class SettingsScreens {
         status.addView(fact(ui, "Admisión", s.admission().title()));
         body.addView(status);
         body.addView(ui.listRow(ui.iconTile(s.admission().glyph(), s.admission().tone()), "Admisión", null, ui.chevron(), a::admission));
-        body.addView(ui.sectionHeader("Próximamente"));
-        body.addView(EntryScreens.emergencyLock(ui, s.features(), () -> {}));
+        body.addView(ui.sectionHeader("Emergencia"));
+        body.addView(EntryScreens.emergencyLock(ui, s.features(), a::emergency));
         body.addView(ui.sectionHeader("Zona de riesgo"));
         body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Destruir identidad", Glyph.TRASH, a::destroyIdentity));
         body.addView(ui.text(UmbraType.CAPTION, "Irreversible.", UmbraColors.WARNING_FG));

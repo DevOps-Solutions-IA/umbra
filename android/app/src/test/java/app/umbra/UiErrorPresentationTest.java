@@ -23,13 +23,22 @@ public class UiErrorPresentationTest {
         assertFalse(detail.contains("\t"));
         assertTrue(detail.length() <= 161);
     }
-    @Test public void classifiesEngineMessages() {
-        assertEquals(ErrorKind.CONTACT_UNVERIFIED, ErrorPresentation.classify("Verifique el código de seguridad antes de conversar"));
-        assertEquals(ErrorKind.CONTACT_BLOCKED, ErrorPresentation.classify("Contacto desconocido o bloqueado"));
-        assertEquals(ErrorKind.OFFLINE_EDITION, ErrorPresentation.classify("Esta edición no tiene acceso a internet"));
-        assertEquals(ErrorKind.RELAY_UNAVAILABLE, ErrorPresentation.classify("Sin respuesta del relay"));
-        assertEquals(ErrorKind.GENERIC, ErrorPresentation.classify(null));
-        assertEquals(ErrorKind.GENERIC, ErrorPresentation.classify("algo inesperado"));
+    @Test public void typedFailuresMapWithoutReadingMessages() {
+        // Same message text, different typed codes: only the type decides the wording.
+        assertEquals("Ya se abrió.", FailurePresentation.text(new app.umbra.content.ContentException(app.umbra.content.ContentException.Code.CONSUMED)));
+        assertEquals("Caducado.", FailurePresentation.text(new app.umbra.content.ContentException(app.umbra.content.ContentException.Code.EXPIRED)));
+        assertEquals("Otra autoridad. Se conserva la actual.",
+            FailurePresentation.text(new app.umbra.admission.AdmissionException(app.umbra.admission.AdmissionException.Code.AUTHORITY_MISMATCH)));
+        assertEquals("Bóveda bloqueada.", FailurePresentation.text(new app.umbra.core.AccessGate.LockedException()));
+        // An untyped exception whose message looks meaningful is still the generic text.
+        assertEquals("No completado.", FailurePresentation.text(new SecurityException("Contacto bloqueado: admission revoked")));
+        assertEquals("No completado.", FailurePresentation.text(new IllegalStateException("Verifique el código")));
+        assertEquals("Activa la cercanía", FailurePresentation.text(new FailurePresentation.UiRefusal("Activa la cercanía")));
+        for (app.umbra.privacy.OperationFailure kind : app.umbra.privacy.OperationFailure.values()) {
+            String text = FailurePresentation.text(kind);
+            assertTrue(kind.name(), SpanishText.isSpanish(text));
+            assertTrue(kind.name(), text.length() <= 64);
+        }
     }
     @Test public void identityChangeErrorUsesPlainLanguage() {
         ErrorPresentation e = ErrorPresentation.of(ErrorKind.IDENTITY_CHANGED);

@@ -3,8 +3,8 @@ package app.umbra.ui.model;
 /**
  * Android-free icon identifiers; the design layer maps each one to a vector drawable. Icons carry no
  * meaning by color alone and never replace the text label or content description of a control.
- * VAULT_*, PASSWORD and CHANGE_PASSWORD now back the real vault password flow. EMERGENCY_LOCK is
- * still prepared only: its backend does not exist in this build and showing it implies nothing.
+ * VAULT_*, PASSWORD and CHANGE_PASSWORD back the real vault password flow; EMERGENCY_LOCK backs
+ * the coordinated domain closure (engine.emergencyLock()).
  */
 public enum Glyph {
     BACK, CLOSE, CHECK, ADD, SEARCH, LOCK, CHAT, GROUP, PERSON, PERSON_ADD, CALL, CALL_END, VIDEO, VIDEO_OFF,
