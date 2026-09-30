@@ -25,6 +25,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         throw new android.database.sqlite.SQLiteDatabaseCorruptException("Vault database damaged; automatic deletion refused");
     };
     private final AccessGate gate;
+    private final Object restrictedResourceScope;
     private EmergencyLock.Registration emergencyRegistration;
     private VaultSessionRegistry.Claim sessionClaim;
     private boolean initialCreationAllowed;
@@ -50,7 +51,10 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         PasswordEnvelope.erase(old); passwordState = State.LOCKED;
     }
     public Vault(Context context, AccessGate gate) { super(context, "umbra.db", null, 2, PRESERVE_CORRUPT); this.gate = gate; this.databaseFile = context.getDatabasePath("umbra.db"); initialCreationAllowed = !databaseFile.exists(); gate.onInvalidation(passwordInvalidation);
-        ensureEmergencyRegistration();
+        synchronized(this) {
+            ensureEmergencyRegistration();
+            restrictedResourceScope=sessionClaim.restrictedResourceScope();
+        }
     }
     private synchronized void ensureEmergencyRegistration() {
         if(emergencyRegistration==null) {
@@ -64,6 +68,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         }
     }
     @Override public EmergencyLock emergency() { return gate.emergency(); }
+    @Override public Object restrictedResourceScope() { return restrictedResourceScope; }
     private static void createTable(SQLiteDatabase db, String table) {
         // Table identifiers are internal constants, never user input.
         db.execSQL("CREATE TABLE " + table + "(bucket TEXT NOT NULL,k TEXT NOT NULL,nonce BLOB NOT NULL,value BLOB NOT NULL,PRIMARY KEY(bucket,k))");

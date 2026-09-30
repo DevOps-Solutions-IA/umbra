@@ -155,6 +155,7 @@ public final class RelayClient implements AutoCloseable {
         if(admission==null) throw new SecurityException("Admission provisioning required");
         var requestLease=admission.requestAuthorization();
         var pending=admission.pendingRequest();
+        if(pending==null)throw new app.umbra.admission.AdmissionException(app.umbra.admission.AdmissionException.Code.INVALID);
         JSONObject challengeResponse=requestRaw("POST","/v1/admission/result-challenge",null,
             new JSONObject().put("wire",pending.wire()),() -> requestLease.run(),java.util.Map.of());
         Wire.fields(challengeResponse,"challenge");

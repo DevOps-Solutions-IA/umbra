@@ -13,9 +13,9 @@ import sys
 import urllib.request
 import zipfile
 
-VERSION = "8.13"
-# https://services.gradle.org/distributions/gradle-8.13-bin.zip.sha256
-SHA256 = "20f1b1176237254a6fc204d8434196fa11a4cfb387567519c61556e8710aed78"
+VERSION = "8.14.4"
+# https://services.gradle.org/distributions/gradle-8.14.4-bin.zip.sha256
+SHA256 = "f1771298a70f6db5a29daf62378c4e18a17fc33c9ba6b14362e0cdf40610380d"
 ROOT = Path(__file__).resolve().parents[1]
 
 

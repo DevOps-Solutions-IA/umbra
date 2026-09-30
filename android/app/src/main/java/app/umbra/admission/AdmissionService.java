@@ -50,9 +50,20 @@ public final class AdmissionService {
         Runnable check=lease();
         return db.transaction(() -> {
             check.run(); State state=getAdmissionState();
-            String pending=read("pending"),credential=read("credential");
-            Long requestExpiry=pending==null?null:AdmissionRequest.decode(pending).expiresAt();
-            Long credentialExpiry=credential==null?null:AdmissionCredential.decode(credential,realm()).expiresAt();
+            Long requestExpiry=null,credentialExpiry=null;
+            if(state!=State.INVALID) {
+                // Reads/authorization failures must propagate, not become format errors.
+                String pending=read("pending"),credential=read("credential");
+                String realmWire=credential==null?null:read("realm");
+                try {
+                    requestExpiry=pending==null?null:AdmissionRequest.decode(pending).expiresAt();
+                    credentialExpiry=credential==null?null:AdmissionCredential.decode(credential,RealmConfig.decode(realmWire)).expiresAt();
+                } catch(AdmissionException | IllegalArgumentException invalid) {
+                    // A valid credential may coexist with corrupt pending renewal metadata.
+                    // Do not publish untrusted dates or repair any persisted record.
+                    state=State.INVALID; requestExpiry=null; credentialExpiry=null;
+                }
+            }
             check.run(); return new Status(state,requestExpiry,credentialExpiry);
         });
     }
@@ -60,7 +71,7 @@ public final class AdmissionService {
     public void cancelPendingRequest(String expectedRequestId) throws Exception {
         Runnable check=lease();
         db.transaction(() -> {
-            check.run(); AdmissionRequest pending=pendingRequest();
+            check.run(); AdmissionRequest pending=requirePendingRequest();
             if(!pending.requestId().equals(expectedRequestId)) throw AdmissionCodec.invalid();
             db.remove("admission","pending"); db.remove("admission","rejection");
             check.run(); return null;
@@ -217,17 +228,26 @@ public final class AdmissionService {
         });
     }
     public AdmissionRequest pendingRequest() throws Exception {
-        return db.transaction(() -> { lease(); String pending=read("pending"); if(pending==null) throw AdmissionCodec.invalid();
-            return AdmissionRequest.decode(pending); });
+        Runnable check=lease();
+        return db.transaction(() -> {
+            check.run(); String pending=read("pending");
+            AdmissionRequest result=pending==null?null:AdmissionRequest.decode(pending);
+            check.run(); return result;
+        });
+    }
+    private AdmissionRequest requirePendingRequest() throws Exception {
+        AdmissionRequest pending=pendingRequest();
+        if(pending==null)throw AdmissionCodec.invalid();
+        return pending;
     }
     public Records.Work<Void> requestAuthorization() throws Exception {
-        Runnable captured=lease(); String pending=pendingRequest().wire();
-        return () -> { captured.run(); if(!pending.equals(pendingRequest().wire())) throw AdmissionCodec.invalid(); return null; };
+        Runnable captured=lease(); String pending=requirePendingRequest().wire(); captured.run();
+        return () -> { captured.run(); if(!pending.equals(requirePendingRequest().wire())) throw AdmissionCodec.invalid(); captured.run(); return null; };
     }
     public String proveRequestResult(AdmissionChallenge challenge,String expectedVerifier) throws Exception {
         Runnable check=lease();
         return db.transaction(() -> {
-            check.run(); AdmissionRequest request=pendingRequest();
+            check.run(); AdmissionRequest request=requirePendingRequest();
             String operation=Bytes.sha256(Bytes.utf8("UMBRA-ADMISSION-RESULT-1"));
             if(!challenge.realmId().equals(realm().realmId()) || !challenge.credentialId().equals(request.requestId()) ||
                     !challenge.credentialHash().equals(Bytes.sha256(Bytes.utf8(request.wire()))) ||
