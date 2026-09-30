@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def valid_report(text, code):
-    return (code == 0 and re.search(r'^OK \(3 tests\)$', text, re.M)
+    return (code == 0 and re.search(r'^OK \(4 tests\)$', text, re.M)
             and 'INSTRUMENTATION_CODE: -1' in text
             and not re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)
             and not any(x in text for x in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'Process crashed')))

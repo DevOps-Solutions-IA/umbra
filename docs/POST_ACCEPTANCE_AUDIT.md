@@ -18,6 +18,16 @@ This separate `codex/post-acceptance-audit` branch proposes a new candidate:
   offline two-phone plan validator strengthen verification without claiming
   physical execution.
 
+## Admission follow-up from Claude PR #19
+
+The independently reproduced `status()` corruption failure and nullable
+`pendingRequest()` mismatch are corrected in a later candidate on this same branch.
+See [RED/GREEN and compatibility evidence](validation/2026-09-30-admission-status-contract-regression.md).
+INVALID snapshots carry no untrusted expiry; required operations still reject
+absence explicitly. This restores the existing UI V1 contract without modifying
+Claude's UI or the four frozen contract files. Earlier89bc6c9 CI is historical;
+the follow-up requires its own ten workflows and27 jobs.
+
 ## Contract impact for Claude
 
 **CONTRACT_CHANGE_REQUIRED — additive internal storage contract only:** custom
