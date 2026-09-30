@@ -106,8 +106,10 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2 # v5, Node 24
         with:
-          gradle-version: '8.13'
+          gradle-version: '8.14.4'
           cache-disabled: true
+      - name: Reject dependency fallback after repository connection failure
+        run: python scripts/check_gradle_repository_failure.py --gradle "$(command -v gradle)" --report android/app/build/reports/gradle-repository-failure.json
       - run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
       - name: Real libsignal unit tests, Android builds and lint
         working-directory: android

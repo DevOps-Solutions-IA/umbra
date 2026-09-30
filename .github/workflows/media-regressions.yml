@@ -37,7 +37,7 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2
         with:
-          gradle-version: '8.13'
+          gradle-version: '8.14.4'
           cache-disabled: true
       - name: Install the project SDK and isolated AVD image
         shell: bash
@@ -107,7 +107,7 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2
         with:
-          gradle-version: '8.13'
+          gradle-version: '8.14.4'
           cache-disabled: true
       - name: Install the project SDK and isolated AVD image
         shell: bash

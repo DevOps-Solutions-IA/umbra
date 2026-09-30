@@ -12,6 +12,38 @@ import static org.junit.Assert.*;
 /** Actual Android SQLite and actual Vault/AndroidKeyStore test fixtures; no hardware claim. */
 @RunWith(AndroidJUnit4.class)
 public final class DeviceAdmissionTest {
+    @Test public void sqliteAdmissionSnapshotsPreserveCorruptionAndDistinguishAbsentPending() throws Exception {
+        for(String damagedKey:new String[]{"credential","pending","realm"}) {
+            try(var records=new SqliteDeviceRecords()) {
+                Engine engine=new Engine(records);engine.initialize("Synthetic snapshot member");
+                var admission=engine.admission();assertNull(admission.pendingRequest());
+                admission.createAdmissionRealm(true);var first=admission.createAdmissionRequest();
+                var stale=admission.requestAuthorization();stale.run();
+                assertThrows(AdmissionException.class,()->admission.cancelPendingRequest("wrong-id"));
+                admission.cancelPendingRequest(first.requestId());assertNull(admission.pendingRequest());
+                assertThrows(AdmissionException.class,stale::run);
+                assertThrows(AdmissionException.class,admission::requestAuthorization);
+                assertThrows(AdmissionException.class,()->admission.cancelPendingRequest(first.requestId()));
+                var request=admission.createAdmissionRequest();
+                var credential=admission.approveAndInstallOwnAdmission(admission.reviewAdmissionRequest(request.wire()),true,3600);
+                var renewal=admission.createAdmissionRequest();var valid=admission.status();
+                assertEquals(AdmissionService.State.ADMITTED,valid.state());
+                assertEquals(Long.valueOf(credential.expiresAt()),valid.credentialExpiresAt());
+                assertEquals(Long.valueOf(renewal.expiresAt()),valid.requestExpiresAt());
+                byte[] corrupt=Bytes.utf8("synthetic corrupt admission record");
+                records.transaction(()->{records.put("admission",damagedKey,corrupt);return null;});
+                records.reopen();var reopened=new Engine(records).admission();var invalid=reopened.status();
+                assertEquals(AdmissionService.State.INVALID,invalid.state());
+                assertNull(invalid.requestExpiresAt());assertNull(invalid.credentialExpiresAt());
+                assertArrayEquals(corrupt,records.get("admission",damagedKey));
+                if(damagedKey.equals("pending"))assertThrows(AdmissionException.class,reopened::pendingRequest);
+                records.gate.lock();
+                assertThrows(SecurityException.class,reopened::status);assertThrows(SecurityException.class,reopened::pendingRequest);
+                records.gate.unlock();assertArrayEquals(corrupt,records.get("admission",damagedKey));
+                assertEquals(AdmissionService.State.INVALID,reopened.status().state());
+            }
+        }
+    }
     @Test public void encryptedAuthorityCannotApproveAfterVaultLock() throws Exception {
         DeviceVaultPasswordTest fixture=new DeviceVaultPasswordTest();
         try {

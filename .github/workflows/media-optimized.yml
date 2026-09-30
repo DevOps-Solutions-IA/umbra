@@ -29,7 +29,7 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2
         with:
-          gradle-version: '8.13'
+          gradle-version: '8.14.4'
           cache-disabled: true
       - run: sdkmanager "platforms;android-36" "build-tools;35.0.0" "emulator" "system-images;android-35;default;x86_64"
       - run: python -m pip install -r relay/requirements-test.lock

@@ -5,6 +5,28 @@ import java.util.Arrays;
 /** Synthetic source/PCM observations only in androidTest, never production or physical microphones. */
 public final class SyntheticRestrictedAudio {
     private SyntheticRestrictedAudio() {}
+    /** Four ADTS header prefixes, then a real native decode control; no microphone. */
+    public static void boundedMalformedCorpus()throws Exception {
+        short[] pcm=new short[RestrictedAudio.SAMPLE_RATE];byte[] encoded=null;
+        try {
+            encoded=RestrictedAudio.encodeBytes(pcm,()->{});
+            for(int length:new int[]{1,2,6,7}) {
+                byte[] prefix=Arrays.copyOf(encoded,length);
+                try {
+                    try(var unexpected=RestrictedAudio.prepare(prefix,()->{})) {
+                        org.junit.Assert.fail("ADTS header prefix accepted: "+length);
+                    }
+                } catch(java.io.IOException | ContentException expected) {
+                    // Only declared input rejection; other runtime/native failures fail the test.
+                } finally {Arrays.fill(prefix,(byte)0);}
+            }
+            try(var prepared=RestrictedAudio.prepare(encoded,()->{})){org.junit.Assert.assertNotNull(prepared);}
+            org.junit.Assert.assertThrows(ContentException.class,
+                    ()->RestrictedAudio.encodeBytes(new short[1023],()->{}));
+            org.junit.Assert.assertThrows(ContentException.class,
+                    ()->RestrictedAudio.encodeBytes(new short[RestrictedAudio.SAMPLE_RATE*9-3*1024+1],()->{}));
+        } finally {Arrays.fill(pcm,(short)0);if(encoded!=null)Arrays.fill(encoded,(byte)0);}
+    }
     public static RestrictedContentService.Prepared prepareRaw(byte[] bytes,Runnable authorization)throws Exception {
         return RestrictedAudio.prepare(bytes,authorization);
     }

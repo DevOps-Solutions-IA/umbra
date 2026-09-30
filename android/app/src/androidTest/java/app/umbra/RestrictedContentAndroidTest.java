@@ -247,7 +247,7 @@ public class RestrictedContentAndroidTest {
         }
     }
     @Test public void notePreparationRejectsMalformedAndExpiredAuthorizationWithoutRecording() throws Exception {
-        assertThrows(Exception.class,()->SyntheticRestrictedAudio.prepareRaw(new byte[]{1,2,3,4},()->{}));
+        SyntheticRestrictedAudio.boundedMalformedCorpus();
         var allowed=new java.util.concurrent.atomic.AtomicBoolean(false);
         assertThrows(SecurityException.class,()->SyntheticRestrictedAudio.tone(()->{if(!allowed.get())throw new SecurityException("Synthetic locked");}));
         allowed.set(true);

@@ -15,5 +15,10 @@ public interface Records {
     default void onInvalidation(Runnable callback) {}
     /** Only implementations backed by a process AccessGate provide coordinated closure. */
     default app.umbra.core.EmergencyLock emergency() { return null; }
+    /** Internal resource-accounting identity, not authorization. Wrappers/owners of
+     * the same live storage must share this token, including owner replacement. */
+    default Object restrictedResourceScope() {
+        var coordinator=emergency();return coordinator==null?this:coordinator;
+    }
     interface Work<T> { T run() throws Exception; }
 }

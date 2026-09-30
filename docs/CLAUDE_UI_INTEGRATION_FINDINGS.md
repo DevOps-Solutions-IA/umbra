@@ -14,6 +14,9 @@ comportamiento real y lo documenta aquí para coordinación con Codex.
 - Efecto en UI: ninguno. `AdmissionFlow.read` consulta `pendingRequest()` solo cuando
   `status().requestExpiresAt()` no es nulo; no usa la excepción como estado.
 - Acción sugerida: corregir el texto del contrato o la firma; no requiere cambio de UI.
+- **Resuelto en el núcleo** por Codex `4c92a1d` (integrado en la convergencia con `91d7aeb`): devuelve `null`
+  solo si no existe solicitud; corrupción y bloqueo siguen fallando cerrado. Los usos internos exigen la
+  solicitud con `requirePendingRequest()`. Sin cambio de UI.
 
 ## F-2 · Decodificadores sin dimensiones intrínsecas — CONTRACT_GAP
 
@@ -51,6 +54,9 @@ comportamiento real y lo documenta aquí para coordinación con Codex.
 - Propietario: Codex, PR #18. **Sin rodeo en UI:** la UI no captura la excepción para presentarla como
   `NOT_ADMITTED`, no borra ni repara la credencial y la prueba no se modifica ni se elimina. Queda en
   rojo hasta integrar un HEAD de #18 completamente verde.
+- **Resuelto en el núcleo** por Codex `4c92a1d` (integrado en la convergencia con `91d7aeb`): `status()`
+  informa `INVALID` ante registros corruptos, no publica fechas no confiables y no repara ni borra nada.
+  La UI y la prueba no cambiaron; la prueba debe pasar en la CI del SHA combinado.
 
 ## CI real de PR #19 (`dcc8152`) — fallos de la UI corregidos
 
