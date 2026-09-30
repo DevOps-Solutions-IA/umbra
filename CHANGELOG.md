@@ -1,3 +1,14 @@
+# Sin publicar — integración final UI (rama `claude/final-ui-integration`)
+
+- Presentación de Claude (`ca2a706`) integrada sobre la base técnica aceptada `e0024f0`
+  (`UI_SECURITY_CONTENT_API_V1`); dominio, criptografía, protocolo y almacenamiento sin cambios.
+- Admisión con las API reales (estado y expiraciones, autoridad, credenciales emitidas, cancelación,
+  evidencia de pares, aprobación propia y renovación atómicas). Errores tipados sin leer mensajes.
+- Bloqueo de emergencia real, adaptadores de privacidad y portapapeles privado.
+- Contenido protegido F01–F06 (foto, nota, video, PDF; Una vez / Solo en UMBRA; caducidad).
+- Pruebas: JVM de presentación, integración UI+dominio en instrumentación, flujo `ui-integration.yml`
+  (debug y R8, ambos sabores en AVD). Recibo: `docs/validation/2026-09-29-claude-final-ui-integration.md`.
+
 # Sin publicar — integración UI + seguridad (rama `claude/ui-security-integration`)
 
 - Merge de `claude/android-ui-foundation` (c394ea7) sobre `codex/private-startup-no-network` (52cd1e5).

@@ -81,14 +81,46 @@ la contraseña terminan con la bóveda bloqueada y vuelven a pedir ambos factore
 Admisión: pantalla propia con los ocho estados de `AdmissionService.State`. Configurar el entorno
 no admite. «Solicitud generada para compartir» no es «recibida». La credencial, el rechazo, la
 revocación y la renovación se importan como archivos y los valida el dominio. Otra autoridad se
-rechaza y se conserva la anterior. Las herramientas de administración viven en una pantalla aparte
-que no deduce autoridad (ver `docs/API_GAPS_UI_SECURITY.md`, G1).
+rechaza y se conserva la anterior. Las herramientas de administración viven en una pantalla aparte;
+desde la integración final usan `isAdmissionAuthority()` como instantánea de presentación (el dominio
+vuelve a comprobar en cada operación).
 
 Conexión: se eliminó el interruptor «Solo Bluetooth». «Conectar» es la única acción que solicita la
 sesión online (`AndroidConnectivity.connect`, `confirmed=true` desde el clic); «Desconectar» la
 revoca sin bloquear la bóveda. Nearby tiene su propio inicio/parada y ninguna acción de radio lo
 activa implícitamente. `CONNECTED` se muestra como «Red habilitada», nunca como servidor
 disponible; la respuesta del servidor se informa aparte y solo tras una sincronización real.
+
+## Integración final sobre la base técnica aceptada (rama `claude/final-ui-integration`, 2026-09-29)
+
+Base técnica exacta `e0024f091d29dc15c2d788b430c5ea11204e5060` (contrato `UI_SECURITY_CONTENT_API_V1`,
+PR16). La presentación de `ca2a706` se integró con un merge explícito; ningún archivo de dominio,
+criptografía, protocolo, almacenamiento o códec cambió respecto de `e0024f0`.
+
+- **Errores**: solo `OperationFailure.classify` → `FailurePresentation`. Se eliminó el análisis de
+  mensajes de excepción (`ErrorPresentation.classify`) y el paso de mensajes del motor a la pantalla.
+- **Admisión**: `status()` (estado y expiraciones), `isAdmissionAuthority()`, `issuedCredentials()`
+  (lista de la autoridad), `cancelPendingRequest(id)` («Cancelar solicitud», solo local),
+  `peerStatus()` (fila «Admisión» del contacto, evidencia local, nunca «Verificado»),
+  `approveAndInstallOwnAdmission()` e `installRenewal()`. Ya no hay transacciones orquestadas por la UI.
+- **Emergencia**: botón en Chats, Ajustes › Seguridad y visor protegido. Oculta el contenido, llama a
+  `engine.emergencyLock()` (sin contraseña ni servidor), cierra manejadores propios y observa
+  `emergency().status()`. Solo `CLOSED` ofrece «Desbloquear», que pide `prepareAuthentication()` antes
+  de la nueva autenticación Android y reconstruye la bóveda. `INCOMPLETE` mantiene el acceso denegado.
+- **Privacidad**: `PrivateAndroidSurface.protect` en la Activity, diálogos y `SurfaceView` de video
+  antes del primer contenido; `sensitiveInput` en todos los campos. «Copiar» texto ordinario usa
+  `PrivateClipboard` con consentimiento de un solo uso; el contenido protegido nunca se copia.
+- **Contenido protegido (F01–F06)**: adjuntar › «Contenido protegido» (Foto, Nota de voz, Video,
+  PDF; «Grabar nota» solo en connected). Modo «Una vez» / «Solo en UMBRA», caducidad del objeto
+  (10 min/1 h/24 h) y límite de sesión (10/30/60 s) separados. `reviewSend` → adaptador de formato →
+  `send` con la misma revisión; «Enviado» significa en cola cifrada. Recibidos: filas con estado del
+  dominio (Disponible / Ya abierto / Caducado). Abrir: salida de audio explícita para nota/video,
+  confirmación, `reviewOpen` → `open`, visor con marco protegido (zoom y páginas dentro de la misma
+  sesión), reproducción sin avance/repetición. Pausa, bloqueo, emergencia o caducidad cierran la
+  sesión, borran el último fotograma y no restauran nada.
+- **Límites conocidos** (ver `docs/CLAUDE_UI_INTEGRATION_FINDINGS.md`): los decodificadores no exponen
+  dimensiones intrínsecas (el marco usa el área del visor); `Status` no expone la duración de sesión
+  («Sesión limitada»); el remitente no tiene lista de objetos enviados.
 
 ---
 
