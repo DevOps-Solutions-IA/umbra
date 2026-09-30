@@ -12,8 +12,8 @@ import time
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def valid_report(text, code):
-    return (code == 0 and re.search(r'^OK \(4 tests\)$', text, re.M)
+def valid_report(text, code, expected=4):
+    return (code == 0 and re.search(r'^OK \(' + str(expected) + r' tests\)$', text, re.M)
             and 'INSTRUMENTATION_CODE: -1' in text
             and not re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)
             and not any(x in text for x in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'Process crashed')))
@@ -56,7 +56,7 @@ def main():
             'app.umbra.DeviceAdmissionTest', package + '.test/androidx.test.runner.AndroidJUnitRunner'],
             stdout=stream, stderr=subprocess.STDOUT, timeout=180)
     if not valid_report(log.read_text(), result.returncode):
-        raise RuntimeError(f'Admission instrumentation did not pass all three cases: {log}')
+        raise RuntimeError(f'Admission instrumentation did not pass all four cases: {log}')
     # Keep prepare instrumentation alive, prove its PID, kill it, then verify in a new process.
     command=[*adb,'shell','am','instrument','-w','-r','-e','class','app.umbra.DeviceSignalTest',
              '-e','listener','app.umbra.AdmissionRestartFixtureListener','-e','admissionPhase']
@@ -83,7 +83,7 @@ def main():
     after=args.reports/'admission-after-kill.log'
     with after.open('w') as stream:
         result=subprocess.run([*command,'verify',runner],stdout=stream,stderr=subprocess.STDOUT,timeout=90)
-    if not valid_report(after.read_text(),result.returncode) or 'admissionRestart=PASS' not in after.read_text():
+    if not valid_report(after.read_text(),result.returncode,expected=3) or 'admissionRestart=PASS' not in after.read_text():
         raise RuntimeError('Admission force-stop restart not verified')
     evidence['forceStopAfterCommittedRevocation']='PASS; synthetic SQLite, not death during commit or hardware Vault'
     evidence['result'] = 'PASS'

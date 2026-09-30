@@ -111,3 +111,23 @@ Android counts and artifact hashes are bound in the subsequent PR #18 receipt
 and exported evidence. This pre-publication report does not reuse89bc6c9 CI as
 acceptance. Old failures remain historical. No ADB or physical tests were run;
 phone/manual/second-peer/observability/Claude integration limits remain.
+
+## First follow-up CI failures retained
+
+Candidate `4c92a1d42b51d40d1fb7637cb60915530f853f15`, admission run36657123180:
+both variants passed the four admission cases and emitted `admissionRestart=PASS`.
+The runner incorrectly reused that four-case count for the separate three-case
+`DeviceSignalTest` restart suite. Artifact11072679247 proves all three Signal
+methods executed successfully. The correction passes an explicit expected3 only
+for that suite; a regression rejects swapped inventories. All four admission
+cases remain required. This was a runner regression, not a failed SQLite restart.
+
+Modulation run36657123109, debug job109703751448, artifact11072884232:
+video progressed through active/stopped/resumed with remote audio and frames.
+During processing step4, peer B reported ERROR_MUTED, one fault and maximum
+block11749851ns exceeding the unchanged10000000ns deadline. Peer A consequently
+observed no natural/modified/loud blocks. This is a fail-closed DSP deadline
+failure; underlying scheduling/CPU cause is not established. It is retained as
+an intermittent failure, not attributed to admission or claimed fixed. No media
+code, thresholds or security policy changed. The next candidate needs its own
+complete matrix; a later pass alone cannot establish the root cause.
