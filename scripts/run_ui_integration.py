@@ -22,7 +22,12 @@ ACTIVITY_CLASS = 'app.umbra.LockedActivityTest'
 # 24 render + 3 security flow + 5 content integration; LockedActivityTest (3) needs a debuggable target.
 EXPECTED = {False: 35, True: 32}
 UI_ENTRY_POINTS = ('app.umbra.ui.flow.RestrictedFlow$Viewer', 'app.umbra.ui.design.ProtectedFrameView',
-                   'app.umbra.ui.screens.ContentScreens', 'app.umbra.ui.model.EmergencyPresentation')
+                   'app.umbra.ui.screens.ContentScreens', 'app.umbra.ui.model.EmergencyPresentation',
+                   'app.umbra.ui.design.QrCodes')
+# Library classes the production QR path needs; they must survive shrinking (renaming is allowed).
+REQUIRED_LIBRARY = ('com.google.zxing.MultiFormatWriter', 'com.google.zxing.qrcode.QRCodeWriter')
+# Exact resource roots (res/raw/umbra_resource_keep.xml) that must remain in the optimized APK.
+REQUIRED_RESOURCES = ('drawable/ic_notification_umbra',)
 MIN_EVIDENCE = 30
 
 
@@ -43,7 +48,20 @@ def optimized_ui(mapping: str, configuration: str) -> dict:
         if not match or match[1] == name:
             raise RuntimeError('Optimized UI entry point missing or not obfuscated: ' + name)
         result[name] = match[1]
+    for name in REQUIRED_LIBRARY:
+        match = re.search(r'^' + re.escape(name) + r' -> ([^:]+):$', mapping, re.M)
+        if not match:
+            raise RuntimeError('Required library class removed by R8: ' + name)
+        result[name] = match[1]
     return result
+
+
+def resources_present(dump: str) -> list:
+    """Resource names from `aapt2 dump resources`; every exact keep root must be packaged."""
+    missing = [r for r in REQUIRED_RESOURCES if not re.search(r'\b' + re.escape(r) + r'\b', dump)]
+    if missing:
+        raise RuntimeError('Optimized APK lost required resources: ' + ', '.join(missing))
+    return list(REQUIRED_RESOURCES)
 
 
 def main() -> None:
@@ -72,6 +90,9 @@ def main() -> None:
         mapping = output / f'mapping/{args.flavor}VaultLab/mapping.txt'
         receipt['optimizedUi'] = optimized_ui(mapping.read_text(), mapping.with_name('configuration.txt').read_text())
         receipt['mappingSha256'] = hashlib.sha256(mapping.read_bytes()).hexdigest()
+        aapt = Path(os.environ['ANDROID_HOME']) / 'build-tools/35.0.0/aapt2'
+        dump = subprocess.check_output([str(aapt), 'dump', 'resources', str(apks[0])], text=True, timeout=120)
+        receipt['keptResources'] = resources_present(dump)
     classes = list(UI_CLASSES) + ([] if args.optimized else [ACTIVITY_CLASS])
     expected = EXPECTED[args.optimized]
     log = args.reports / 'ui-integration.log'

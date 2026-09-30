@@ -51,7 +51,7 @@ errores tipados sin leer mensajes.
 | F. Accesibilidad | `assertAccessible` + `assertConcise` (etiquetas, 48 dp, español) en todas las pantallas nuevas | CI pendiente |
 | G/H. Debug/R8 | `ui-integration.yml` matriz `optimized: [false, true]` (vaultLab no depurable, mapeo exigido) | CI pendiente |
 | I/J. Connected/Offline | Ambos sabores en cada job; offline sin INTERNET/ACCESS_NETWORK_STATE/RECORD_AUDIO/CAMERA | CI pendiente |
-| Scripts | `python -m unittest discover -s scripts/tests` 232 casos; `repository_guard`; `check_source_policy` 13 | **PASS local** |
+| Scripts | `python -m unittest discover -s scripts/tests` 238 casos; `repository_guard`; `check_source_policy` 13 | **PASS local** |
 | Tipos | android-36 + stubs: 0 errores en `ui/`; completo vs base: **sin errores nuevos** (34 de deriva, idénticos en `e0024f0`) | **PASS local** |
 
 Conteos de instrumentación completos (`verify.yml`): offline 98, connected 101 (66/69 técnicos + 32 UI).
@@ -77,6 +77,22 @@ reconstrucción de bóveda, callbacks obsoletos, hilos, borrado de entradas y er
 `docs/CLAUDE_UI_INTEGRATION_FINDINGS.md`: F-1 CORE_BUG_CANDIDATE (documentación de `pendingRequest()`),
 F-2…F-5 CONTRACT_GAP (dimensiones intrínsecas, duración de sesión en `Status`, portapapeles en hilo
 principal, estado de enviados). Ninguno se resolvió con rodeos inseguros.
+
+## CI real de `dcc8152` y correcciones
+
+Runs `36653888664` (Verify UMBRA) y `36653888747` (Claude UI integration). Detalle en F-6 y la sección
+«CI real» de los hallazgos.
+
+| Fallo | Clasificación | Acción |
+|---|---|---|
+| `UiAdmissionFlowTest.invalidStoredAdmissionIsReportedNotRepaired` | CORE_BUG_CONFIRMED (`status()` lanza) | Codex PR #18; sin rodeo en UI, prueba intacta |
+| `assertConcise` en huellas/códigos (debug) | Fallo de política de prueba | Datos técnicos marcados y validados aparte; límites humanos iguales |
+| `ic_notification_umbra` eliminado (R8) | Raíz de recurso ausente | `tools:keep` exacto + comprobación `aapt2` en el runner |
+| `NoClassDefFoundError MultiFormatWriter` (R8) | Prueba dependía de librería no trazada | Ruta de producción `QrCodes`; QR y pantalla verificados en R8; mapeo exigido |
+
+Verificación local del arreglo: tipos UI y androidTest 0 errores (ambos sabores); JVM 95/95; completo
+vs base sin errores nuevos; scripts 238 casos; `repository_guard`, `check_source_policy` 13; `git diff --check`.
+Conteos 35/32 sin cambios. CI del nuevo HEAD pendiente de publicación. PR #18 (`89bc6c9`) **no integrado**.
 
 ## Pendiente
 

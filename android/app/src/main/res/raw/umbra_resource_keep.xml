@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Exact resource-shrinker root, nothing broader. ic_notification_umbra is the monochrome small icon reserved
+  for the domain's generic private notification (PrivateAndroidSurface.notification(context, channel, icon)).
+  No production code posts a notification today, so shrinkResources would otherwise drop it from optimized
+  builds while the branding set and its on-device test still require it. Keeps only this one drawable.
+  AGP reads this file for the shrinker and does not package it.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_notification_umbra" />

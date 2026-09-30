@@ -115,7 +115,7 @@ public class UiContentIntegrationTest {
             for (String forbidden : new String[]{"compartir", "guardar", "exportar", "imprimir", "reenviar", "copiar", "abrir con"})
                 assertFalse("no " + forbidden + " control on a protected viewer", t.contains(forbidden));
         }
-        for (View v : all(root)) if (v instanceof TextView t && !(v instanceof Button)) assertNull(SpanishText.englishWord(t.getText().toString()));
+        for (View v : all(root)) if (v instanceof TextView t && !(v instanceof Button) && !Ui.technical(v)) assertNull(SpanishText.englishWord(t.getText().toString()));
     }
 
     @Test public void photoOnceOpensThroughTheUiFlowIntoAProtectedFrameAndIsConsumed() throws Exception {

@@ -18,9 +18,6 @@ import app.umbra.core.Bytes;
 import app.umbra.ui.design.Ui;
 import app.umbra.ui.model.*;
 import app.umbra.ui.screens.*;
-import com.google.zxing.BarcodeFormat;
-import com.google.zxing.MultiFormatWriter;
-import com.google.zxing.common.BitMatrix;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.util.*;
@@ -126,11 +123,27 @@ public class UiScreensRenderTest {
         for (View v : all(root)) if (v instanceof ImageButton && ("Ayuda: " + topic.title).contentEquals(String.valueOf(v.getContentDescription()))) return v;
         return null;
     }
-    /** Clean style: Spanish only on screen, short buttons and short visible lines (explanations live in help sheets). */
+    /**
+     * Clean style: Spanish only on screen, short buttons and short visible lines (explanations live in help sheets).
+     * It measures human copy. Technical data (Ui.TECHNICAL: fingerprints, safety codes, identifiers, diagnostics)
+     * is a value to compare, never shortened: it is checked instead for a technical-only alphabet, a spoken
+     * accessibility label and wrapping (no ellipsis), so prose can never hide inside a "technical" view.
+     */
+    private static final java.util.regex.Pattern TECHNICAL_TEXT = java.util.regex.Pattern.compile("[0-9A-Za-z_\\-·.:/ \\n]+");
     private static void assertConcise(View root) {
         for (View v : all(root)) {
             if (!shown(v) || !(v instanceof TextView t) || v instanceof EditText) continue;
             String text = t.getText().toString();
+            if (Ui.technical(v)) {
+                assertTrue("Technical view carries prose: " + text, TECHNICAL_TEXT.matcher(text).matches());
+                // Every token is a hex block or an identifier (digit, '_' or '-'): a prose word fails here.
+                for (String token : text.trim().split("\\s+"))
+                    assertTrue("Prose word inside technical data: " + token, token.matches("[0-9a-fA-F]{1,8}") || token.matches(".*[0-9_\\-].*"));
+                assertNull("Technical data must wrap, never be truncated: " + text, t.getEllipsize());
+                assertTrue("Technical data needs a spoken label", t.getContentDescription() != null && t.getContentDescription().length() > 0);
+                for (String line : text.split("\n")) assertTrue("Technical line too long to wrap by blocks: " + line, line.length() <= MAX_LINE);
+                continue;
+            }
             assertNull("English on screen: " + text, SpanishText.englishWord(text));
             CharSequence d = v.getContentDescription();
             if (d != null) assertNull("English in accessibility label: " + d, SpanishText.englishWord(d.toString()));
@@ -139,6 +152,26 @@ public class UiScreensRenderTest {
         }
     }
     private static final int MAX_BUTTON = 24, MAX_LINE = 64;
+    /** A real QR has three dark finder squares (top-left, top-right, bottom-left) and a light quiet zone around them. */
+    private static void assertQrFinderPatterns(Bitmap qr) {
+        int n = qr.getWidth(), dark = 0, light = 0;
+        for (int y = 0; y < n; y++) for (int x = 0; x < n; x++) if (qr.getPixel(x, y) == Color.BLACK) dark++; else if (qr.getPixel(x, y) == Color.WHITE) light++;
+        assertEquals("only black and white modules", n * n, dark + light);
+        assertTrue("QR contains modules", dark > n * n / 5 && light > n * n / 5);
+        assertEquals("quiet zone is light", Color.WHITE, qr.getPixel(1, 1));
+        int[][] corners = {{0, 0}, {n - 1, 0}, {0, n - 1}};
+        for (int[] c : corners) {
+            int darkNear = 0;
+            for (int dy = 0; dy < n / 8; dy++) for (int dx = 0; dx < n / 8; dx++) {
+                int x = c[0] == 0 ? n / 16 + dx : n - 1 - n / 16 - dx, y = c[1] == 0 ? n / 16 + dy : n - 1 - n / 16 - dy;
+                if (qr.getPixel(x, y) == Color.BLACK) darkNear++;
+            }
+            assertTrue("finder pattern near corner " + c[0] + "," + c[1], darkNear > (n / 8) * (n / 8) / 4);
+        }
+        int darkBottomRight = 0;
+        for (int dy = 0; dy < n / 16; dy++) for (int dx = 0; dx < n / 16; dx++) if (qr.getPixel(n - 1 - n / 12 - dx, n - 1 - n / 12 - dy) == Color.BLACK) darkBottomRight++;
+        assertTrue("no finder pattern in the bottom-right corner", darkBottomRight < (n / 16) * (n / 16));
+    }
     private static Button button(View root, String text) {
         for (View v : all(root)) if (v instanceof Button b && text.contentEquals(b.getText())) return b;
         return null;
@@ -287,12 +320,13 @@ public class UiScreensRenderTest {
         assertAccessible(contact);
         assertConcise(contact);
         String code = Bytes.safetyCode(ME, BRUNO);
+        // The production QR path (the same method the verification screen uses), never ZXing called from the test APK:
+        // under R8 the app keeps only what its own code reaches, so this also proves the encoder survived shrinking.
         Bitmap qr;
-        try {
-            BitMatrix m = new MultiFormatWriter().encode(app.umbra.verification.Verification.qr(ME, BRUNO), BarcodeFormat.QR_CODE, 320, 320);
-            qr = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888);
-            for (int y = 0; y < 320; y++) for (int x = 0; x < 320; x++) qr.setPixel(x, y, m.get(x, y) ? Color.BLACK : Color.WHITE);
-        } catch (Exception e) { throw new AssertionError(e); }
+        try { qr = app.umbra.ui.design.QrCodes.render(app.umbra.verification.Verification.qr(ME, BRUNO), app.umbra.ui.design.QrCodes.SIZE); }
+        catch (Exception e) { throw new AssertionError("production QR path failed", e); }
+        assertEquals(app.umbra.ui.design.QrCodes.SIZE, qr.getWidth());
+        assertQrFinderPatterns(qr);
         SecurityScreens.VerifyActions va = new SecurityScreens.VerifyActions() { public void back() {} public void method(SecurityScreens.Method m) {} public void compare(String c) {} public void technical(boolean s) {} };
         View verify = render("07-verify-code", ui -> SecurityScreens.verify(ui, new SecurityScreens.VerifyState("Bruno", TrustPresentation.of(TrustLevel.UNVERIFIED), code, null, SecurityScreens.Method.CODE, false, "D4D4D4D4", "B2B2B2B2", FEATURES), va));
         assertTrue(hasText(verify, "Sin verificar"));
@@ -302,7 +336,12 @@ public class UiScreensRenderTest {
         assertTrue(visibleText(verify).contains(Fingerprints.group(code).substring(0, 9)));
         assertAccessible(verify);
         Bitmap finalQr = qr;
-        render("07b-verify-qr", ui -> SecurityScreens.verify(ui, new SecurityScreens.VerifyState("Bruno", TrustPresentation.of(TrustLevel.UNVERIFIED), code, finalQr, SecurityScreens.Method.QR, false, "D4D4D4D4", "B2B2B2B2", FEATURES), va));
+        View qrScreen = render("07b-verify-qr", ui -> SecurityScreens.verify(ui, new SecurityScreens.VerifyState("Bruno", TrustPresentation.of(TrustLevel.UNVERIFIED), code, finalQr, SecurityScreens.Method.QR, false, "D4D4D4D4", "B2B2B2B2", FEATURES), va));
+        boolean qrShown = false;
+        for (View x : all(qrScreen)) if (x instanceof android.widget.ImageView iv && "QR del código de seguridad con Bruno".contentEquals(String.valueOf(iv.getContentDescription()))
+                && iv.getDrawable() instanceof android.graphics.drawable.BitmapDrawable bd && bd.getBitmap() == finalQr && iv.getWidth() > 0) qrShown = true;
+        assertTrue("the verification screen renders the production QR", qrShown);
+        assertConcise(qrScreen);
         render("07c-verify-manual-identity-changed", ui -> SecurityScreens.verify(ui, new SecurityScreens.VerifyState("Bruno", TrustPresentation.of(TrustLevel.IDENTITY_CHANGED), code, null, SecurityScreens.Method.MANUAL, true, "D4D4D4D4", "B2B2B2B2", FEATURES), va));
     }
 

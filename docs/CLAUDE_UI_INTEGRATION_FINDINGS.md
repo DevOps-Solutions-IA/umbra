@@ -42,6 +42,39 @@ comportamiento real y lo documenta aquí para coordinación con Codex.
 - No hay API para listar u observar objetos restringidos salientes; `send` devuelve el id y significa
   «en cola cifrada». La UI muestra solo ese hecho y no inventa entregado/abierto.
 
+## F-6 · `AdmissionService.status()` lanza con credencial almacenada corrupta — CORE_BUG_CONFIRMED
+
+- Evidencia real: CI de PR #19 (HEAD `dcc8152`), Verify UMBRA run `36653888664`, prueba JVM
+  `UiAdmissionFlowTest.invalidStoredAdmissionIsReportedNotRepaired`.
+- Entrada: credencial de admisión almacenada inválida/corrupta. Esperado: `status()` informa un estado
+  tipado (credencial inválida) sin reparar ni borrar nada. Real: `status()` lanza.
+- Propietario: Codex, PR #18. **Sin rodeo en UI:** la UI no captura la excepción para presentarla como
+  `NOT_ADMITTED`, no borra ni repara la credencial y la prueba no se modifica ni se elimina. Queda en
+  rojo hasta integrar un HEAD de #18 completamente verde.
+
+## CI real de PR #19 (`dcc8152`) — fallos de la UI corregidos
+
+Runs: Verify UMBRA `36653888664`, Claude UI integration `36653888747`.
+
+- **Concisión frente a datos técnicos (debug).** `assertConcise` medía huellas y códigos de seguridad como
+  texto humano. Corrección: `Ui.code()` y el detalle técnico de `errorState` se marcan `Ui.TECHNICAL`; la
+  política los valida aparte (solo grupos hex/identificadores, sin elipsis, con `contentDescription`,
+  cada línea ≤ 64 caracteres con salto de línea). El texto humano mantiene los mismos límites (botón 24,
+  línea 64, español). No se subió ningún límite global ni se trunca ningún código.
+- **Icono de notificación en R8.** `ic_notification_umbra` no tiene referencia de producción (reservado para
+  `PrivateAndroidSurface.notification`), así que `shrinkResources` lo quitaba. Corrección: raíz exacta
+  `res/raw/umbra_resource_keep.xml` (`tools:keep` solo de ese drawable). R8 y `shrinkResources` siguen
+  activos; `run_ui_integration.py` exige el recurso en el APK optimizado (`aapt2 dump resources`).
+- **ZXing en R8 (`NoClassDefFoundError MultiFormatWriter`).** Causa: la prueba llamaba a ZXing directamente
+  y el trazado del fixture solo conserva clases de la app; R8 renombraba/eliminaba la librería. Corrección:
+  ruta de producción única `ui.design.QrCodes.render` (la usan `MainActivity` y la prueba); sin keep de
+  ZXing. La prueba R8 verifica el QR real (patrones de localización en tres esquinas, zona silenciosa,
+  solo blanco/negro) y la pantalla con el `ImageView` accesible; el runner exige `QrCodes`,
+  `MultiFormatWriter` y `QRCodeWriter` en el mapeo, y falla con `-dontoptimize/-dontobfuscate`.
+- Conteos sin cambios: 35 debug / 32 R8 por sabor.
+- El registro de CI no es legible desde el entorno de Claude (API de GitHub no habilitada): el cuarto
+  fallo de debug se confirmará en la siguiente ejecución.
+
 ## Límites del entorno de esta integración
 
 - Sin KVM ni acceso a Maven/Google en el entorno de Claude: no se ejecutó Gradle, lint, R8, APK ni AVD

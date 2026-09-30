@@ -38,9 +38,6 @@ import app.umbra.ui.flow.AdmissionFlow;
 import app.umbra.ui.flow.VaultFlow;
 import app.umbra.ui.model.*;
 import app.umbra.ui.screens.*;
-import com.google.zxing.BarcodeFormat;
-import com.google.zxing.MultiFormatWriter;
-import com.google.zxing.common.BitMatrix;
 import org.json.*;
 import java.io.*;
 import java.util.*;
@@ -1088,14 +1085,8 @@ public final class MainActivity extends Activity {
     }
     private Bitmap qr(String peer) {
         return qrCache.computeIfAbsent(peer, p -> {
-            try {
-                BitMatrix matrix = new MultiFormatWriter().encode(app.umbra.verification.Verification.qr(profile.optString("id"), p), BarcodeFormat.QR_CODE, 320, 320);
-                Bitmap bitmap = Bitmap.createBitmap(320, 320, Bitmap.Config.ARGB_8888);
-                int[] pixels = new int[320 * 320];
-                for (int y = 0; y < 320; y++) for (int x = 0; x < 320; x++) pixels[y * 320 + x] = matrix.get(x, y) ? Color.BLACK : Color.WHITE;
-                bitmap.setPixels(pixels, 0, 320, 0, 0, 320, 320);
-                return bitmap;
-            } catch (Exception unavailable) { return null; } // The complete textual code is the primary path.
+            try { return QrCodes.render(app.umbra.verification.Verification.qr(profile.optString("id"), p), QrCodes.SIZE); }
+            catch (Exception unavailable) { return null; } // The complete textual code is the primary path.
         });
     }
     private void renderVerify(String peer) {

@@ -144,10 +144,16 @@ public final class Ui {
     }
     public TextView text(UmbraType type, CharSequence value, int color) { TextView t = text(type, value); t.setTextColor(color); return t; }
     public TextView heading(UmbraType type, CharSequence value) { TextView t = text(type, value); t.setAccessibilityHeading(true); return t; }
+    /**
+     * View tag for technical data (fingerprints, safety codes, identifiers, diagnostics). These are values to
+     * compare, not human copy: they are never shortened, translated or truncated, and copy rules do not apply.
+     */
+    public static final Object TECHNICAL = new Object() { @Override public String toString() { return "umbra:technical"; } };
+    public static boolean technical(View v) { return v.getTag() == TECHNICAL; }
     /** Monospace block for safety codes; long codes wrap by blocks, never scroll horizontally. */
     public TextView code(String grouped) {
         TextView t = text(UmbraType.MONOSPACE, grouped); t.setTextIsSelectable(false); t.setLongClickable(false);
-        t.setContentDescription(Fingerprints.spoken(grouped)); return t;
+        t.setContentDescription(Fingerprints.spoken(grouped)); t.setTag(TECHNICAL); return t;
     }
 
     // ---------------------------------------------------------------- buttons
@@ -372,7 +378,7 @@ public final class Ui {
         box.addView(banner(error.tone(), error.glyph(), error.title(), error.body(), null, null));
         if (retry != null && error.retryable()) box.addView(button(ButtonKind.SECONDARY, "Reintentar", Glyph.RETRY, retry));
         if (allowTechnical && error.technical() != null) {
-            TextView details = text(UmbraType.MONOSPACE, error.technical(), UmbraColors.TEXT_SECONDARY);
+            TextView details = text(UmbraType.MONOSPACE, error.technical(), UmbraColors.TEXT_SECONDARY); details.setTag(TECHNICAL);
             details.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 13); details.setVisibility(View.GONE);
             details.setBackground(shape(UmbraColors.BACKGROUND_SECONDARY, 12)); details.setPadding(dp(12), dp(10), dp(12), dp(10));
             Button toggle = button(ButtonKind.GHOST, "Detalles técnicos", Glyph.INFO, null);
