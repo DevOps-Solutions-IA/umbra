@@ -1,148 +1,322 @@
-# UMBRA — código fuente de mensajería privada
+<div align="center">
 
-## Preparación para GitHub y Codex
+# UMBRA
 
-**Publicación remota pendiente.** Objetivo: `devopssolutionsia/umbra`, privado. Esta carpeta
-incluye el código 0.2.0-dev más herramientas e instrucciones de continuidad; no incorpora
-funciones nuevas de aplicación ni convierte esta entrega en una release.
+### PRIVATE ANDROID COMMUNICATIONS
 
-Desde esta carpeta, con Python 3, Git y GitHub CLI instalados:
-```bash
-python scripts/publish_github.py --check-only
-python scripts/publish_github.py
-```
-El segundo comando se ejecuta en el equipo autenticado del propietario. Abre el inicio de
-sesión de GitHub CLI cuando hace falta; no solicita pegar tokens en un chat. No reemplaza
-repositorios existentes, no hace force-push y comprueba privacidad/SHA remoto. Ante una
-interrupción después de crear el repositorio, `--resume` exige un remoto privado vacío o
-que `main` ya corresponda exactamente al commit local. Ver `docs/GITHUB_SETUP.md`.
+**Local identity · explicit trust · fail-closed access · controlled connectivity**
 
-Para continuar en Codex: `AGENTS.md`, `PROMPT_CODEX.md`, `docs/CODEX_HANDOFF.md`,
-`docs/ROADMAP_CODEX.md` y `docs/TESTING_WITHOUT_PHONES.md`. La CI está configurada,
-no ejecutada en GitHub en esta entrega. Los resultados locales nuevos están en
-`docs/validation/handoff-summary.md`.
+Android-native secure communications project for closed, explicitly admitted environments.
+
+</div>
 
 ---
 
-**0.2.0-dev · continuación de 0.1.0-dev · 18 de septiembre de 2026**
+## Operational status
 
-Cliente Android nativo con interfaz propia, chats individuales, adjuntos pequeños, identidad local sin teléfono, transporte Bluetooth directo y relay HTTPS. Esta revisión modifica el código anterior: no es una maqueta de pantallas ni un documento de propuesta.
-
-**Entrega de código, no de una aplicación certificada para secretos reales. No incluye APK.** Se ejecutaron las pruebas del servidor y del núcleo Java; faltan la compilación Android, la ejecución de libsignal/JNI, las pruebas entre teléfonos y una auditoría independiente. No se afirma que sea más segura que WhatsApp, Signal u otra aplicación auditada.
-
-## Qué cambia en esta revisión
-
-| Área | Código incorporado |
+| Control | Current reference |
 |---|---|
-| Bóveda | Índices HMAC-SHA-256, valores AES-256-GCM, contexto autenticado por registro, migración 1→2 transaccional y rechazo de sustitución silenciosa de claves perdidas. |
-| Autorización local | Permisos de acceso de duración limitada y por generación; un bloqueo invalida operaciones anteriores. Las escrituras deben formar una transacción y se comprueba la autorización al confirmar. |
-| Android | Preparación de Keystore fuera del hilo visual, requisito de claves respaldadas por hardware compatible, bloqueo al abandonar la app, autenticación antes de continuar tras el selector de archivos y protección adicional de diálogos. |
-| Bluetooth | Vinculación explícita separada de reconexión, desafío firmado de posesión de identidad, nonces, roles y límites de tamaño, tiempo y colas. No se envía automáticamente una tarjeta de contacto al reconectar. |
-| Mensajería | Validación estricta de tipos/campos/UTF-8/Base64, rechazo de claves JSON duplicadas, cuotas locales, orden persistente de salida y reintentos con el mismo ciphertext. |
-| Relay | Límites de solicitudes y cuerpos, rechazo de JSON ambiguo, plazos de recepción, límites de concurrencia, cursores SQLite monotónicos, cuotas de buzones y registros de deduplicación. |
-| Distribución | Variantes `connected` y `offline`, comprobaciones de política del código y verificación posterior de manifiestos combinados. |
+| Technical baseline | `e0024f091d29dc15c2d788b430c5ea11204e5060` |
+| Technical line | `codex/security-content-completion` |
+| Acceptance receipt | [PR #16](https://github.com/DevOps-Solutions-IA/umbra/pull/16) |
+| UI contract | `UI_SECURITY_CONTENT_API_V1` |
+| CI on accepted baseline | 10 workflows · 27 jobs · SUCCESS |
+| Final graphical integration | In progress on a separate presentation line |
+| Production release | Not published |
 
-El cifrado de mensajes mantiene la integración con **libsignal 0.102.3**; no se sustituyó por un cifrado casero. El desafío adicional de Bluetooth es protocolo propio de aplicación y **requiere revisión independiente**. La clave que protege los registros se gestiona en Keystore; las claves del protocolo se descifran en memoria cuando se necesitan. No se afirma que todas las claves de mensajería residan siempre dentro del hardware.
+> **Repository note:** `main` remains a conservative historical baseline while the accepted technical line and final UI integration are reviewed separately. Do not infer current product capability from an older commit on `main`.
 
-## Evidencia de esta entrega
+UMBRA is under active development. The accepted technical baseline has passed the executed software, Android, R8 and laboratory layers recorded in PR #16; this is **not** a security certification or a claim of production readiness.
 
-| Validación | Resultado observado |
-|---|---|
-| Relay, pytest | **80 pruebas aprobadas**: 33 anteriores y 47 incorporadas. |
-| Núcleo Java, JDK 21 real | **105 escenarios aprobados**: 20 anteriores y 85 nuevos. Incluyen JCA AES-GCM/HMAC con claves de prueba de software, no Android Keystore. |
-| Configuración fuente | **12 comprobaciones aprobadas** sobre permisos declarados, backups, confianza TLS y variante offline. No inspeccionan un APK. |
-| Sintaxis Java | 20 archivos analizados; no verifica resolución de tipos/dependencias Android. |
-| Integración real libsignal | **30 métodos JUnit escritos, no ejecutados**: 18 anteriores y 12 nuevos. Sin reemplazar la biblioteca por un simulador. |
-| Preflight Android | Bloqueado: falta Android SDK, plataforma 36. |
-| Manifiestos combinados / APK | Bloqueado: no existen salidas de una compilación Android. |
+---
 
-Los comandos, límites y salidas completas están en [docs/TEST_STATUS.md](docs/TEST_STATUS.md) y `docs/validation/`. Los informes anteriores se conservan, identificados como históricos, en `docs/legacy/0.1/`.
+## Mission profile
 
-## Dos variantes
+UMBRA is designed around a narrow operating doctrine:
 
-**Connected** conserva mensajería por relay HTTPS y Bluetooth. Su interruptor «solo Bluetooth» cancela conexiones propias en curso y pausa nuevos intentos de red; no puede retirar bytes que ya se hayan enviado.
+- local cryptographic identity; no phone number or email as identity;
+- explicit device admission into a private realm;
+- human verification kept separate from admission and device linking;
+- end-to-end encrypted 1:1 messaging using libsignal;
+- explicit network activation — unlocking does not silently connect;
+- HTTPS relay and Bluetooth RFCOMM as distinct transport paths;
+- TURN-only policy for internet voice/video media;
+- restricted-content modes for one-time and UMBRA-only access;
+- local encrypted vault protected by Android Keystore and a personal password;
+- emergency invalidation that denies new access before coordinated resource shutdown;
+- separate connected and offline Android variants.
 
-**Offline** tiene un identificador de aplicación distinto, `BuildConfig.ALLOW_RELAY=false` y un manifiesto de variante que elimina `INTERNET` y `ACCESS_NETWORK_STATE`. Es una restricción escrita en el proyecto, pendiente de comprobar en la compilación. El script posterior a la compilación falla si falta un manifiesto o si conserva los permisos prohibidos. Esta variante no comparte automáticamente identidad ni historial con Connected.
+The system is intentionally fail-closed: an unknown state, invalid credential, altered policy, unsupported format or stale authorization is rejected rather than downgraded.
 
-La restricción se refiere al proceso de UMBRA: un selector de documentos o aplicación externa puede usar su propia conexión a internet. No convierte el teléfono completo en un dispositivo sin red ni oculta la actividad de radio Bluetooth.
+---
 
-## Estructura
+## Operating doctrine
+
+### 01 — Identity is local
+
+UMBRA creates identity material on the device. User-facing aliases are presentation data, not identity anchors.
+
+### 02 — Admission is not trust
+
+A valid realm credential authorizes participation in the private environment. It does **not** automatically mark another person as verified.
+
+### 03 — Trust requires explicit verification
+
+Contact trust states are independent from admission, linking and group membership. Identity changes suspend prior trust until explicitly resolved.
+
+### 04 — Connectivity is deliberate
+
+Opening or unlocking UMBRA does not automatically create network sessions. Online and Nearby authorization are independent user decisions.
+
+### 05 — Restricted content is enforced in the domain
+
+A hidden button is not a security control. One-time access, expiry, export denial and recipient binding are enforced below the presentation layer.
+
+### 06 — Failure does not widen access
+
+Storage, cryptographic, authorization, media or cleanup failures do not create fallback access paths.
+
+---
+
+## System architecture
 
 ```text
-android/app/src/main/      Cliente nativo, protocolo, bóveda e interfaz
-android/app/src/offline/   Eliminación de permisos de red para la variante offline
-android/app/src/test/      Pruebas de integración real con libsignal, pendientes
-relay/                    FastAPI/SQLite, administrador de invitaciones y pruebas
-scripts/                  Pruebas locales, políticas de fuente y compilación Android
-.github/workflows/        Flujo CI escrito para ambas variantes; no ejecutado aquí
-docs/validation/          Salidas reales de esta sesión
-docs/HARDENING_0_2.md      Cambios, amenazas cubiertas y limitaciones
+┌─────────────────────────────────────────────────────────────┐
+│                        ANDROID CLIENT                       │
+│                                                             │
+│  Identity / Trust     Vault / Password     Admission        │
+│  Messaging / Signal  Restricted Content   Emergency Lock    │
+│  Location            Calls / Media        Privacy Adapters  │
+│                                                             │
+└───────────────┬──────────────────┬──────────────────────────┘
+                │                  │
+        E2EE HTTPS envelopes       │ Bluetooth RFCOMM
+                │                  │
+                ▼                  ▼
+        ┌──────────────┐     ┌──────────────┐
+        │ HTTPS RELAY  │     │ NEARBY PEER  │
+        │ opaque data  │     │ direct radio │
+        └──────┬───────┘     └──────────────┘
+               │
+               │ signaling / authorized media
+               ▼
+        ┌──────────────┐
+        │ TURN RELAY   │
+        │ RELAY_ONLY   │
+        └──────────────┘
 ```
 
-## Ejecutar las pruebas locales
+The relay handles routing and opaque envelopes; application content keys and plaintext are not intentionally delegated to the relay.
 
-Python 3.12+ y JDK 21. Se utilizó Python 3.13.5 en esta entrega.
+---
 
-```bash
-cd UMBRA
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r relay/requirements-test.txt
-bash scripts/test_local.sh
-```
+## Core capabilities
 
-En Windows: activar `.venv\Scripts\Activate.ps1` y utilizar Git Bash/WSL para el script de shell, o ejecutar por separado las órdenes que contiene. Las dependencias de ejecución permanecen fijadas como en la base; no se ha completado una revisión de vulnerabilidades ni generado un lock con hashes de todos los artefactos.
+### Identity, vault and admission
 
-## Compilar Android y ambas variantes
+- local Signal identity;
+- signed one-use pairing material;
+- explicit safety-code verification;
+- multi-device linking with device-specific keys/sessions;
+- signed private-realm admission credentials with proof of possession;
+- individual renewal and revocation;
+- AES-256-GCM local record protection;
+- HMAC indexes for protected local lookup;
+- Android Keystore binding;
+- Argon2id personal-password layer;
+- no master password, server password recovery or silent identity reset.
 
-JDK 21, Gradle 8.13, Android Gradle Plugin 8.13.2, plataforma 36 y Build Tools 35.0.0. Android 12/API 31 o superior en los teléfonos. Estas son las versiones configuradas; su resolución conjunta no se verificó en este entorno.
+### Messaging and transport
 
-```bash
-sdkmanager "platforms;android-36" "build-tools;35.0.0"
-python scripts/build_android.py --sdk /ruta/al/Android/Sdk
-```
+- encrypted 1:1 text;
+- encrypted attachments;
+- persistent ACK/retry behavior;
+- HTTPS relay transport;
+- Bluetooth RFCOMM transport;
+- per-device ciphertext handling;
+- explicit online and Nearby consent;
+- no automatic network restoration after unlock or process restart.
 
-En Windows:
+### Calls and media
 
-```powershell
-python scripts/build_android.py --sdk "$env:LOCALAPPDATA\Android\Sdk"
-```
+- authenticated 1:1 call signaling;
+- TURN-only voice transport policy;
+- TURN-only video transport policy;
+- local voice modulation with fail-muted processing behavior;
+- encrypted location sharing with explicit recipient/device authorization.
 
-El script ejecuta pruebas JUnit, ensamblado debug y lint de ambas variantes, y después comprueba los manifiestos combinados. Utiliza Gradle local o descarga la distribución oficial, con comprobación de su checksum publicado. No incorpora binarios del SDK ni bibliotecas descargadas.
+### Restricted content
 
-Rutas **esperadas tras una compilación correcta**, no archivos presentes en esta entrega:
+| Mode | Behavior |
+|---|---|
+| **ONCE** | Persistent consumption occurs before presentation; reopening is rejected. |
+| **UMBRA_ONLY** | May be reopened while valid, but remains non-exportable. |
+| **Expiry** | Object lifetime and active-session lifetime are separate controls. |
+
+Supported restricted profiles are deliberately narrow:
+
+| Type | Current profile |
+|---|---|
+| Image | JPEG/PNG input, sanitized PNG output; bounded processing |
+| Voice note | AAC-LC / ADTS, mono 16 kHz; connected capture up to 8 s |
+| File video | AVC baseline, up to 320×240, 45 frames, 3 s, optional AAC |
+| PDF | Static raster copy, up to 4 pages, no external viewer |
+
+Restricted objects are not exposed through a generic save/share/print/external-open path.
+
+---
+
+## Android operating variants
+
+### Connected
+
+Includes authorized HTTPS transport and internet media functionality in addition to local/Nearby operation.
+
+### Offline
+
+The accepted APK policy removes:
+
+- `INTERNET`
+- `ACCESS_NETWORK_STATE`
+- `RECORD_AUDIO`
+- `CAMERA`
+- WebRTC media binaries
+
+Offline can still support the functionality explicitly permitted by its own manifest and domain policy. This constrains the UMBRA process; it does not make the entire Android device networkless.
+
+---
+
+## Validated technical baseline
+
+The accepted technical baseline is:
 
 ```text
-android/app/build/outputs/apk/connected/debug/app-connected-debug.apk
-android/app/build/outputs/apk/offline/debug/app-offline-debug.apk
+e0024f091d29dc15c2d788b430c5ea11204e5060
 ```
 
-No hay claves de firma de publicación. El flujo GitHub Actions no se ejecutó ni se publicó en una cuenta. Las acciones de CI se fijaron por SHA en esta preparación. Las imágenes, toolchains y demás artefactos de terceros todavía requieren fijación/revisión adicional antes de una distribución sensible.
+Its recorded acceptance includes:
 
-## Prueba de aceptación Bluetooth, pendiente
+| Layer | Result |
+|---|---|
+| GitHub Actions | 10 / 10 workflows SUCCESS |
+| Jobs | 27 / 27 SUCCESS |
+| Verify Android | 69 connected · 66 offline |
+| JVM Android suites | 269 connected · 212 offline |
+| File-video matrices | 32 debug · 32 R8 |
+| Focused media | 9 debug · 9 R8 |
+| Nearby focused | 8 scenarios |
+| Build / lint / release / R8 | PASS in the recorded acceptance |
+| JNI / APK policy | PASS in the recorded acceptance |
 
-Instalar la misma revisión en dos teléfonos compatibles, crear una identidad distinta en cada uno y emparejarlos desde Android. Regresar a UMBRA y desbloquear ambas aplicaciones. Para un contacto nuevo, utilizar **Cerca → Vincular un nuevo contacto** en ambos extremos: uno espera y el otro conecta. La vinculación intercambia tarjetas y prueba posesión de claves; **no equivale a verificar a la persona**.
+The complete evidence, failure history and scope limitations are tracked in [PR #16](https://github.com/DevOps-Solutions-IA/umbra/pull/16) and the validation records on the accepted technical line.
 
-Comparar personalmente el código de seguridad completo en ambos teléfonos y completar la verificación. Después, usar los botones de contacto verificado para reconectar. Mantener ambas apps abiertas/desbloqueadas, Wi-Fi y datos móviles desactivados, Bluetooth activo y enviar solamente datos de prueba. Comprobar mensajes bidireccionales, adjuntos, confirmaciones, desconexiones y reintentos.
+### Physical laboratory scope
 
-La versión 0.2 usa saludo Bluetooth v2 y no conecta mediante el saludo anterior: actualizar ambos extremos. El servidor conserva el formato de sobre v1. El vencimiento de la autorización local, aproximadamente a los cuatro minutos, interrumpe el enlace y exige volver a desbloquear.
+Authorized isolated hardware tests have exercised synthetic debug/R8 cases and persistent restricted-content consumption on an Android 16 arm64 device.
 
-## Migraciones y datos
+They do **not** establish:
 
-La variante Connected mantiene la continuidad de identificador respecto a la versión anterior del mismo tipo de build. El código migra la bóveda de esquema 1 a 2 conservando la clave AES existente y creando una clave HMAC para índices. **La migración Android no se probó en Keystore/SQLite reales de un teléfono.** No usar datos irremplazables para estrenarla ni intentar revertir posteriormente a 0.1.
+- authenticated production-Vault hardware acceptance;
+- complete biometric acceptance;
+- physical microphone/camera/acoustic-route acceptance;
+- two-phone RFCOMM/voice/video acceptance;
+- global absence of device traffic outside the app's observable boundary.
 
-El relay migra su cola a secuencias `AUTOINCREMENT`. La migración SQLite del servidor sí tiene pruebas ejecutadas de conservación de datos y rollback ante fallo. Revisar recuperación, retención y almacenamiento antes de una operación real.
+Those remain separate hardware acceptance items.
 
-## Límites deliberados
+---
 
-Chats individuales, texto hasta 16.000 bytes, adjuntos hasta 256 KiB, 100 contactos y vencimiento máximo de siete días. Se reservan hasta 128 salidas de usuario y 256 entradas totales de salida, incluidas confirmaciones; hasta 4.096 registros de mensajes y 8.192 registros de recepción/deduplicación; cuota local de ciphertext de 64 MiB. El borrado por vencimiento se procesa al ejecutar/desbloquear la aplicación, no mediante una garantía de borrado puntual con la app cerrada.
+## Security boundaries
 
-Sin grupos, llamadas, videollamadas, iPhone, escritorio, malla, Wi-Fi Direct, varios dispositivos, recuperación de identidad, push ni recepción con la app bloqueada. El QR se muestra para verificación; no hay lector de QR integrado. Bluetooth es un enlace de proximidad, no una red anónima ni de larga distancia.
+UMBRA deliberately does **not** claim to be “unbreakable”, “military-grade”, anonymous, or resistant to every compromised device.
 
-Un destinatario puede copiar lo recibido. Un sistema comprometido puede observar datos cuando están descifrados. Las exportaciones salen de la protección de UMBRA; los buffers de memoria administrada y almacenamiento flash no ofrecen borrado forense garantizado. El relay y la red siguen viendo metadatos. Una app privada no elimina esas limitaciones.
+The current design does not prevent:
 
-## Operación, licencia y publicación
+- a recipient from photographing a screen with another device;
+- external audio recording;
+- privileged or compromised-OS observation of plaintext while legitimately displayed;
+- traffic-analysis metadata visible to infrastructure or network operators;
+- rollback or snapshot attacks outside the demonstrated application boundary;
+- forensic recovery guarantees from managed memory or flash storage;
+- denial of service by infrastructure;
+- vulnerabilities in Android, native codecs, dependencies or future platform changes.
 
-El modo Bluetooth no necesita servidor. Para HTTPS: consultar [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md); no hay un servidor contratado, expuesto ni desplegado por esta entrega. Las medidas adicionales y pendientes se describen en [docs/SECURITY.md](docs/SECURITY.md) y [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
+TURN-only media avoids direct peer media paths by policy; it does not make the TURN operator or ISP blind to connection metadata.
 
-El código propio mantiene la licencia MIT de la entrega anterior. libsignal declara AGPLv3 y uso externo sin soporte: esto no convierte automáticamente el APK enlazado en una distribución cerrada. Conservar y revisar `THIRD_PARTY_NOTICES.md` y las licencias de todas las dependencias antes de distribuir. No existe afiliación con Signal ni WhatsApp. La marca UMBRA sigue siendo provisional.
+Security claims are limited to the mechanisms and evidence actually executed.
+
+---
+
+## Development reference
+
+The current accepted technical line is intentionally separate from the historical default branch.
+
+- [PR #16 — accepted technical receipt](https://github.com/DevOps-Solutions-IA/umbra/pull/16)
+- [Accepted technical tree](https://github.com/DevOps-Solutions-IA/umbra/tree/e0024f091d29dc15c2d788b430c5ea11204e5060)
+- [Security model](https://github.com/DevOps-Solutions-IA/umbra/blob/e0024f091d29dc15c2d788b430c5ea11204e5060/docs/SECURITY.md)
+- [Android build procedure](https://github.com/DevOps-Solutions-IA/umbra/blob/e0024f091d29dc15c2d788b430c5ea11204e5060/docs/ANDROID_BUILD.md)
+- [Validation records](https://github.com/DevOps-Solutions-IA/umbra/tree/e0024f091d29dc15c2d788b430c5ea11204e5060/docs/validation)
+
+Current toolchain on the accepted line:
+
+```text
+JDK             21
+Gradle          8.13
+Android Gradle  8.13.2
+Android SDK     36
+Build Tools     35.0.0
+minSdk          31
+libsignal       0.102.3
+```
+
+No production signing key belongs in this repository. No production-signed APK or Play Store release is represented by this README.
+
+---
+
+## Repository structure
+
+```text
+android/                 Native Android client
+relay/                   HTTPS relay and persistence
+native/                  Reviewed native/WebRTC material
+scripts/                 Build, validation and laboratory tooling
+docs/                    Architecture, protocol and security contracts
+docs/validation/         Dated evidence and failure history
+.github/workflows/       CI and Android/media laboratories
+AGENTS.md                 Agent/repository operating rules
+```
+
+---
+
+## Engineering discipline
+
+Changes that affect identity, authorization, cryptography, persistence, transport or restricted-content policy require:
+
+1. a reproducible failing case or explicit requirement;
+2. a minimal reviewable change;
+3. regression coverage;
+4. validation against the relevant matrix;
+5. preservation of prior failed evidence;
+6. an explicit statement of what was **not** demonstrated.
+
+A later green run does not retroactively explain an earlier failure.
+
+---
+
+## License and third-party software
+
+Original UMBRA source files are distributed under the repository's **MIT License**.
+
+Third-party components retain their own licenses and obligations. In particular, the project references **libsignal 0.102.3**, whose upstream project declares GNU AGPLv3 terms. WebRTC, Bouncy Castle and other dependencies retain their respective notices.
+
+Review [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](https://github.com/DevOps-Solutions-IA/umbra/blob/e0024f091d29dc15c2d788b430c5ea11204e5060/THIRD_PARTY_NOTICES.md) before redistribution.
+
+---
+
+<div align="center">
+
+**UMBRA**
+
+_Explicit trust. Controlled exposure. No silent fallback._
+
+</div>
