@@ -11,7 +11,7 @@ pendiente de publicación de la rama.** No es una aceptación física ni de prod
 | Base técnica exacta | `e0024f091d29dc15c2d788b430c5ea11204e5060` (= `codex/security-content-completion` = `refs/pull/16/head` al crear la rama) |
 | Contrato | `UI_SECURITY_CONTENT_API_V1` (`docs/UI_API_CONTRACT.md`, PR16) |
 | Fuente de presentación | `ca2a706fd30c8194181588b19e72c69529f70335` (bundle `umbra-ui-security-integration-ca2a706.bundle`, SHA-256 `a8cb0eaddee9610cbc1c8ad931cec55cf718a79d84e419db825ed94c298bc9c1`, padre `538d158`, prerrequisitos `c394ea7`, `52cd1e5`) |
-| Commits de UI | `2d4555e` merge con resolución manual · `0e4f474` cableado al contrato · `e604362` CI de integración UI · commit de este recibo |
+| Commits de UI | `2d4555e` merge con resolución manual · `0e4f474` cableado al contrato · `e604362` CI de integración UI · `ba9e2bb` documentación · `54d79e5` correcciones de revisión (ciclo de vida del visor, captura, gate de proceso) · commit de este recibo |
 | HEAD verificado (antes del recibo) | `e6043620523418db03765790161eff263e823d5a`, árbol `88101f11af5e5e3af91dc562d984c3ec60f12f7e` |
 
 No había trabajo de Claude posterior a `ca2a706` en el repositorio remoto ni en la copia local del
@@ -62,6 +62,15 @@ Conteos de instrumentación completos (`verify.yml`): offline 98, connected 101 
   ejecución de CI, APK, mapeo R8 ni capturas del HEAD de esta rama todavía.** Se entrega un bundle
   verificable; al publicarse la rama corren `verify.yml`, `ui-integration.yml` y los flujos técnicos.
 - Hashes de APK/mapeo: se registran en los recibos que escribe `scripts/run_ui_integration.py` en CI.
+
+## Revisión independiente
+
+Una revisión de código separada (agente de verificación) sobre `2d4555e..ba9e2bb` encontró y se corrigió en
+`54d79e5`: envío protegido desde archivo perdido tras el bloqueo del selector; «Atrás» sin cerrar el visor
+(sesión, reproductor y fotograma); hoja de captura descartable con micrófono activo; notas capturadas sin
+cerrar al cancelar; gate por Activity (la recreación perdía el coordinador de emergencia, ahora es de
+proceso); aviso de portapapeles demasiado optimista. Confirmó correctos: ticket de emergencia, INCOMPLETE,
+reconstrucción de bóveda, callbacks obsoletos, hilos, borrado de entradas y errores tipados.
 
 ## Hallazgos
 
