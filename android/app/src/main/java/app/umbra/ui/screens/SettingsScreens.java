@@ -187,7 +187,9 @@ public final class SettingsScreens {
     private static void about(Ui ui, SettingsState s, LinearLayout body) {
         LinearLayout v = ui.card();
         v.addView(ui.logo(40, UmbraColors.ACCENT_MUTED));
-        v.addView(ui.heading(UmbraType.HEADING, "UMBRA " + s.version()), ui.margins(Ui.match(), 10, 0));
+        v.addView(ui.heading(UmbraType.HEADING, "UMBRA"), ui.margins(Ui.match(), 10, 0));
+        // The build version (with its flavor suffix, e.g. "-offline") is an identifier, not Spanish copy.
+        v.addView(ui.identifier(UmbraType.CAPTION, s.version(), "Versión " + s.version()), ui.margins(Ui.match(), 2, 0));
         v.addView(ui.chip(Tone.WARNING, Glyph.WARNING, "Versión de desarrollo"));
         body.addView(v);
         body.addView(ui.sectionHeader("Funciones"));

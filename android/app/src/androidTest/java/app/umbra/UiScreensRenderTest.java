@@ -449,6 +449,18 @@ public class UiScreensRenderTest {
                 assertEquals("one tap, no password dialog in between", 1, emergencies[0]);
             }
             if (s == SettingsSection.PROFILE) assertFalse(visibleText(v).toLowerCase(Locale.ROOT).contains("private key"));
+            if (s == SettingsSection.ABOUT) {
+                // The real build version, flavor suffix included ("0.2.0-dev-offline"), is shown whole as a technical
+                // identifier with a Spanish spoken label; it is not human copy and is never shortened.
+                boolean version = false;
+                for (View x : all(v)) if (x instanceof TextView t && BuildConfig.VERSION_NAME.contentEquals(t.getText())) {
+                    assertTrue("version is tagged as a technical identifier", Ui.technical(t));
+                    assertEquals("Versión " + BuildConfig.VERSION_NAME, String.valueOf(t.getContentDescription()));
+                    version = true;
+                }
+                assertTrue("full build version shown", version);
+                assertTrue("product name is human copy", hasExact(v, "UMBRA"));
+            }
         }
     }
 

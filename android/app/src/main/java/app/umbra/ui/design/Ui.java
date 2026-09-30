@@ -150,6 +150,13 @@ public final class Ui {
      */
     public static final Object TECHNICAL = new Object() { @Override public String toString() { return "umbra:technical"; } };
     public static boolean technical(View v) { return v.getTag() == TECHNICAL; }
+    /**
+     * A technical identifier shown as-is (build version, flavor suffix): never translated, shortened or truncated.
+     * {@code spoken} is the Spanish accessibility label that introduces it (e.g. "Versión 0.2.0-dev-offline").
+     */
+    public TextView identifier(UmbraType type, String value, String spoken) {
+        TextView t = text(type, value); t.setTextIsSelectable(false); t.setContentDescription(spoken); t.setTag(TECHNICAL); return t;
+    }
     /** Monospace block for safety codes; long codes wrap by blocks, never scroll horizontally. */
     public TextView code(String grouped) {
         TextView t = text(UmbraType.MONOSPACE, grouped); t.setTextIsSelectable(false); t.setLongClickable(false);
