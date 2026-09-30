@@ -24,8 +24,11 @@ EXPECTED = {False: 35, True: 32}
 UI_ENTRY_POINTS = ('app.umbra.ui.flow.RestrictedFlow$Viewer', 'app.umbra.ui.design.ProtectedFrameView',
                    'app.umbra.ui.screens.ContentScreens', 'app.umbra.ui.model.EmergencyPresentation',
                    'app.umbra.ui.design.QrCodes')
-# Library classes the production QR path needs; they must survive shrinking (renaming is allowed).
-REQUIRED_LIBRARY = ('com.google.zxing.MultiFormatWriter', 'com.google.zxing.qrcode.QRCodeWriter')
+# The QR encoder the production path (QrCodes) reaches must survive shrinking. R8 may legitimately class-inline
+# stateless facades (MultiFormatWriter, QRCodeWriter), so the check requires the QR encoder package itself (e.g.
+# qrcode.decoder.Version tables, qrcode.encoder.*), renaming allowed. Functional proof is the R8 instrumentation
+# case that renders a real QR through QrCodes and checks its finder patterns on screen.
+REQUIRED_LIBRARY_PREFIX = 'com.google.zxing.qrcode.'
 # Exact resource roots (res/raw/umbra_resource_keep.xml) that must remain in the optimized APK.
 REQUIRED_RESOURCES = ('drawable/ic_notification_umbra',)
 MIN_EVIDENCE = 30
@@ -48,11 +51,10 @@ def optimized_ui(mapping: str, configuration: str) -> dict:
         if not match or match[1] == name:
             raise RuntimeError('Optimized UI entry point missing or not obfuscated: ' + name)
         result[name] = match[1]
-    for name in REQUIRED_LIBRARY:
-        match = re.search(r'^' + re.escape(name) + r' -> ([^:]+):$', mapping, re.M)
-        if not match:
-            raise RuntimeError('Required library class removed by R8: ' + name)
-        result[name] = match[1]
+    encoder = re.findall(r'^(' + re.escape(REQUIRED_LIBRARY_PREFIX) + r'[\w.$]+) -> ([^:]+):$', mapping, re.M)
+    if not encoder:
+        raise RuntimeError('QR encoder removed by R8: no ' + REQUIRED_LIBRARY_PREFIX + '* class in mapping')
+    result.update(dict(encoder))
     return result
 
 

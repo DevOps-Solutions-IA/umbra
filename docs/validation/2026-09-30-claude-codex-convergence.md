@@ -61,3 +61,14 @@ Las pruebas JVM de dominio con libsignal (`AdmissionStatusContractTest`, `UiAdmi
 
 - CI completa del SHA combinado; solo después, prueba física con los dos teléfonos y el APK exacto de esa CI.
 - MANUAL_PENDING / NEEDS_SECOND_PEER sin cambios.
+
+## CI de `2313e54` y correcciones posteriores (commits normales sobre el merge)
+
+| Resultado CI | Clasificación | Acción |
+|---|---|---|
+| Verify connected 102/102; UI debug connected 35/35 (87 capturas) | PASS | — |
+| Offline: `settingsSectionsAreHonestAboutPendingControls` («UMBRA 0.2.0-dev-offline» leído como inglés) | Clasificación de presentación | Versión real mostrada como identificador técnico (`Ui.identifier`); sin cambiar versión ni sufijo |
+| R8: `QRCodeWriter` ausente del mapeo | Comprobación frágil del runner (R8 inlineó la fachada) | Se exige el paquete `zxing.qrcode.*`; QR real demostrado por la instrumentación R8 |
+| Admission offline, Emergency Nearby: `ZipFile unknown archive` | Infraestructura | Reejecutar; sin cambios de producto |
+
+Conteos sin cambios: 99 offline / 102 connected; UI 35 debug / 32 R8.

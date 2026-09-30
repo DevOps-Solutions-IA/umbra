@@ -75,11 +75,29 @@ Runs: Verify UMBRA `36653888664`, Claude UI integration `36653888747`.
   y el trazado del fixture solo conserva clases de la app; R8 renombraba/eliminaba la librería. Corrección:
   ruta de producción única `ui.design.QrCodes.render` (la usan `MainActivity` y la prueba); sin keep de
   ZXing. La prueba R8 verifica el QR real (patrones de localización en tres esquinas, zona silenciosa,
-  solo blanco/negro) y la pantalla con el `ImageView` accesible; el runner exige `QrCodes`,
-  `MultiFormatWriter` y `QRCodeWriter` en el mapeo, y falla con `-dontoptimize/-dontobfuscate`.
+  solo blanco/negro) y la pantalla con el `ImageView` accesible; el runner exige `QrCodes`
+  renombrado y el paquete codificador `com.google.zxing.qrcode.*` en el mapeo (las fachadas sin estado
+  `MultiFormatWriter`/`QRCodeWriter` pueden quedar inlineadas legítimamente por R8), y falla con
+  `-dontoptimize/-dontobfuscate`.
 - Conteos sin cambios: 35 debug / 32 R8 por sabor.
 - El registro de CI no es legible desde el entorno de Claude (API de GitHub no habilitada): el cuarto
   fallo de debug se confirmará en la siguiente ejecución.
+
+## CI real del SHA combinado `2313e54` — correcciones
+
+- Verify connected 102/102 y UI debug connected 35/35 (87 capturas): PASS.
+- **Offline (Verify 99 ejecutadas y UI debug offline):** único fallo
+  `UiScreensRenderTest.settingsSectionsAreHonestAboutPendingControls`; `assertConcise` leía la etiqueta
+  «UMBRA 0.2.0-dev-offline» como copy en inglés por el sufijo de sabor. Corrección de presentación: el
+  encabezado humano es «UMBRA» y la versión real (`BuildConfig.VERSION_NAME`, sufijo incluido) se muestra
+  entera con `Ui.identifier` (etiqueta `Ui.TECHNICAL`, lectura «Versión …»). No cambia la versión, el sufijo
+  ni el conteo; la prueba ahora exige la versión completa, etiquetada y con lectura en español.
+- **R8:** `Required library class removed by R8: com.google.zxing.qrcode.QRCodeWriter` — R8 conservó
+  `MultiFormatWriter` e inlineó `QRCodeWriter` (fachada sin estado). El runner exige ahora el paquete
+  codificador `com.google.zxing.qrcode.*` (sin keep de ZXing; R8 y `shrinkResources` activos); la prueba
+  de instrumentación R8 sigue demostrando el QR real por `QrCodes.render` y su pantalla.
+- Admission offline y Emergency Nearby: fallos de infraestructura (`ZipFile unknown archive` al descargar
+  imagen de sistema/emulador); sin cambios de producto.
 
 ## Límites del entorno de esta integración
 
