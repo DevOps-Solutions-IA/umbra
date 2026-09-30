@@ -62,7 +62,12 @@ public final class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final AtomicBoolean syncBusy = new AtomicBoolean(false);
     private final Map<String,String> drafts = new HashMap<>();
-    private final AccessGate gate = new AccessGate();
+    /**
+     * Process-scoped gate: Activity recreation (rotation, configuration) must keep the SAME emergency coordinator,
+     * so a CLOSING/INCOMPLETE closure can never be escaped by recreating the Activity (docs/EMERGENCY_LOCK.md).
+     */
+    private static final AccessGate PROCESS_GATE = new AccessGate();
+    private final AccessGate gate = PROCESS_GATE;
     private volatile RelayClient activeRelay;
     private final Set<Dialog> dialogs = new HashSet<>();
     private final app.umbra.media.VoiceControls voiceControls=new app.umbra.media.VoiceControls();
@@ -138,12 +143,16 @@ public final class MainActivity extends Activity {
     private final Set<byte[]> restrictedInputs = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private List<RestrictedPresentation.Received> restrictedReceived = List.of();
     private RestrictedFlow.Viewer viewer; private String viewerId, viewerPeer; private int viewerTicket;
+    /** Increments on every open and every release; callbacks of an older open are stale. */
+    private long viewerToken;
     private RestrictedPresentation.Received viewerItem;
     private ProtectedFrameView viewerFrame; private SurfaceView viewerSurface;
     private int viewerPage; private String viewerStatus = ""; private Tone viewerTone = Tone.NEUTRAL;
     private AudioDeviceInfo viewerSink; private boolean viewerRendering, viewerRenderAgain;
     private final ContentScreens.Handles viewerHandles = new ContentScreens.Handles();
     private volatile boolean captureStop, captureDiscarded; private Dialog captureDialog;
+    /** Captured notes awaiting the send confirmation; closed on lock, cancel or review expiry. */
+    private final Set<app.umbra.content.RestrictedContentService.Prepared> pendingPrepared = java.util.concurrent.ConcurrentHashMap.newKeySet();
     /** Posts a UI lock when the domain closes the gate (vault auto-lock, create/change password, key loss). */
     private final Runnable gateInvalidated = () -> main.post(this::gateCheck);
 
@@ -384,7 +393,7 @@ public final class MainActivity extends Activity {
         releaseViewer(); cancelCapture(); eraseRestrictedInputs();
         pendingCopy = null; pendingCopyConfirmed = false;
         try { clipboard.clearOwned(); } catch (RuntimeException notForeground) { /* only in the focused window; never a global clear */ }
-        restrictedReceived = List.of(); pendingRestrictedKind = null; pendingRestrictedPeer = null;
+        restrictedReceived = List.of(); closePendingPrepared();
         stopLocationLocally(); authenticationGranted = false; gate.lock(); unlocked = false; networkPaused = true; networkStateLoaded = false; generation++; cancelRelay();
         engine = null; initialised = false; accessStep = null; accessBusy = false; accessProblem = null; changeBusy = false; changeProblem = null;
         admission = null; peerAdmission = null; admissionUnreadable = false; connectivityState = "LOCKED_PRIVATE"; canConnect = false; nearbyActive = false; connectBusy = false; adminBusy = false;
@@ -807,6 +816,8 @@ public final class MainActivity extends Activity {
         callHandles.duration = null;
         if (accessStep != AccessStep.OPEN) { renderAccess(); return; }
         Route route = nav.current();
+        // A protected presentation exists only on its own screen: leaving it by any path closes it.
+        if (route.kind() != Route.Kind.CONTENT && (viewer != null || viewerId != null)) releaseViewer();
         if (route.kind() == Route.Kind.ONBOARDING) { renderOnboarding(); return; }
         if (profile == null) return;
         switch (route.kind()) {
@@ -1648,6 +1659,7 @@ public final class MainActivity extends Activity {
     @Override public void onBackPressed() { back(); }
     private void back() {
         if (!unlocked) { moveTaskToBack(true); return; }
+        if (onRoute(Route.Kind.CONTENT)) { closeViewer(null); if (onRoute(Route.Kind.CONTENT)) { nav.back(); render(); } return; }
         if (nav.back()) { refresh(); render(); return; }
         if (onRoute(Route.Kind.HOME) && nav.tab() != HomeTab.CHATS) { nav.selectTab(HomeTab.CHATS); refresh(); return; }
         lock(); moveTaskToBack(true);
@@ -1728,7 +1740,7 @@ public final class MainActivity extends Activity {
         super.onWindowFocusChanged(hasFocus);
         if (!hasFocus || !unlocked || pendingCopy == null || !pendingCopyConfirmed) return;
         OrdinaryTextExport.Review review = pendingCopy; pendingCopy = null; pendingCopyConfirmed = false;
-        try { clipboard.copyMessage(review, true); notice("Copiado. Se borra al bloquear."); }
+        try { clipboard.copyMessage(review, true); notice("Copiado. Se borra si bloqueas con UMBRA abierta."); }
         catch (Exception e) { notice(FailurePresentation.text(e)); }
     }
 
@@ -1770,7 +1782,7 @@ public final class MainActivity extends Activity {
     private void reviewRestrictedSend(Uri uri) {
         Kind kind = pendingRestrictedKind; String peer = pendingRestrictedPeer; RestrictedPresentation.Choice choice = restrictedChoice;
         pendingRestrictedKind = null; pendingRestrictedPeer = null;
-        if (kind == null || peer == null) return;
+        if (kind == null || peer == null) { notice("Elige de nuevo el contenido protegido."); return; }
         action(() -> {
             byte[] input = readBounded(uri, kind.maxInputBytes());
             restrictedInputs.add(input);
@@ -1837,13 +1849,18 @@ public final class MainActivity extends Activity {
         };
         box.addView(ContentScreens.captureSheet(ui, new ContentScreens.CaptureState(true, "Micrófono activo"), actions));
         captureDialog = SecureDialogs.sheet(this, this::track, box);
+        // Only "Detener" or "Descartar" end a capture; an outside tap never leaves the microphone running unseen.
+        captureDialog.setCancelable(false); captureDialog.setCanceledOnTouchOutside(false);
         action(() -> NoteCapture.record(this, engine, review, input, () -> captureStop),
             prepared -> {
                 Dialog open = captureDialog; captureDialog = null; if (open != null) open.dismiss();
                 if (captureDiscarded) { prepared.close(); return; } // discarded meanwhile: never sent
+                pendingPrepared.add(prepared);
+                // Not confirmed within the review window (or cancelled): close it instead of holding a pending slot.
+                main.postDelayed(() -> { if (pendingPrepared.remove(prepared)) prepared.close(); }, 61_000);
                 confirm("Enviar nota protegida", "Para " + aliasFor(peer) + ". No se podrá exportar.", "Enviar",
-                    false, () -> action(() -> RestrictedFlow.send(engine, review, prepared), id -> { notice(RestrictedPresentation.SENT); refresh(); syncNow(); },
-                        failure -> notice(FailurePresentation.text(failure) + " " + RestrictedPresentation.NOT_SENT)));
+                    false, () -> { if (!pendingPrepared.remove(prepared)) return; action(() -> RestrictedFlow.send(engine, review, prepared), id -> { notice(RestrictedPresentation.SENT); refresh(); syncNow(); },
+                        failure -> notice(FailurePresentation.text(failure) + " " + RestrictedPresentation.NOT_SENT)); });
             },
             failure -> { Dialog open = captureDialog; captureDialog = null; if (open != null) open.dismiss(); if (!captureDiscarded) notice(FailurePresentation.text(failure)); });
     }
@@ -1885,6 +1902,7 @@ public final class MainActivity extends Activity {
         releaseViewer();
         viewerId = item.id(); viewerPeer = peer; viewerItem = item; viewerSink = sink; viewerPage = 0;
         viewerStatus = "Abriendo…"; viewerTone = Tone.NEUTRAL; viewerTicket = generation;
+        final long token = ++viewerToken;
         if (item.kind() == Kind.PHOTO || item.kind() == Kind.PDF) {
             viewerFrame = new ProtectedFrameView(this);
             viewerFrame.setContentDescription(item.kind().label + " protegido de " + aliasFor(peer));
@@ -1906,7 +1924,7 @@ public final class MainActivity extends Activity {
             } catch (Exception e) { failure = e; }
             final RestrictedFlow.Viewer result = opened; final Exception problem = failure;
             main.post(() -> {
-                boolean current = !destroyed && unlocked && ticket == generation && id.equals(viewerId);
+                boolean current = !destroyed && unlocked && ticket == generation && token == viewerToken && id.equals(viewerId) && onRoute(Route.Kind.CONTENT);
                 if (!current) { if (result != null) result.close(); return; } // stale callback: never presented
                 if (problem != null) { if (hasVaultFailure(problem)) { lock(); return; } closeViewer(FailurePresentation.text(problem)); return; }
                 viewer = result; viewerStatus = "Abierto"; viewerTone = Tone.ACCENT;
@@ -2023,6 +2041,7 @@ public final class MainActivity extends Activity {
     }
     /** Non-navigating core of {@link #closeViewer}: used by lock and emergency, which choose their own screen. */
     private boolean releaseViewer() {
+        viewerToken++;
         main.removeCallbacks(viewerPoll);
         RestrictedFlow.Viewer v = viewer; viewer = null;
         boolean wasOpen = viewerId != null;
@@ -2034,5 +2053,8 @@ public final class MainActivity extends Activity {
             v.closure().whenComplete((ok, error) -> { if (error != null) main.post(() -> notice(RestrictedPresentation.CLOSURE_UNCONFIRMED)); });
         }
         return wasOpen;
+    }
+    private void closePendingPrepared() {
+        for (var prepared : new ArrayList<>(pendingPrepared)) { pendingPrepared.remove(prepared); prepared.close(); }
     }
 }
