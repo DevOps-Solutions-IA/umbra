@@ -40,12 +40,13 @@ def main() -> None:
             package + '.test/androidx.test.runner.AndroidJUnitRunner'], stdout=stream,
             stderr=subprocess.STDOUT, timeout=300)
     output = args.log.read_text(encoding='utf-8')
-    # Inventory: 67 shared technical methods (including concurrent Vault ONCE open, encrypted DB/WAL
-    # inspection, native clipboard and SQLite admission snapshots that preserve corruption) + 32 Claude UI
+    # Inventory: 83 shared technical methods (including concurrent Vault ONCE open, encrypted DB/WAL
+    # inspection, native clipboard, SQLite admission snapshots that preserve corruption, and
+    # sixteen access-readiness/deadline real-Vault domain cases; the opt-in lifecycle harness is a separate lab) + 32 Claude UI
     # methods (UiScreensRenderTest, UiSecurityFlowTest, UiContentIntegrationTest); connected adds capture and
     # two video surface lifecycle methods.
     # Exact counts remain fail-closed: adding a class requires updating this contract.
-    expected=102 if args.flavor=='connected' else 99
+    expected=118 if args.flavor=='connected' else 115
     failed = result.returncode != 0 or not re.search(r'^OK \('+str(expected)+r' tests\)$', output, re.MULTILINE)
     failed |= 'INSTRUMENTATION_CODE: -1' not in output
     failed |= bool(re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', output))

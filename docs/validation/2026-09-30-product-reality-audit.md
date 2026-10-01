@@ -340,3 +340,24 @@ Esta auditoría concluye con documentación; no declara producto completo ni pro
 - Inspección Python de enum/matriz: exit 0; 29 features presentes, 41 IDs únicos, 17 columnas por fila, una clasificación permitida; HEAD/base/tree exactos comprobados.
 - `git diff --check`: exit 0. Antes de stage solo existían los dos documentos nuevos de esta auditoría. La revisión staged debe seguir mostrando exclusivamente esos dos paths.
 - No nuevos tests de producto, cambios de comportamiento, supresiones, exclusiones ni relajaciones. Las ocho pruebas ejecutadas localmente son del tooling existente; las pruebas Android citadas proceden de los recibos del SHA auditado.
+
+## Addendum — Execution02: contrato de acceso (sin modificar el informe previo)
+
+Base exacta de esta continuación: `1a0b040ff0fc3cd723bc519c279818616155b0b7`;
+rama aislada `codex/access-readiness-contract`. Se añade
+[ACCESS_READINESS_V1](../contracts/ACCESS_READINESS_V1.md), con snapshot, causas,
+plazos efectivos y outcomes de password y acciones externas. El contrato no integra
+por sí mismo la UI de Claude; MainActivity y ui.* permanecen sin cambios.
+
+La inspección identificó un candidato de núcleo distinto de la expectativa UX:
+el plazo corto elegido dependía del despacho del timer; el gate solo imponía el
+techo original. La nueva comprobación síncrona solo acorta autorizaciones. Las
+regresiones de clock y Vault comprueban la frontera sin esperar el timer. La
+reproducción exacta RED sobre base y los resultados Android deben diferenciarse de
+la inspección y de la compilación; no se declara reproducción física.
+
+Se conserva la semántica foreground/background observada en H04. No se convierte
+“4 min” en permanencia desbloqueada en background. Los cambios son aditivos;
+UI_SECURITY_CONTENT_API_V1, admisión, Signal, contenido y transportes no se
+reemplazan. Resultados por SHA/entorno en el recibo nuevo, sin reutilizar la CI verde
+de ffb4475 como aceptación del código de Execution02.

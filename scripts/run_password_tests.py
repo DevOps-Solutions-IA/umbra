@@ -11,8 +11,8 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def valid_report(text, code):
-    return (code == 0 and re.search(r'^OK \(9 tests\)$', text, re.M)
+def valid_report(text, code, expected_tests=9):
+    return (code == 0 and re.search(r'^OK \(' + str(expected_tests) + r' tests\)$', text, re.M)
             and 'INSTRUMENTATION_CODE: -1' in text
             and not re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', text)
             and not any(x in text for x in ('FAILURES!!!', 'INSTRUMENTATION_FAILED', 'Process crashed')))
@@ -48,6 +48,10 @@ def main():
         if not match or match[1] == 'app.umbra.vault.PasswordEnvelope':
             raise RuntimeError('Optimized envelope implementation missing or not obfuscated')
         evidence['envelopeClass'] = match[1]
+        access_match = re.search(r'^app\.umbra\.access\.AccessSession -> ([^:]+):$', mapping.read_text(), re.M)
+        if not access_match or access_match[1] == 'app.umbra.access.AccessSession':
+            raise RuntimeError('Optimized access coordinator missing or not obfuscated')
+        evidence['accessSessionClass'] = access_match[1]
         evidence['mappingSha256'] = hashlib.sha256(mapping.read_bytes()).hexdigest()
     log = args.reports / 'password-tests.log'
     with log.open('w') as stream:
@@ -56,6 +60,16 @@ def main():
             stdout=stream, stderr=subprocess.STDOUT, timeout=180)
     if not valid_report(log.read_text(), result.returncode):
         raise RuntimeError(f'Password instrumentation did not pass all nine cases: {log}')
+    readiness_log = args.reports / 'access-readiness-tests.log'
+    with readiness_log.open('w') as stream:
+        result = subprocess.run([*adb, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
+            'app.umbra.DeviceAccessReadinessTest,app.umbra.DeviceAccessLifecycleTest,app.umbra.DeviceVaultDeadlineProbeTest',
+            package + '.test/androidx.test.runner.AndroidJUnitRunner'],
+            stdout=stream, stderr=subprocess.STDOUT, timeout=240)
+    if not valid_report(readiness_log.read_text(), result.returncode, expected_tests=17):
+        raise RuntimeError(f'Access readiness instrumentation did not pass all seventeen cases: {readiness_log}')
+    evidence['accessReadinessTests'] = 17
+    evidence['accessLifecycleHarness'] = 'opt-in nonvisual Activity; AndroidKeyStore laboratory keys'
     command = ['python', str(ROOT / 'scripts/run_password_restart.py'), '--serial', args.serial,
                '--flavor', args.flavor, '--log-dir', str(args.reports)]
     if args.optimized:

@@ -36,7 +36,16 @@ public final class Vault extends SQLiteOpenHelper implements Records {
     private volatile AccessGate.Lease passwordLease;
     private volatile State passwordState = State.LOCKED;
     public enum State { UNINITIALIZED, LOCKED, UNLOCKING, UNLOCKED, LOCKING, CORRUPT, KEY_UNAVAILABLE }
-    private long autoLockMillis = 240_000;
+    /** SQLite committed, but authorization cleanup reported a failure. Never retry as if rolled back. */
+    public static final class PasswordCommitFailure extends IllegalStateException {
+        private PasswordCommitFailure() { super("Password mutation committed; access cleanup incomplete"); }
+    }
+    private void finishPasswordMutation() {
+        try { lock(); } catch (RuntimeException cleanup) { throw new PasswordCommitFailure(); }
+    }
+    private volatile long autoLockMillis = 240_000;
+    private final app.umbra.access.AccessSession access;
+    public app.umbra.access.AccessSession access() { return access; }
     private final java.io.File databaseFile;
     private java.util.concurrent.ScheduledFuture<?> autoLockTimer;
     private static final java.util.concurrent.ScheduledThreadPoolExecutor TIMERS = timerExecutor();
@@ -54,6 +63,7 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         synchronized(this) {
             ensureEmergencyRegistration();
             restrictedResourceScope=sessionClaim.restrictedResourceScope();
+            access = new app.umbra.access.AccessSession(this, gate);
         }
     }
     private synchronized void ensureEmergencyRegistration() {
@@ -288,6 +298,38 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         }
     }
     public synchronized boolean isPasswordConfigured() { return protection() != null; }
+    private static void validateProtectionMetadata(byte[] envelope) {
+        try { PasswordEnvelope.parameters(envelope); }
+        catch (IllegalArgumentException malformed) { throw new IllegalStateException("Vault protection damaged"); }
+    }
+    /** Worker-side metadata inspection after Android authentication; never reads secrets or repairs data. */
+    public synchronized boolean inspectAccessProtection(AccessGate.Lease expected) {
+        gate.check(expected);
+        try {
+            byte[] envelope = protection();
+            if (envelope != null) validateProtectionMetadata(envelope);
+            key(AES_ALIAS); key(INDEX_ALIAS);
+            gate.check(expected); return envelope != null;
+        } catch (java.security.UnrecoverableKeyException unavailable) {
+            markAccessFailure(expected, State.KEY_UNAVAILABLE, AccessGate.LockCause.KEY_INVALIDATED); throw new SecurityException("Vault access unavailable");
+        } catch (IllegalStateException | android.database.sqlite.SQLiteDatabaseCorruptException corrupt) {
+            markAccessFailure(expected, State.CORRUPT, AccessGate.LockCause.VAULT_FAILURE); throw new SecurityException("Vault access unavailable");
+        } catch (RuntimeException denied) { throw denied; }
+        catch (Exception unavailable) { throw new SecurityException("Vault access unavailable"); }
+    }
+
+    private void markAccessFailure(AccessGate.Lease expected, State state, AccessGate.LockCause cause) {
+        synchronized (gate) {
+            gate.check(expected);
+            try { gate.lockWithCause(cause); } finally { forgetPasswordKey(); passwordState=state; }
+        }
+    }
+    /** Classifies only device-key availability; never password versus authentication-tag failures. */
+    public synchronized void reportAccessFailure(AccessGate.Lease expected, Exception failure) {
+        boolean unavailable=failure instanceof java.security.UnrecoverableKeyException || failure instanceof KeyPermanentlyInvalidatedException
+            || (failure instanceof PasswordEnvelope.DeviceKeyFailure && failure.getCause() instanceof KeyPermanentlyInvalidatedException);
+        if(unavailable) markAccessFailure(expected,State.KEY_UNAVAILABLE,AccessGate.LockCause.KEY_INVALIDATED);
+    }
     public State getVaultState() {
         synchronized (gate) {
             try {
@@ -303,7 +345,11 @@ public final class Vault extends SQLiteOpenHelper implements Records {
         createPassword(password, PasswordEnvelope.DEFAULT);
     }
     public synchronized void createPassword(byte[] password, PasswordEnvelope.Parameters parameters) throws Exception {
-        AccessGate.Lease lease = gate.enter();
+        createPassword(password, parameters, gate.enter());
+    }
+    /** Queued work must carry the original lease, never acquire a replacement session. */
+    public synchronized void createPassword(byte[] password, PasswordEnvelope.Parameters parameters, AccessGate.Lease lease) throws Exception {
+        gate.check(lease);
         ensureEmergencyRegistration();
         if (isPasswordConfigured()) throw new IllegalStateException("Password already configured");
         SQLiteDatabase db = getWritableDatabase();
@@ -339,34 +385,40 @@ public final class Vault extends SQLiteOpenHelper implements Records {
                 ended = true;
             } finally { if (!ended && db.inTransaction()) db.endTransaction(); }
             // Enrollment finishes locked; never extend the old authenticated session.
-            lock();
+            finishPasswordMutation();
         } finally { PasswordEnvelope.erase(fresh); PasswordEnvelope.erase(verified); }
     }
-    public synchronized void unlock(byte[] password) throws Exception {
-        AccessGate.Lease lease = gate.invalidateAuthorizations(); // system authentication still mandatory
+    public synchronized void unlock(byte[] password) throws Exception { unlock(password, gate.enter()); }
+    public synchronized void unlock(byte[] password, AccessGate.Lease expected) throws Exception {
+        AccessGate.Lease lease;
+        synchronized (gate) { gate.check(expected); lease = gate.invalidateAuthorizations(); } // never renews system authentication
         ensureEmergencyRegistration();
         forgetPasswordKey(); passwordState = State.UNLOCKING;
         byte[] clear = null;
         try {
             byte[] envelope = protection();
             if (envelope == null) throw new SecurityException("Password enrollment required");
+            validateProtectionMetadata(envelope);
             clear = PasswordEnvelope.open(password, envelope, key(AES_ALIAS));
             VaultCodec.index(key(INDEX_ALIAS), "meta", "identity"); // require the existing index key, never regenerate it
             final byte[] opened = clear;
             gate.commit(lease, () -> {
+                gate.restrict(lease, java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(autoLockMillis));
                 passwordDataKey = opened; passwordLease = lease; passwordState = State.UNLOCKED;
                 scheduleAutoLock(); return null;
             });
             clear = null;
         } catch (Exception failure) {
             forgetPasswordKey();
-            if (failure instanceof java.security.UnrecoverableKeyException) passwordState = State.KEY_UNAVAILABLE;
+            if (failure instanceof java.security.UnrecoverableKeyException ||
+                    (failure instanceof PasswordEnvelope.DeviceKeyFailure && failure.getCause() instanceof KeyPermanentlyInvalidatedException)) passwordState = State.KEY_UNAVAILABLE;
             else if (failure instanceof IllegalStateException || failure instanceof android.database.sqlite.SQLiteDatabaseCorruptException) passwordState = State.CORRUPT;
             throw new SecurityException("Vault unlock failed");
         } finally { PasswordEnvelope.erase(clear); }
     }
-    public synchronized void changePassword(byte[] current, byte[] replacement) throws Exception {
-        AccessGate.Lease lease = gate.enter(); requirePasswordAccess();
+    public synchronized void changePassword(byte[] current, byte[] replacement) throws Exception { changePassword(current, replacement, gate.enter()); }
+    public synchronized void changePassword(byte[] current, byte[] replacement, AccessGate.Lease lease) throws Exception {
+        gate.check(lease); requirePasswordAccess();
         SQLiteDatabase db = getWritableDatabase();
         if (db.inTransaction()) throw new IllegalStateException("Password change requires its own transaction");
         byte[] clear = null, check = null;
@@ -385,12 +437,12 @@ public final class Vault extends SQLiteOpenHelper implements Records {
                 gate.commit(lease, () -> { db.setTransactionSuccessful(); db.endTransaction(); return null; });
                 ended = true;
             } finally { if (!ended && db.inTransaction()) db.endTransaction(); }
-            lock();
+            finishPasswordMutation();
         } finally { PasswordEnvelope.erase(clear); PasswordEnvelope.erase(check); }
     }
     /** Immediate invalidation, even while Argon2 or a database transaction is running. */
     public void lock() { gate.lock(); }
-    public synchronized long getAutoLockPolicy() { return autoLockMillis; }
+    public long getAutoLockPolicy() { return autoLockMillis; }
     public synchronized void setAutoLockPolicy(long millis) {
         if (millis < 1 || millis > 240_000) throw new IllegalArgumentException("Autolock exceeds existing policy");
         if (passwordDataKey != null) throw new IllegalStateException("Configure autolock while locked");
@@ -399,9 +451,9 @@ public final class Vault extends SQLiteOpenHelper implements Records {
     private void scheduleAutoLock() {
         if (autoLockTimer != null) autoLockTimer.cancel(false);
         AccessGate.Lease scheduled = passwordLease;
-        long remaining = Math.min(java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(autoLockMillis), gate.remainingNanos(scheduled));
+        long remaining = gate.timing().effectiveRemainingNanos();
         autoLockTimer = TIMERS.schedule(() -> {
-            synchronized (gate) { if (passwordLease == scheduled) gate.lock(); }
+            synchronized (gate) { if (passwordLease == scheduled) gate.timing(); }
         }, Math.max(0, remaining), java.util.concurrent.TimeUnit.NANOSECONDS);
     }
 

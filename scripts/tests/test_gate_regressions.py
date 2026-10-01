@@ -32,7 +32,7 @@ class GateRegressionTests(unittest.TestCase):
     def test_r8_inlined_lab_and_test_origins_are_rejected(self):
         safe = "app.umbra.crypto.Engine -> a:\n    1:1:void receive():10:10 -> a\n"
         check_apk_policy.validate_mapping(safe)
-        for origin in ("app.umbra.lab.SoftwareKeys.unlock", "androidx.test.runner.Helper.run",
+        for origin in ("app.umbra.lab.SoftwareKeys.unlock", "app.umbra.accesslab.AccessLifecycleHarness.attach", "androidx.test.runner.Helper.run",
                        "app.umbra.MemoryRecords.get", "app.umbra.DeviceMemoryRecords$Nested.get",
                        "app.umbra.VoiceNativeFixtureListener.run", "app.umbra.media.VoiceEngineFixtureListener.run", "app.umbra.media.SyntheticVideoCapturer.run"):
             with self.subTest(origin=origin):
@@ -46,6 +46,15 @@ class GateRegressionTests(unittest.TestCase):
             with zipfile.ZipFile(apk, "w") as archive:
                 archive.writestr("classes.dex", b"synthetic production descriptor")
                 archive.writestr("classes2.dex", b"Lapp/umbra/MemoryRecords$Nested;")
+            with zipfile.ZipFile(apk) as archive:
+                with self.assertRaisesRegex(RuntimeError, "Test/lab"):
+                    check_apk_policy.validate_dex(archive)
+
+    def test_access_lifecycle_harness_cannot_enter_ordinary_apk(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            apk = Path(temporary) / "access-lab.apk"
+            with zipfile.ZipFile(apk, "w") as archive:
+                archive.writestr("classes.dex", b"Lapp/umbra/accesslab/AccessLifecycleHarness;")
             with zipfile.ZipFile(apk) as archive:
                 with self.assertRaisesRegex(RuntimeError, "Test/lab"):
                     check_apk_policy.validate_dex(archive)

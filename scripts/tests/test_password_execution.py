@@ -16,6 +16,14 @@ class PasswordExecutionTests(unittest.TestCase):
         self.assertFalse(valid_report(good + 'INSTRUMENTATION_STATUS_CODE: -3\n', 0))
         self.assertFalse(valid_report(good.replace('INSTRUMENTATION_CODE: -1', ''), 0))
 
+    def test_access_readiness_requires_its_own_seventeen_cases(self):
+        good = 'OK (17 tests)\nINSTRUMENTATION_CODE: -1\n'
+        self.assertTrue(valid_report(good, 0, expected_tests=17))
+        self.assertFalse(valid_report(good.replace('17 tests', '16 tests'), 0, expected_tests=17))
+        self.assertFalse(valid_report(good, 1, expected_tests=17))
+        self.assertFalse(valid_report(good + 'Process crashed', 0, expected_tests=17))
+        self.assertFalse(valid_report(good + 'INSTRUMENTATION_STATUS_CODE: -3', 0, expected_tests=17))
+
     def test_restart_needs_explicit_assertion_and_successful_tests(self):
         good = 'passwordRestart=PASS\nOK (3 tests)\nINSTRUMENTATION_CODE: -1\n'
         self.assertTrue(verified_report(good, 0))
