@@ -151,22 +151,71 @@ public class UiContentIntegrationTest {
         }
     }
 
+    private record ShortSession(RestrictedFlow.Viewer viewer, String attempt, long wallMillis, long nanos) {}
+    /** The domain floors wall time to seconds. A one-second test must not start at an arbitrary
+     * end-of-second phase. This is one bounded precondition wait, never a retry of open/render.
+     * Historical run 36799170306 lacked these timings; its exact expiry trigger remains unconfirmed. */
+    private static void awaitNextWholeSecond() throws InterruptedException {
+        long initialSecond = System.currentTimeMillis() / 1000, began = System.nanoTime();
+        while (System.nanoTime() - began < TimeUnit.MILLISECONDS.toNanos(1_500)) {
+            long second = System.currentTimeMillis() / 1000;
+            if (second != initialSecond) {
+                assertEquals("Clock must reach the next boundary without jumping", initialSecond + 1, second);
+                return;
+            }
+            Thread.sleep(1);
+        }
+        fail("No next whole-second boundary within the bounded fixture precondition");
+    }
+    private static void shortSessionTiming(String attempt, String event, long wallMillis, long nanos) {
+        android.os.Bundle timing = new android.os.Bundle();
+        timing.putString("restrictedShortSessionAttempt", attempt);
+        timing.putString("restrictedShortSessionEvent", event);
+        timing.putLong("restrictedShortSessionOpeningWallPhaseMillis", Math.floorMod(wallMillis, 1000));
+        timing.putLong("restrictedShortSessionElapsedMillis", TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - nanos));
+        timing.putLong("restrictedShortSessionWallElapsedMillis", System.currentTimeMillis() - wallMillis);
+        InstrumentationRegistry.getInstrumentation().sendStatus(0, timing);
+    }
+    private static ShortSession openShortSession(Engine receiver, String id, String attempt) throws Exception {
+        var review = RestrictedFlow.reviewOpen(receiver, id);
+        awaitNextWholeSecond();
+        long wallMillis = System.currentTimeMillis(), nanos = System.nanoTime();
+        try {
+            var viewer = RestrictedFlow.Viewer.open(receiver, review);
+            shortSessionTiming(attempt, "opened", wallMillis, nanos);
+            return new ShortSession(viewer, attempt, wallMillis, nanos);
+        } catch (Exception | Error failure) {
+            shortSessionTiming(attempt, "open-failed", wallMillis, nanos);
+            throw failure;
+        }
+    }
+    private static Bitmap renderShortSession(ShortSession opening) throws Exception {
+        try {
+            Bitmap frame = opening.viewer().render(0, W, H, 1f, 0, 0);
+            shortSessionTiming(opening.attempt(), "rendered", opening.wallMillis(), opening.nanos());
+            return frame;
+        } catch (Exception | Error failure) {
+            shortSessionTiming(opening.attempt(), "render-failed", opening.wallMillis(), opening.nanos());
+            throw failure;
+        }
+    }
+
     @Test public void umbraOnlyReopensAfterTheSessionLimitButStaysNonExportable() throws Exception {
         try (var ar = new SqliteDeviceRecords(); var br = new SqliteDeviceRecords()) {
             Engine a = new Engine(ar), b = new Engine(br); LocationAndroidTest.pair(a, b, ar, br);
             String id = sendThroughUi(a, b, Kind.PHOTO, png(), RestrictedPresentation.UMBRA_ONLY, 1);
-            RestrictedFlow.Viewer first = RestrictedFlow.Viewer.open(b, RestrictedFlow.reviewOpen(b, id));
-            first.render(0, W, H, 1f, 0, 0).recycle();
-            first.close(); first.closure().toCompletableFuture().get(3, TimeUnit.SECONDS);
+            ShortSession first = openShortSession(b, id, "first");
+            try { renderShortSession(first).recycle(); } finally { first.viewer().close(); }
+            first.viewer().closure().toCompletableFuture().get(3, TimeUnit.SECONDS);
             assertTrue("still openable: UMBRA_ONLY is not consumed", listed(b, a, id).canOpen());
             Thread.sleep(1_200); // the active-session deadline (F06) is distinct from the object expiry
-            RestrictedFlow.Viewer second = RestrictedFlow.Viewer.open(b, RestrictedFlow.reviewOpen(b, id));
+            ShortSession second = openShortSession(b, id, "second");
             try {
-                Bitmap frame = second.render(0, W, H, 1f, 0, 0); assertEquals(BLUE, frame.getPixel(W / 2, H / 2)); frame.recycle();
+                Bitmap frame = renderShortSession(second); assertEquals(BLUE, frame.getPixel(W / 2, H / 2)); frame.recycle();
                 Thread.sleep(1_300);
-                assertThrows("the session limit ends the presentation", SecurityException.class, second::check);
-                assertThrows(SecurityException.class, () -> second.render(0, W, H, 1f, 0, 0));
-            } finally { second.close(); }
+                assertThrows("the session limit ends the presentation", SecurityException.class, second.viewer()::check);
+                assertThrows(SecurityException.class, () -> second.viewer().render(0, W, H, 1f, 0, 0));
+            } finally { second.viewer().close(); }
             assertThrows("restricted buckets are never exported", ContentException.class, () -> b.get("restricted-object", id));
         }
     }

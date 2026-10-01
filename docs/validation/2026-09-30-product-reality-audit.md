@@ -361,3 +361,10 @@ Se conserva la semántica foreground/background observada en H04. No se conviert
 UI_SECURITY_CONTENT_API_V1, admisión, Signal, contenido y transportes no se
 reemplazan. Resultados por SHA/entorno en el recibo nuevo, sin reutilizar la CI verde
 de ffb4475 como aceptación del código de Execution02.
+
+Execution02 evidence update: workflow 36799170274 reproduced the exact-base
+selected-deadline defect (protected read permitted before timer dispatch) and
+passed the corrected probe plus access/password suites in connected/offline,
+debug/R8. See `2026-09-30-access-readiness-contract.md` for SHA/tree, artifacts,
+limits and the separate preserved UI-fixture expiry failure. This does not alter
+the physical/product-flow findings of the original audit.

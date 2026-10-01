@@ -87,3 +87,81 @@ Next execution, not implemented here: Claude connects the additive contract to
 its existing presentation and tests the combined product lifecycle, including
 platform authentication and external-action callbacks. Do not infer successful
 visual integration from this nonvisual domain/lab delivery.
+
+## Executed candidate receipt: c9ce6e1
+
+Published candidate: `c9ce6e1f90a88d38ee7b2ab128cbd3ea675552d9`.
+PR #21 OPEN/DRAFT against `codex/product-reality-audit`; no auto-merge.
+Actions integration checkout `83460158fb08f5b6a08356b8c826f0fb79b50596`, tree
+`3ac84d80119cda15b454d7a18cdab2a251f3e425`, identical to candidate tree.
+
+**Core deadline bug reproduced RED and corrected:** password workflow
+[36799170274](https://github.com/DevOps-Solutions-IA/umbra/actions/runs/36799170274)
+completed SUCCESS in both debug and optimized matrices. The isolated unchanged
+base accepted the protected read at the selected 60-second deadline, before its
+real timer could run. Exact expected assertion recorded as EXPECTED_HISTORICAL_RED;
+not a linkage/runner failure. Base APK SHA-256
+`98e6c232ad7d706e9781c9239dc55809912b0c03311c668c2e139c5851115493`;
+RED log SHA-256 `4643dec6a7409e142eba8bd282e34a00ed03ea15ca8e0ac12a6cf3a267debf18`.
+The candidate probe passed independently, as did all 17 access cases and the
+original 9 password cases in each of connected/offline × debug/R8. Restart,
+interrupted migration and debug reinstall stages also passed their existing
+three-case post-restart checks; these do not represent physical hardware auth.
+
+Downloaded artifact bytes were independently hashed:
+
+| Artifact | ID | ZIP SHA-256 |
+|---|---|---|
+| Password debug | 11134939397 | e984a11e2b1bab55171c7648a2255edb686d6f83afb07c0387edafbf940e2bca |
+| Password R8 | 11134814186 | f7c76403dba4d20321f521abe3200df78a4c3d574fffdc4bcfbbc157d55afe5d |
+
+Final local source run: 413 connected / 355 offline JVM tests, zero failures,
+errors or skips. The earlier 412 count belongs to an intermediate compilation,
+not the final inventory. Tooling: 253 PASS. Source policy: 13 PASS. Full-history
+repository guard and diff checks are recorded separately; source guard passed.
+
+Local Gradle commands (JDK 21 / Gradle 8.14.4 / SDK 36), exit 0:
+
+```
+gradle -p android --no-daemon -PumbraAccessLab=true -PumbraVaultLab=true \
+ :app:testConnectedDebugUnitTest :app:testOfflineDebugUnitTest \
+ :app:assembleConnectedVaultLab :app:assembleOfflineVaultLab \
+ :app:assembleConnectedVaultLabAndroidTest :app:assembleOfflineVaultLabAndroidTest
+gradle -p android --no-daemon :app:assembleConnectedDebug :app:assembleOfflineDebug \
+ :app:assembleConnectedRelease :app:assembleOfflineRelease \
+ :app:lintConnectedDebug :app:lintOfflineDebug
+python3 scripts/check_apk_policy.py --sdk /mnt/c/Android/sdk-linux --include-release
+```
+
+Both ordinary flavors/debug+release passed final APK policy, including no lab DEX,
+backup/TLS/component policy and offline permission isolation. New access code is
+obfuscated as `b.a` in both laboratory mappings; mapping hashes:
+connected `4b715b0ae332ef19f708238389777ecbdbdf6af980991cf7162feda436d94131`,
+offline `97d45014ba51b93b43c895640545d569dd6b3806e0a6b0833b7dec48db818b4b`.
+Warnings about pre-existing deprecated APIs and libsignal stripping were retained;
+no suppression or global keep rule was added.
+
+## Preserved unrelated UI-fixture RED and bounded correction
+
+[UI run 36799170306](https://github.com/DevOps-Solutions-IA/umbra/actions/runs/36799170306)
+failed debug connected at `UiContentIntegrationTest:159`, second positive render
+of a one-second UMBRA_ONLY session; optimized matrix passed. Trace reports
+`RestrictedContentService.Session.timeCheck` EXPIRED. It uses SqliteDeviceRecords,
+not the modified Vault access coordinator. The exact historical trigger remains
+**HISTORICAL_UNCONFIRMED**: the branch combines monotonic expiry, whole-second wall
+expiry, rollback and denied-session state, without timing evidence in that run.
+
+Artifact 11134303948 is preserved, ZIP SHA-256
+`7e431fb4e5f91c184fa602dc18194e0c6e2574730abdad35f77e0ff56b0acd68`.
+Known fixture deficiency: `deadline=floor(wallMillis/1000)+1` permits only roughly
+1..1000 ms before wall expiry, but the test demanded successful rendering from an
+arbitrary starting phase. The test-only correction waits once for the next whole
+second (bounded 1500 ms; jumps/no boundary fail), emits safe phase/elapsed timing,
+and keeps the **one-second** policy, all positive/expiry/export assertions and
+existing waits. No retries, larger session, production content change or UI change.
+A later pass establishes execution of the controlled fixture, not proof of the
+historical exact trigger. That distinction must remain in the final PR receipt.
+
+The follow-up commit contains only this fixture control and documentation; it
+requires its own CI. Final run IDs/statuses are attached to PR #21 after they
+finish, rather than attributing this candidate's green to a later SHA.

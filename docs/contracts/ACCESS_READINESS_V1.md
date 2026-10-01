@@ -188,3 +188,8 @@ optimización y nombres ofuscados y verifica el coordinator en mapping.
 Resultados concretos y limitaciones: ver el addendum de Execution02 en la auditoría
 y el recibo de validación de esta rama. La evidencia emulada no sustituye una
 validación de autenticación hardware ni del producto gráfico combinado.
+
+Una cancelación observada invalida acceso antes de esperar Argon2/SQLite. Mientras
+ese worker aún termina, otro intento puede devolver BUSY aunque el snapshot ya
+muestre CANCELLED/EXPIRED. Esto impide solapar trabajo sensible; no es una nueva
+autorización ni una razón para restaurar el epoch antiguo.
