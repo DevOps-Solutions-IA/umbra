@@ -165,3 +165,53 @@ historical exact trigger. That distinction must remain in the final PR receipt.
 The follow-up commit contains only this fixture control and documentation; it
 requires its own CI. Final run IDs/statuses are attached to PR #21 after they
 finish, rather than attributing this candidate's green to a later SHA.
+
+## Follow-up source validation: e2d23cc
+
+Source candidate `e2d23cce9f5a54bbce0da67625d136fa06976de4`, integration checkout
+`0de7474f37a1e92755e0f5fe2e772943956f3b59`, common tree
+`2a5127e7915fdb3ba6444863583f4a84ea0a4184`.
+Password/access run [36800133063](https://github.com/DevOps-Solutions-IA/umbra/actions/runs/36800133063)
+SUCCESS (debug/R8, both flavors): 17 new cases plus original nine per combination;
+exact-base RED reproduced again, including log hash
+`22fb69c530d5c2877f6d6a25be310c576cc2a7ecf978024bed8104015776da59`.
+
+| Downloaded ZIP | Artifact ID | Verified SHA-256 |
+|---|---|---|
+| Password/access debug | 11136160933 | 533e990506a7186d0125acd3b4292f2b0db48d8ea014fe29ef40556143b2cae4 |
+| Password/access R8 | 11135950287 | 995101b241e56b47336e227b8a2a45619518b4853869a5db73e637d98d2a05ab |
+| UI integration debug | 11135860241 | 5cd6f285ee4fdd24f95adca346f49c97809a39e88b25688f51a3321e6c88b2a6 |
+| UI integration R8 | 11136060209 | cfc360eca5eee5d14dcc4e8c9f432c2354c3aebb1c6d88c575b2ca304e5dc1eb |
+
+[UI run 36800133136](https://github.com/DevOps-Solutions-IA/umbra/actions/runs/36800133136)
+SUCCESS: 35 cases/flavor debug, 32 cases/flavor R8 (existing separate inventories).
+Debug fixture timing shows opening phase 0 ms and positive renders at 76..81 ms.
+All expiry/export assertions remain. This does not establish which historical
+condition caused run 36799170306 to expire; that uncertainty remains preserved.
+
+CI laboratory APK hashes (not ordinary production APKs):
+
+| Flavor/build | SHA-256 |
+|---|---|
+| connected/debug with accessLab | 1f0745d3753f93d73993baed5e7b826cea19f754c9f878255351007a98f59937 |
+| offline/debug with accessLab | 3d6e87e1662b3a6593887412207bb23f1374b6b30c7fd27c11c68b2ec65e1242 |
+| connected/vaultLab R8 | 5e5265e284864e77c69a195171c24b50b34f68f67a34a89fba1ac3b7f58e9cb3 |
+| offline/vaultLab R8 | 3fcb9f86127a647c5381119c74e12164e2dfb714823189bbfe6bb84c270d0fdb |
+
+The R8 AccessSession and PasswordEnvelope mappings and hashes match the earlier
+candidate. No weakening of optimization was needed. Final local inventory checker
+confirmed 413/355 JVM cases; APK/JNI checker confirmed four Signal ABI and offline
+exclusions. Local full-history guard completed: 707 current files, 1,917 reachable
+historical blobs, exit 0. This is a credential-pattern guard, not a security audit.
+
+A documentation inventory check found two external outcomes described semantically
+but missing their literal enum names. The documentation-only follow-up adds
+EXTERNAL_ACTION_REQUIRED and EXTERNAL_CANCELLED; all five enum catalogs now have
+literal coverage. This inspection is not counted as a behavior test.
+
+Superseded candidate c9ce6e1 workflows 36799170249, 36799170294, 36799170225 and
+36799170385 were cancelled by this agent to release their concurrency slots for
+the newer candidate. They are CANCELLED, never PASS; retained job results/logs
+remain historical. No other agent's runs were cancelled. Final-head workflow
+results, checkout/tree and remaining statuses are recorded in PR #21's final
+receipt without rewriting the historical records above.

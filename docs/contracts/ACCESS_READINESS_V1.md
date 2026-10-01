@@ -125,6 +125,8 @@ estados propios de llamadas, contenido o admisión.
 | UNAVAILABLE / BUSY | Otra operación aceptada sigue ejecutándose; pulsar no equivale a aceptación |
 | FAILED / COMMITTED_CLEANUP_FAILED | El cambio SQLite YA fue confirmado y el cierre reportó fallo. No asumir rollback ni repetir automáticamente |
 | AUTHENTICATION_REQUIRED | Se requiere autenticación nueva; no reusar el grant anterior |
+| REQUIRES_USER_ACTION / EXTERNAL_ACTION_REQUIRED | Contexto externo creado; aún requiere la acción real de Android/usuario |
+| CANCELLED / EXTERNAL_CANCELLED | El usuario canceló la acción externa; no se reanuda trabajo sensible |
 
 La operación y el estado actual se mantienen separados: SUCCESS histórico nunca
 concede OPEN después de background/emergencia. El resultado de una operación vieja
