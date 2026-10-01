@@ -26,6 +26,10 @@ public final class PasswordEnvelope {
     private static final int HEADER = 60, MAGIC = 0x554d5057;
     private static final SecureRandom RANDOM = new SecureRandom();
     private PasswordEnvelope() {}
+    /** Internal typed device-key failure only; password and authentication tags remain indistinguishable. */
+    public static final class DeviceKeyFailure extends GeneralSecurityException {
+        private DeviceKeyFailure(java.security.InvalidKeyException cause) { super("Vault device key unavailable", cause); }
+    }
 
     /** Password is exact UTF-8 bytes (no normalization). Caller must erase its input. */
     public static byte[] seal(byte[] password, byte[] dataKey, SecretKey deviceKey, Parameters profile)
@@ -55,13 +59,15 @@ public final class PasswordEnvelope {
             byte[] salt = new byte[16]; in.get(salt);
             byte[] header = Arrays.copyOf(envelope, HEADER);
             // Authenticate metadata with device key before allocating Argon2 memory.
-            inner = decrypt(deviceKey, Arrays.copyOfRange(envelope, HEADER, SIZE), header, "device");
+            try { inner = decrypt(deviceKey, Arrays.copyOfRange(envelope, HEADER, SIZE), header, "device"); }
+            catch (java.security.InvalidKeyException unavailable) { throw new DeviceKeyFailure(unavailable); }
             if (inner.length != 60) throw failure();
             derived = derive(password, salt, profile);
             byte[] key = decrypt(new SecretKeySpec(derived, "AES"), inner, header, "password");
             if (key.length != 32) { erase(key); throw failure(); }
             return key;
-        } catch (GeneralSecurityException | IllegalArgumentException e) { throw failure(); }
+        } catch (DeviceKeyFailure unavailable) { throw unavailable; }
+        catch (GeneralSecurityException | IllegalArgumentException e) { throw failure(); }
         finally { erase(derived); erase(inner); }
     }
     /** Serial KDF bounds concurrent memory. No lowered production/test profile exists. */
@@ -111,7 +117,9 @@ public final class PasswordEnvelope {
         ByteBuffer header = ByteBuffer.wrap(envelope);
         if (header.getInt() != MAGIC || header.getInt() != 1 || header.getInt() != 0x13)
             throw new IllegalArgumentException("Invalid protection format");
-        return new Parameters(header.getInt(), header.getInt(), header.getInt());
+        Parameters profile = new Parameters(header.getInt(), header.getInt(), header.getInt());
+        if (header.getInt() != 32) throw new IllegalArgumentException("Invalid protection format");
+        return profile;
     }
     public static byte[] randomDataKey() { return random(32); }
     private static byte[] random(int length) { byte[] bytes = new byte[length]; RANDOM.nextBytes(bytes); return bytes; }
