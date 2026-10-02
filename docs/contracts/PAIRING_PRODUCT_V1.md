@@ -129,6 +129,13 @@ consentimiento explícito existente. El payload escaneado no elige endpoints.
 Offline conserva parsing/render/file sin añadir INTERNET ni canal de laboratorio.
 [Endpoints, schema y cuotas exactos](../../relay/PAIRING_RENDEZVOUS.md).
 
+Límite de metadata preexistente: AdmissionCredential contiene la clave pública
+Signal y se presenta al relay para autenticación. El courier cifra las tarjetas,
+prekeys y transcripts; no oculta información pública ya revelada por admisión.
+El servidor tampoco recibe las claves privadas. Interpretar la fase11 como
+ocultación adicional de esa clave pública requiere una decisión de contrato de
+admisión; no está implementada ni implícitamente aprobada en esta entrega.
+
 El cliente persiste ciphertext de retry; el courier exige bytes inmutables. El
 invitador valida firmas localmente antes de seleccionar candidato. Código robado
 puede reservar el claim o saturar candidatos: es un límite de disponibilidad, no

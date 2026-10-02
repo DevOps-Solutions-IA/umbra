@@ -84,8 +84,14 @@ public final class PairingRestartFixtureListener extends RunListener {
         if (phase.equals("invite")) {
             assertFalse(locator.exists());
             DeviceVaultPasswordTest fixture = new DeviceVaultPasswordTest(); fixture.before();
-            // Only this fixture's deliberately synthetic placeholder is removed.
-            fixture.vault.transaction(() -> { fixture.vault.remove("meta", "identity"); return null; });
+            // DeviceVaultPasswordTest creates exactly these two synthetic placeholders.
+            // A leftover session with no identity must remain a production rejection.
+            fixture.vault.transaction(() -> {
+                assertTrue("Unexpected synthetic identity fixture", Arrays.equals(new byte[]{1, 2, 3, 4}, fixture.vault.get("meta", "identity")));
+                assertTrue("Unexpected synthetic session fixture", Arrays.equals(new byte[]{9, 8, 7}, fixture.vault.get("session", "ratchet")));
+                fixture.vault.remove("meta", "identity"); fixture.vault.remove("session", "ratchet");
+                return null;
+            });
             File second = new File(context.getCacheDir(), "synthetic-pairing-restart-b-" + UUID.randomUUID() + ".db");
             AccessGate gate = new AccessGate(); gate.unlock();
             Vault b = new Vault(isolated(context, second), gate);

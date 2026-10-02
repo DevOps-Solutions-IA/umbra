@@ -230,3 +230,41 @@ adversariales añadidos al último full. No sumar este corte al full anterior.
 Revisión independiente read-only del diff: sin bloqueante nuevo identificado;
 no equivale a auditoría criptográfica externa. UI/res/manifiestos productivos sin
 cambios. Publicación/CI posteriores deben identificarse por SHA y checkout.
+
+
+### CI roja del candidato 15dc062 y corrección de fixture
+
+HEAD `15dc0623a97cd1b1c4cfdf4bf8cfccced857c278`, árbol
+`409552f5209e9205ffdad177a77daad687c5e5d2`; PR22 draft contra PR21.
+Checkout de integración `e83d0c3ace3197d64e5d4c17bc495bed89bf35ea`
+con el mismo árbol. Personal vault password run37054269798 terminó FAILURE
+(debug y R8). Los cinco DevicePairingPersistenceTest pasaron en ambas matrices.
+El nuevo listener de force-stop falló antes de READY: eliminaba solamente el
+placeholder de identidad creado por DeviceVaultPasswordTest.before, dejando el
+placeholder session/ratchet. Engine.initialized rechazó correctamente una bóveda
+no vacía sin identidad. Ningún force-stop nuevo se acepta como ejecutado en ese run.
+
+Corrección exclusiva de test: verificar bytes exactos de ambos placeholders y
+eliminarlos juntos dentro de la transacción del fixture antes de inicializar las
+dos identidades reales. Si cambia el fixture, falla antes de borrar. Engine y su
+rechazo permanecen intactos. No se borran registros productivos ni se cambian
+permisos/Keystore. Requiere ejecución Android nueva para validar la corrección.
+Artifacts rojos preservados: 11247841670 (R8),11248251918 (debug).
+
+Full JVM local del HEAD15dc062:440connected/382offline, cero failures/errors/skips;
+build VaultLab R8 y test APK de ambos flavors SUCCESS,4m9s. Compilar no prueba
+reinicio Android. Log `/tmp/umbra-pairing-15dc062-local.log`.
+
+Decisión de alcance pendiente: admisión vigente revela la clave pública Signal
+al relay. El courier no revela transcripts ni claves privadas; no puede prometer
+ocultar esa metadata pública sin un cambio incompatible de admisión. Se solicitó
+aclaración al propietario y no se implementó ese cambio.
+
+SHA256 artifacts rojos descargados:
+-11247841670:`f506e089157f98639908cb032b85f944ec5c24a8969f035a678bacc295a17077`.
+-11248251918:`b756c37739c1722bffddaff3d36e661f9e1a2692c3e18bcd071e7b032697031f`.
+
+Diagnóstico local de comandos: intentar tareas compileConnectedDebugAndroidTest
+con `-PumbraVaultLab=true` falló antes de compilar porque esa configuración expone
+el testBuildType VaultLab. Se conservó el log y se corrigieron los nombres de tarea;
+no es un error Java ni se modificaron dependencias para resolverlo.
