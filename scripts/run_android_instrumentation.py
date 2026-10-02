@@ -45,8 +45,9 @@ def main() -> None:
     # sixteen access-readiness/deadline real-Vault domain cases; the opt-in lifecycle harness is a separate lab) + 32 Claude UI
     # methods (UiScreensRenderTest, UiSecurityFlowTest, UiContentIntegrationTest); connected adds capture and
     # two video surface lifecycle methods.
+    # Pairing adds five encrypted SQLite/Argon2 persistence and lifecycle methods per flavor.
     # Exact counts remain fail-closed: adding a class requires updating this contract.
-    expected=118 if args.flavor=='connected' else 115
+    expected=123 if args.flavor=='connected' else 120
     failed = result.returncode != 0 or not re.search(r'^OK \('+str(expected)+r' tests\)$', output, re.MULTILINE)
     failed |= 'INSTRUMENTATION_CODE: -1' not in output
     failed |= bool(re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', output))

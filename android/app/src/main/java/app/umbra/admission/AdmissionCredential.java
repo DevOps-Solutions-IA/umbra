@@ -24,7 +24,7 @@ public record AdmissionCredential(String wire,String realmId,String credentialId
         c.verify(realm); return c;
     }
     public void verify(RealmConfig realm) {
-        if(!realmId.equals(realm.realmId()) || !issuerKeyId.equals(realm.authorityKeyId())) throw AdmissionCodec.invalid();
+        if(!realmId.equals(realm.realmId()) || !issuerKeyId.equals(realm.authorityKeyId())) throw new AdmissionException(AdmissionException.Code.AUTHORITY_MISMATCH);
         AdmissionCodec.verify("credential",wire,realm.authorityPublicKey(),AdmissionCodec.fields("credential",wire,10));
     }
     public void validate(RealmConfig realm,long now) { verify(realm); if(now<notBefore) throw new AdmissionException(AdmissionException.Code.NOT_YET_VALID); if(now>=expiresAt) throw new AdmissionException(AdmissionException.Code.EXPIRED); }

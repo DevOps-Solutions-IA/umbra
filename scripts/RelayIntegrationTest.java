@@ -51,6 +51,11 @@ public final class RelayIntegrationTest {
     public static void main(String[] args) throws Exception {
         String base = args[0]; Path exchange = Path.of(args[1]);
         String[] invitations = Files.readString(exchange.resolve("invitations")).split("\n");
+        if(args.length==4 && args[3].equals("pairing-only")) {
+            PairingRelayIntegration.run(base,invitations,exchange);
+            require(!Files.exists(exchange.resolve("server-failed")),"isolated pairing relay remained healthy");
+            return;
+        }
         MemoryRecords aStore = new MemoryRecords(); EmergencyRecords bStore = new EmergencyRecords();
         Engine alice = new Engine(aStore), bob = new Engine(bStore);
         alice.initialize("Synthetic Alice"); bob.initialize("Synthetic Bob");

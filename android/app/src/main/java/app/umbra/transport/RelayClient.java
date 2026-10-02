@@ -347,4 +347,28 @@ public final class RelayClient implements AutoCloseable {
             transportClosed=true;confirmClosure();
         }
     }
+    // Opaque pairing courier. Existing request() enforces admission and explicit online consent.
+    public JSONObject publishPairingRendezvous(String box,String token,JSONObject body)throws Exception {
+        Wire.uuid(box);return request("POST","/v1/boxes/"+box+"/pairing-rendezvous",token,body);
+    }
+    public JSONObject claimPairingCode(String locator,String token,String requestId)throws Exception {
+        app.umbra.pairing.PairingService.token(locator);app.umbra.pairing.PairingService.token(requestId);
+        return request("POST","/v1/pairing-codes/"+locator+"/claim",token,new JSONObject().put("request_id",requestId));
+    }
+    public JSONObject submitPairingRequest(String id,String token,JSONObject body)throws Exception {
+        app.umbra.pairing.PairingService.token(id);return request("POST","/v1/pairing-rendezvous/"+id+"/requests",token,body);
+    }
+    public JSONObject pairingRequests(String id,String token)throws Exception {
+        app.umbra.pairing.PairingService.token(id);return request("GET","/v1/pairing-rendezvous/"+id+"/requests",token,null);
+    }
+    public JSONObject selectPairingAck(String id,String token,JSONObject body)throws Exception {
+        app.umbra.pairing.PairingService.token(id);return request("POST","/v1/pairing-rendezvous/"+id+"/ack",token,body);
+    }
+    public JSONObject pairingAck(String id,String hash,String token)throws Exception {
+        app.umbra.pairing.PairingService.token(id);Wire.identity(hash);return request("GET","/v1/pairing-rendezvous/"+id+"/requests/"+hash+"/ack",token,null);
+    }
+    public void revokePairingRendezvous(String id,String token)throws Exception {
+        app.umbra.pairing.PairingService.token(id);request("DELETE","/v1/pairing-rendezvous/"+id,token,null);
+    }
+
 }

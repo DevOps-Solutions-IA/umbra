@@ -22,8 +22,9 @@ from .admission_context import revalidate
 from .admission_store import AdmissionStore
 from .admission_http import AdmissionGate, install_admission
 from .maintenance import RetentionHealth, retention_loop
-from .schema import validate_constraints, migrate_admission, ADMISSION_TABLES
+from .schema import validate_constraints, migrate_admission, ADMISSION_TABLES, migrate_rendezvous, RENDEZVOUS_TABLES
 from .pairing import install_pairing
+from .rendezvous import install_rendezvous
 from .devices import install_devices
 
 MAX_BODY = 1_000_000
@@ -88,7 +89,9 @@ class Database:
             conn.execute("CREATE TABLE IF NOT EXISTS device_revocations(box TEXT PRIMARY KEY, cap_hash TEXT NOT NULL, revoked INTEGER NOT NULL, created INTEGER NOT NULL)")
             if conn.execute("PRAGMA user_version").fetchone()[0] < 5:
                 migrate_admission(conn)
-            conn.execute("PRAGMA user_version=5")
+            if conn.execute("PRAGMA user_version").fetchone()[0] < 6:
+                migrate_rendezvous(conn)
+            conn.execute("PRAGMA user_version=6")
 
     @staticmethod
     def validate_schema(conn: sqlite3.Connection) -> None:
@@ -103,7 +106,9 @@ class Database:
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")}
         if version >= 5:
             expected.update(ADMISSION_TABLES)
-        if version not in (0, 1, 2, 3, 4, 5) or not tables <= expected:
+        if version >= 6:
+            expected.update(RENDEZVOUS_TABLES)
+        if version not in (0, 1, 2, 3, 4, 5, 6) or not tables <= expected:
             raise ValueError("Unsupported database schema; explicit migration required")
         if version == 0 and not tables:
             return  # The only path allowed to initialize an empty database.
@@ -145,6 +150,7 @@ class Database:
         db.execute("DELETE FROM acknowledged WHERE expires<=?", (now,))
         db.execute("DELETE FROM invites WHERE expires<=?", (now,))
         db.execute("DELETE FROM pairing_invites WHERE expires<=?", (now,))
+        db.execute("DELETE FROM pairing_rendezvous WHERE expires<=?", (now,))
 
     def issue_invite(self, ttl: int = 3600) -> str:
         import secrets
@@ -281,6 +287,7 @@ def create_app(database_path: str | None = None, *, rate_limit: int = 240,
             raise HTTPException(401, "Unauthorized")
 
     install_pairing(app, db, authorize, validate_token, token_hash)
+    install_rendezvous(app, db, authorize, validate_token, token_hash)
     install_devices(app, db, authorize, validate_token, token_hash)
 
     @app.get("/healthz")

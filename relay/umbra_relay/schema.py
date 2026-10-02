@@ -40,6 +40,35 @@ UNIQUE_KEYS.update({"admission_realm": set(), "admission_requests": {("id",), ("
 ADMISSION_TABLES = {name for name in COLUMNS if name.startswith("admission_")}
 
 
+RENDEZVOUS_TABLES = {"pairing_rendezvous", "pairing_candidates"}
+COLUMNS.update({
+    "pairing_rendezvous": [("id_hash", "TEXT", 0, 1), ("box", "TEXT", 1, 0),
+        ("owner_hash", "TEXT", 1, 0), ("request_hash", "TEXT", 1, 0),
+        ("locator_hash", "TEXT", 0, 0), ("code_hash", "TEXT", 0, 0),
+        ("invite_blob", "TEXT", 0, 0), ("expires", "INTEGER", 1, 0),
+        ("code_claim_hash", "TEXT", 0, 0), ("selected_hash", "TEXT", 0, 0),
+        ("ack_blob", "TEXT", 0, 0), ("revoked", "INTEGER", 1, 0)],
+    "pairing_candidates": [("rendezvous", "TEXT", 1, 1), ("request_hash", "TEXT", 1, 2),
+        ("ack_hash", "TEXT", 1, 0), ("request_blob", "TEXT", 1, 0)],
+})
+UNIQUE_KEYS.update({"pairing_rendezvous": {("id_hash",), ("locator_hash",)},
+                    "pairing_candidates": {("rendezvous", "request_hash")}})
+
+
+def migrate_rendezvous(conn):
+    conn.execute("""CREATE TABLE pairing_rendezvous(
+        id_hash TEXT PRIMARY KEY, box TEXT NOT NULL REFERENCES boxes(id) ON DELETE CASCADE,
+        owner_hash TEXT NOT NULL, request_hash TEXT NOT NULL, locator_hash TEXT UNIQUE,
+        code_hash TEXT, invite_blob TEXT, expires INTEGER NOT NULL, code_claim_hash TEXT,
+        selected_hash TEXT, ack_blob TEXT, revoked INTEGER NOT NULL)""")
+    conn.execute("""CREATE TABLE pairing_candidates(
+        rendezvous TEXT NOT NULL REFERENCES pairing_rendezvous(id_hash) ON DELETE CASCADE,
+        request_hash TEXT NOT NULL, ack_hash TEXT NOT NULL, request_blob TEXT NOT NULL,
+        PRIMARY KEY(rendezvous, request_hash))""")
+    conn.execute("CREATE INDEX rendezvous_expiry ON pairing_rendezvous(expires)")
+    conn.execute("CREATE INDEX rendezvous_box ON pairing_rendezvous(box)")
+
+
 def migrate_admission(conn):
     """Called only after full old schema validation inside the enclosing transaction."""
     conn.execute("CREATE TABLE admission_realm(id INTEGER PRIMARY KEY, config TEXT NOT NULL)")
@@ -74,7 +103,9 @@ def validate_constraints(conn: sqlite3.Connection, tables: set[str], version: in
             raise ValueError("Incompatible database schema uniqueness constraints")
         foreign_keys = [(r["table"], r["from"], r["to"], r["on_update"], r["on_delete"])
                         for r in conn.execute(f'PRAGMA foreign_key_list("{table}")')]
-        expected = [("boxes", "box", "id", "NO ACTION", "CASCADE")] if table in ("messages", "acknowledged", "pairing_invites") else []
+        expected = [("boxes", "box", "id", "NO ACTION", "CASCADE")] if table in ("messages", "acknowledged", "pairing_invites", "pairing_rendezvous") else []
+        if table == "pairing_candidates":
+            expected = [("pairing_rendezvous", "rendezvous", "id_hash", "NO ACTION", "CASCADE")]
         if foreign_keys != expected:
             raise ValueError("Incompatible database schema foreign keys")
     if version >= 2:

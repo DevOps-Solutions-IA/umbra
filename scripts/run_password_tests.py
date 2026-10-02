@@ -68,6 +68,21 @@ def main():
             stdout=stream, stderr=subprocess.STDOUT, timeout=240)
     if not valid_report(readiness_log.read_text(), result.returncode, expected_tests=17):
         raise RuntimeError(f'Access readiness instrumentation did not pass all seventeen cases: {readiness_log}')
+    pairing_log = args.reports / 'pairing-persistence-tests.log'
+    with pairing_log.open('w') as stream:
+        result = subprocess.run([*adb, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
+            'app.umbra.DevicePairingPersistenceTest', package + '.test/androidx.test.runner.AndroidJUnitRunner'],
+            stdout=stream, stderr=subprocess.STDOUT, timeout=180)
+    if not valid_report(pairing_log.read_text(), result.returncode, expected_tests=5):
+        raise RuntimeError(f'Pairing real Vault instrumentation failed: {pairing_log}')
+    evidence['pairingVaultTests'] = 5
+    pairing_restart = ['python', str(ROOT / 'scripts/run_pairing_restart.py'), '--serial', args.serial,
+                       '--flavor', args.flavor, '--log-dir', str(args.reports / 'pairing-restart')]
+    if args.optimized:
+        pairing_restart.append('--optimized')
+    subprocess.run(pairing_restart, check=True, timeout=300)
+    evidence['pairingForceStops'] = 4
+
     evidence['accessReadinessTests'] = 17
     evidence['accessLifecycleHarness'] = 'opt-in nonvisual Activity; AndroidKeyStore laboratory keys'
     command = ['python', str(ROOT / 'scripts/run_password_restart.py'), '--serial', args.serial,
