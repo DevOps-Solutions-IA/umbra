@@ -1101,3 +1101,43 @@ Final local tooling check of the cumulative laboratory corrections:382 tests PAS
 in20.315s. Review confirms no inventory filtering, assertion relaxation or product
 lease change. The estimated310s tail is explicitly inferred across two runs, not
 a measured completion time of the failed suite.
+
+
+### 2026-10-03 — b559 completed, additional admission rejection retained
+
+The b55900e checkpoint finished 11 workflows / 29 jobs: 8 workflows and
+25 jobs SUCCESS, four jobs FAILURE, none pending. The debug video shard-1
+`degraded-network` failure is a MESSAGE_POLL HTTP 403, with
+ADMISSION_UNAVAILABLE and no fresh-challenge header, before final evidence.
+Artifact 11280934391 SHA-256
+`1fc31334da167bffa5d2e0be73dbf4a0a2bcad902175f610f89c786511caf3c4`
+contains the denial and unchanged failing Android exception. Cause remains
+UNCONFIRMED. Neither TURN failure nor invalid cryptography is inferred.
+
+The existing server uses a monotonic challenge-row deadline and subsequently
+checks integer wall-clock validity. A fraction-of-a-second wall-expired but
+monotonic-live window is a source-backed hypothesis, not the demonstrated
+cause of this historical denial. A lab-only observer now calls the same
+AdmissionStore.consume once and rethrows the same AdmissionError. It records
+only bounded closed stage codes and host monotonic observation times; no
+credentials, proofs, identifiers, exception text or traceback objects are
+persisted. For Challenge.validate it observes the original time relation;
+that relation does not prove other bindings or signatures valid. Unknown
+rejections remain OTHER and FAILURE. Production admission is unchanged.
+
+The controlled validation-boundary, same-exception, successful return,
+unknown-failure, retention and snapshot tests pass. This is diagnostic
+coverage, not correction or acceptance of the historical 403. Logs:
+`/tmp/umbra-03b-admission-stage-red.log` (missing observer import),
+`/tmp/umbra-03b-admission-stage-green.log` (three tests PASS).
+The new candidate must obtain its own complete CI; old passes do not count.
+
+Read-only review found two issues in the new observer before publication:
+a failed diagnostic could replace the original rejection, and thread-pool
+recording could race a snapshot. The failing-clock regression first failed;
+the observer now preserves the original rejection, reports diagnosticFailures,
+and copies/updates bounded metadata under a short lock. Five focused tests
+PASS, including concurrent reads. Production admission remains unchanged.
+The mistaken `python scripts/source_policy.py` command exited 2 because that
+file does not exist; the actual `python scripts/check_source_policy.py` passed
+all 13 checks. No missing command is counted as a pass.

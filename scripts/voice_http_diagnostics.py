@@ -118,3 +118,58 @@ class DenialDiagnostics:
     def snapshot(self):
         return {'total': self.total, 'dropped': self.dropped,
                 'statusCounts': dict(self.status_counts), 'responses': [dict(row) for row in self.rows]}
+
+
+class AdmissionRejectionDiagnostics:
+    """Lab-only rejection stage; never retain credentials, proofs or exception text."""
+    def __init__(self, capacity=128, clock=time.monotonic_ns):
+        if type(capacity) is not int or not 1 <= capacity <= 128:
+            raise ValueError('Invalid diagnostic capacity')
+        from collections import deque
+        from threading import Lock
+        self.rows = deque(maxlen=capacity)
+        self.lock = Lock()
+        self.clock = clock
+        self.total = self.dropped = self.diagnostic_failures = 0
+
+    def wrap_consume(self, consume):
+        def observed(*args, **kwargs):
+            from umbra_relay.admission_protocol import AdmissionError, Challenge, ChallengeUnavailable
+            try:
+                return consume(*args, **kwargs)
+            except AdmissionError as rejected:
+                try:
+                    stage = 'OTHER'
+                    if isinstance(rejected, ChallengeUnavailable):
+                        stage = 'CHALLENGE_UNAVAILABLE'
+                    else:
+                        trace = rejected.__traceback__
+                        while trace is not None:
+                            frame = trace.tb_frame
+                            if frame.f_code is Challenge.validate.__code__:
+                                # Original time relation only; does not assert bindings valid.
+                                now, fields = frame.f_locals['now'], frame.f_locals['p']
+                                stage = ('CHALLENGE_NOT_STARTED' if now < int(fields[6]) else
+                                         'CHALLENGE_WALL_EXPIRED' if now >= int(fields[7]) else
+                                         'CHALLENGE_BINDING')
+                            elif frame.f_code is Challenge.verify_proof.__code__:
+                                stage = 'CHALLENGE_PROOF'
+                            trace = trace.tb_next
+                    observed_nanos = self.clock()
+                    with self.lock:
+                        self.total += 1
+                        if len(self.rows) == self.rows.maxlen:
+                            self.dropped += 1
+                        self.rows.append({'stage': stage, 'observedNanos': observed_nanos})
+                except Exception:
+                    # A diagnostic failure is reported but cannot change admission behavior.
+                    with self.lock:
+                        self.diagnostic_failures += 1
+                raise  # Same exception; no retry, response or authorization change.
+        return observed
+
+    def snapshot(self):
+        with self.lock:
+            return {'total': self.total, 'dropped': self.dropped,
+                    'diagnosticFailures': self.diagnostic_failures,
+                    'rejections': [dict(row) for row in self.rows]}

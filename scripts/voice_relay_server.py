@@ -2,7 +2,7 @@
 import argparse
 import json
 from pathlib import Path
-from voice_http_diagnostics import ConnectionDiagnostics, DenialDiagnostics
+from voice_http_diagnostics import ConnectionDiagnostics, DenialDiagnostics, AdmissionRejectionDiagnostics
 
 
 def main():
@@ -17,8 +17,10 @@ def main():
     from uvicorn.protocols.http.h11_impl import H11Protocol
     diagnostic=ConnectionDiagnostics()
     denials=DenialDiagnostics()
+    admission_rejections=AdmissionRejectionDiagnostics()
     def snapshot():
         value=diagnostic.snapshot();value['httpDenials']=denials.snapshot()
+        value['admissionRejections']=admission_rejections.snapshot()
         temporary=args.diagnostics.with_suffix('.tmp')
         temporary.write_text(json.dumps(value,indent=2)+'\n')
         temporary.replace(args.diagnostics)
@@ -49,7 +51,10 @@ def main():
         # No keepalive/HTTP/TLS deadline change. Locked dependencies use h11 already.
         def observed_app():
             from umbra_relay.app import create_app
-            return denials.wrap(create_app())
+            app=create_app()
+            if app.state.admission is not None:
+                app.state.admission.consume=admission_rejections.wrap_consume(app.state.admission.consume)
+            return denials.wrap(app)
         config=uvicorn.Config(observed_app,factory=True,fd=args.fd,workers=1,
                     ssl_certfile=str(args.cert),ssl_keyfile=str(args.key),
                     http=ObservedH11,access_log=False,proxy_headers=False,log_level='warning')
