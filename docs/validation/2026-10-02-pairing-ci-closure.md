@@ -525,3 +525,42 @@ con Engine/CallService/NativeVoiceSession ofuscados; APK
 `010589031b950b441f4d1d42f33eef6486e2836e209ec417951fe3ca8a6226b6`.
 Este control estático no ejecuta media. No se cambian minificación, ofuscación ni
 reglas generales para hacerlo pasar. Las advertencias de dependencias se mantienen.
+
+### 2026-10-03 — aa0ccfe: recibo estricto y asociación Wi-Fi del laboratorio
+
+El candidato aa0ccfe859c006e8d3a2a3f9cc9d85c670733dc3 NO está aceptado.
+Emergency run37112222457 falló en media debug/R8 porque el recibo agregó
+`expiredSnapshotRejections` pero sus validadores de claves exactas no lo reconocían.
+Los cierres nativos observados fueron CLOSED, 43.399864ms/79.041889ms,
+quiet1000ms/observación500ms/callbacks tardíos0. Artifacts11269409884
+SHA256 cb3aea34c2e7c51a0b601b15184741bc4f4853bfe236281ccafc10b0800c4ac7;
+11269834709 SHA256 6f9f10627ea48a85fbf4f60cf63d9cda6e9af093bc19dc2b2fda0a6b7ba63306.
+Modulation debug job111172191977 falló por el mismo rechazo de esquema en lock:
+artifact11270825479 SHA256 4138badc8c08723bf16210a3b822caba378d61395a681743bc0acad33f4b747b.
+Su recibo confirma quiet1000ms/observación500ms/callbacks0/rechazos0.
+No se atribuye este error de validación a captura activa ni se convierte el run en PASS.
+
+La corrección incluye el campo obligatorio, int estricto, cero en cierre normal;
+solo expiración esperada admite rechazos acotados por 140s/100ms del fixture.
+Campos desconocidos, faltantes, bool, negativos y exceso siguen rechazados.
+Regresión sobre recibo real: RED antes/GREEN después; todos los consumidores
+incluido el fixture de emergency_execution se actualizan juntos.
+
+Emergency-lock R8 job111172191931 falló ANTES de connect: durante15001ms no hubo
+red predeterminada. Tras el retorno de cold-activity, Wi-Fi estaba habilitado pero
+sin asociación/IP/ruta; habilitar el radio no seleccionaba el AP virtual propio.
+Artifact11270275450 SHA256 9746963801d73a44bebc7b665f97159028c30766ec2fd02d02a701fcc5277cdd.
+El motivo interno Android de las entradas permanentemente deshabilitadas no está
+confirmado. Se reutiliza restore_startup_wifi, con selección explícita del AP
+propio, los5s existentes de asentamiento y diagnósticos separados cold-restore/.
+No se añade fallback celular, reintento connect, nuevo deadline ni cambio productivo.
+Regresión causal del estado enabled/disconnected: RED1/11, GREEN11/11; este modelo
+no sustituye la asociación Android real pendiente en CI del siguiente SHA.
+
+Validación local: `python -m unittest discover -s scripts/tests -p 'test_*.py'`
+345PASS,14.839s,exit0; repository_guard753archivos, source_policy13checks y
+`git diff --check` exit0. Un comando inicial usó por error scripts/source_policy.py
+(inexistente,exit2); el comando correcto scripts/check_source_policy.py pasó13checks.
+Estos cambios posteriores a aa0ccfe son exclusivamente tooling/tests/documentación.
+AccessGate productivo, duración240s, UI, criptografía y políticas permanecen intactos.
+La CI nueva todavía es necesaria; no se reutiliza el verde previo.

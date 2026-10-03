@@ -4,7 +4,7 @@ import sys
 import unittest
 from unittest.mock import patch, Mock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing, coordinate_mute, processing_barrier, issue_turn_after_selection, require_completed_run, await_expired_turn_timestamp
+from run_voice_integration import valid_audio, valid_report, valid_stop, valid_emergency_stop, valid_impairment, valid_processing, coordinate_mute, processing_barrier, issue_turn_after_selection, require_completed_run, await_expired_turn_timestamp
 import voice_network_evidence as network
 
 class VoiceEvidenceTest(unittest.TestCase):
@@ -34,6 +34,32 @@ class VoiceEvidenceTest(unittest.TestCase):
             for field in good:
                 bad=good.copy();del bad[field];receipt.write_text(json.dumps(bad))
                 with self.assertRaises(RuntimeError):require_completed_run(receipt)
+
+    def test_actual_emergency_receipt_includes_strict_snapshot_counter(self):
+        # Exact nonsecret receipt from aa0ccfe artifact11269409884, emulator5554.
+        good=dict(failedClosed=True,nativeCaptureQuietAfterMillis=1000,
+                  nativeCaptureObservedMillis=500,lateCaptureCallbacks=0,
+                  expiredDeliveriesRejected=0,expiredSnapshotRejections=0,
+                  emergencyState="CLOSED",requestedNanos=122672453510,
+                  invalidatedNanos=122672457167,confirmedNanos=122715853374,
+                  lateVideoCallbacks=0,lastAudioCaptureNanos=122711424586,
+                  lastVideoCaptureNanos=0)
+        self.assertTrue(valid_emergency_stop(good))
+        missing=dict(good);del missing["expiredSnapshotRejections"]
+        self.assertFalse(valid_emergency_stop(missing))
+        for value in (-1,True,1,1401):
+            self.assertFalse(valid_emergency_stop({**good,"expiredSnapshotRejections":value}))
+        self.assertFalse(valid_emergency_stop({**good,"unknown":0}))
+        base={key:good[key] for key in ("failedClosed","nativeCaptureQuietAfterMillis",
+            "nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected",
+            "expiredSnapshotRejections")}
+        for value in (0,1,1400):
+            self.assertTrue(valid_stop({**base,"expiredSnapshotRejections":value},expected_expiry=True))
+        for value in (-1,True,1401):
+            self.assertFalse(valid_stop({**base,"expiredSnapshotRejections":value},expected_expiry=True))
+        missing=dict(base);del missing["expiredSnapshotRejections"]
+        self.assertFalse(valid_stop(missing,expected_expiry=True))
+        self.assertFalse(valid_stop({**base,"unknown":0},expected_expiry=True))
 
     def test_turn_issued_once_only_after_both_selected_engines_request_it(self):
         events=[]
@@ -161,7 +187,7 @@ class VoiceEvidenceTest(unittest.TestCase):
 
     def test_state_flag_does_not_prove_native_capture_stopped(self):
         good={"failedClosed":True,"nativeCaptureQuietAfterMillis":1000,
-              "nativeCaptureObservedMillis":500,"lateCaptureCallbacks":0,"expiredDeliveriesRejected":0}
+              "nativeCaptureObservedMillis":500,"lateCaptureCallbacks":0,"expiredDeliveriesRejected":0,"expiredSnapshotRejections":0}
         self.assertTrue(valid_stop(good))
         self.assertTrue(valid_stop({**good,"expiredDeliveriesRejected":1},expected_expiry=True))
         self.assertFalse(valid_stop({**good,"expiredDeliveriesRejected":1}))

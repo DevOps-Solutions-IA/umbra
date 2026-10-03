@@ -185,7 +185,11 @@ def main():
             # Integrated Claude UI (locked, no device credential): a default-network return and a cold
             # relaunch must not open connections, resolve names or start sensors/scans on their own.
             run('shell','svc','wifi','disable');run('shell','svc','data','disable');time.sleep(2)
-            reset();run('shell','svc','wifi','enable');run('shell','svc','data','enable')
+            reset()
+            # Enabling Wi-Fi alone can leave the owned virtual AP disconnected.
+            # Restore the same Wi-Fi-only topology before observing app silence.
+            cold_restore=args.reports/'cold-restore';cold_restore.mkdir(exist_ok=True)
+            restore_startup_wifi(adb[0],args.serial,cold_restore)
             observe('cold-activity-network-return',dns_log)
             run('shell','am','force-stop',package)
             reset();run('shell','am','start','-W','-n',package+'/app.umbra.ui.MainActivity')

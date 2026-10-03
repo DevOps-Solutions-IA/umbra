@@ -123,17 +123,20 @@ def coordinate_video_stop(serials, processes, deadline, write, read):
 
 
 def valid_stop(report, *, expected_expiry=False):
-    return (set(report)=={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"}
+    # At most one audit rejection per 100ms iteration within the longest 140s fixture.
+    max_snapshot_rejections=140_000//100 if expected_expiry else 0
+    return (set(report)=={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected","expiredSnapshotRejections"}
             and report["failedClosed"] is True
-            and all(type(report[key]) is int for key in ("nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"))
+            and all(type(report[key]) is int for key in ("nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected","expiredSnapshotRejections"))
             and 1000<=report["nativeCaptureQuietAfterMillis"]<=2000
             and 500<=report["nativeCaptureObservedMillis"]<=1500
             and report["lateCaptureCallbacks"]==0
-            and 0<=report["expiredDeliveriesRejected"]<=(1 if expected_expiry else 0))
+            and 0<=report["expiredDeliveriesRejected"]<=(1 if expected_expiry else 0)
+            and 0<=report["expiredSnapshotRejections"]<=max_snapshot_rejections)
 
 
 def valid_emergency_stop(report, *, video=False):
-    base={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"}
+    base={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected","expiredSnapshotRejections"}
     extra={"emergencyState","requestedNanos","invalidatedNanos","confirmedNanos","lateVideoCallbacks","lastAudioCaptureNanos","lastVideoCaptureNanos"}
     return (set(report)==base|extra
             and valid_stop({key:report[key] for key in base})
