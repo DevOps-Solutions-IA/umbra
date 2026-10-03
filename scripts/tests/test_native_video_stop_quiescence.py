@@ -95,6 +95,23 @@ class NativeVideoStopQuiescenceTest(unittest.TestCase):
 ''')
         self.assertEqual(0,result.returncode,result.stderr)
 
+    def test_idle_observation_reports_elapsed_samples_and_safe_busy_frames(self):
+        result=self.run_java(RACE+'''
+ try {
+  long requested=System.nanoTime();
+  var observation=NativeVideoStopQuiescence.await(known.get(),known::get,requested,
+    requested+2_000_000_000L,System::nanoTime,nanos->{
+     release.countDown();check(emitted.await(1,TimeUnit.SECONDS));TimeUnit.NANOSECONDS.sleep(nanos);
+    });
+  check(observation.samples()>=2 && observation.elapsedNanos()>0);
+  check(!observation.lastBusyFrames().isEmpty() && observation.lastBusyFrames().size()<=24);
+  check(!observation.lastBusyFrames().toString().contains("app.umbra.media.Check"));
+  try {observation.lastBusyFrames().add("unsafe");throw new AssertionError("Mutable evidence");}
+  catch(UnsupportedOperationException expected) {}
+ } finally {release.countDown();executor.shutdownNow();executor.awaitTermination(2,TimeUnit.SECONDS);}
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
     def test_busy_worker_expires_at_supplied_scenario_deadline_without_extension(self):
         result=self.run_java(RACE+'''
  try {

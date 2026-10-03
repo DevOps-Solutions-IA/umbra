@@ -8,10 +8,12 @@ final class NativeVideoStopQuiescence {
     private NativeVideoStopQuiescence() {}
     @FunctionalInterface interface Sleeper { void pause(long nanos) throws InterruptedException; }
 
-    static void await(Thread expected, Supplier<Thread> currentWorker, long requestedNanos, long scenarioDeadlineNanos,
+    record Observation(long elapsedNanos,int samples,java.util.List<String> lastBusyFrames) {}
+
+    static Observation await(Thread expected, Supplier<Thread> currentWorker, long requestedNanos, long scenarioDeadlineNanos,
                       LongSupplier clock, Sleeper sleeper) throws InterruptedException {
         if(expected==null || requestedNanos<=0 || scenarioDeadlineNanos<=requestedNanos)throw new AssertionError("Missing native stop worker or request");
-        int observations=0;
+        int observations=0;java.util.List<String> lastBusy=java.util.List.of();
         while(true) {
             long elapsed=clock.getAsLong()-requestedNanos;
             if(elapsed<0 || elapsed>=scenarioDeadlineNanos-requestedNanos)
@@ -26,8 +28,9 @@ final class NativeVideoStopQuiescence {
                 elapsed=clock.getAsLong()-requestedNanos;
                 if(elapsed<0 || elapsed>=scenarioDeadlineNanos-requestedNanos)
                     throw timeout("Native stop idle observation exceeded scenario deadline",expected,elapsed,observations);
-                return;
+                return new Observation(elapsed,observations,lastBusy);
             }
+            lastBusy=safeFrames(stack);
             elapsed=clock.getAsLong()-requestedNanos;
             if(elapsed<0 || elapsed>=scenarioDeadlineNanos-requestedNanos)
                 throw timeout("Native stop worker did not become idle within scenario deadline",expected,elapsed,observations);

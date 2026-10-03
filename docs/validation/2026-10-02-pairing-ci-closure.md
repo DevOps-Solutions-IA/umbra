@@ -810,3 +810,96 @@ por fallo de storage. Debug/R8 de este último cambio8s/24s exit0.
 Build release+lint connected/offline38s y debugAPKs9s exit0. Políticas APK de
 los cuatro binarios PASS, incluidos DEX/mapping y permisos; JNI/empaquetado y
 contador JVM exit0. No ejecución física y aceptación CI acumulativa pendiente.
+
+
+## Candidato4708c0b — diagnóstico exportable de cierres (2026-10-03)
+
+HEAD `4708c0bc497b5afc27d7df98dd5ca601bc4296bc`, árbol
+`ca40023bb8f531729796e7e4a8a490745cc75258`. Checkout de los artefactos
+`c0897404c7e77eb716e72aa2cf6abd5c60f30e92`; equivalencia de árbol pendiente
+hasta consulta Git. Estado consultado:11workflows,29jobs,26SUCCESS,2FAILURE,
+1pendiente; no aceptación final.
+
+Video37136521627 debug0/job111242552549: expired-auth falla la aserción de
+estabilidad terminal después de350ms; el motivo inicial no fue exportado.
+El motivo final `negotiation-timeout` no demuestra retrospectivamente cuál
+campo cambió. También device-revoked falla `Delivery expired` antes de aplicar
+la revocación prevista. Artifact11279287463 SHA256
+`cb538034d4ce5dc67497ad242af03aced295eff32e637225a9b614aa2d5ba302`.
+Debug1/job111242552519: wrong-fingerprint falla con `CallService.Interrupted`
+en la autorización de un control enumerado previamente, antes de iniciar HTTP.
+El diagnóstico final nativo indica `native-certificate-binding`,4357ms.
+Artifact11279003586 SHA256
+`bf08ba2e32c1d236170933457f53978dd304f6fa6f5861a51e9a099197d72a0f`.
+Esto demuestra cancelación que alcanza una entrega pendiente; no fallo de TURN.
+
+La información de caducidad y espera de inventario se escribía en archivos
+privados que el runner no exportaba. Se corrige solamente la observabilidad:
+status de instrumentación con tipos cerrados de control, tiempos monotónicos,
+TTL restante y booleanos, sin IDs, payloads ni secretos. La observación terminal
+incluye estado/motivo inicial y final, contadores cero/no-cero y cierre pendiente,
+completo o excepcional. La espera350ms y todas las aserciones permanecen.
+La espera de quiescencia conserva criterio, periodo50ms y deadline; exporta
+número de muestras y frames de stack mediante allowlist acotada, nunca nombres
+arbitrarios, rutas o thread names. No se declara corregida la causa mediante
+este cambio diagnóstico.
+
+Validación local del diff diagnóstico:370tooling tests,18.355s,exit0;
+9regresiones de quiescencia incluidas. Fuente13controles y repository_guard761,
+exit0; `git diff --check` exit0. Debug androidTest build5s/exit0.
+Un comando inicial combinó debug y mediaLab bajo el flag que deshabilita debug:
+falló antes de compilar por tarea inexistente (exit1); se preserva
+`/tmp/umbra-03b-observability-build.log` y se separan ambas construcciones.
+No cambia AccessGate, TTL, consentimientos, producción, UI ni permisos.
+
+
+Cierre consultado de4708c0b:10/11workflows,27/29jobsSUCCESS,2FAILURE,
+0pendientes. Verify Android sí terminóSUCCESS en su propio SHA; los dos rojos
+son video debug antes descritos. Fetch del checkout c0897404 confirma el mismo
+árbol ca40023b,exit0. Artifact R8shard0/11279652110 SHA256
+`3d6e4d3257d51e74648edad3b24f8cd86897dbd62bcda1b7f648416d5db2cbef`:
+16/16casos PASS y el control focalizado con cliente Android legacy reproduce EOF;
+la conexión propia tuvo idle5.0017s. Tras conectar explícitamente una sesión
+sintética nueva, el transporte corregido reporta `freshSocketVerified=true`.
+El JSON exige además `androidEof=true` y `networkRevoked=true`.
+Esto prueba el mecanismo controlado y el arreglo mínimo de pooling; no identifica
+la conexión de los incidentes históricos. No se subieron capturas brutas.
+
+## Regresión del control pendiente tras rechazo de huella (2026-10-03)
+
+Reproducción con Engine/libsignal real: crear ICE en sesión autorizada,
+comprobar autorización, cancelar la sesión, ejecutar la misma autorización;
+se obtiene exactamente `CallService.Interrupted`. El ciphertext no cambia y no
+se marca upload. El método antiguo de clasificación, exclusivo de expiración,
+relanza ese mismo error: RED/exit1. Clasificador de test nuevo, condicionado a
+wrong-fingerprint+FAILED+native-certificate-binding+cero tres contadores+
+misma sesión+mensaje exacto, acepta únicamente abandonar el pump: GREEN/exit0.
+Los estados del adaptador en esta reproducción JVM son sintéticos; la evidencia
+nativa del motivo viene del artefacto4708c0b, no de este test JVM.
+Comando `python /tmp/umbra-native-rejection-semantic-proof.py`; logs
+`/tmp/umbra-native-rejection-semantic-{red,green}.log`. No petición, retry ni
+transporte exitoso. El helper está exclusivamente en androidTestConnected;
+TraceReferences incorpora solo esa clase de test para el laboratorio R8.
+
+El consumidor retorna a las comprobaciones existentes de350ms, estabilidad
+terminal y contadores cero. No reconoce desconexión, watchdog, expiración,
+identidad cambiada, otro callId ni otro error como esta cancelación.
+`closureObservation` es diagnóstico, no una aserción nueva de disposición
+completa; se mantienen las validaciones de cierre existentes sin sobreafirmar.
+Revisión independiente del diff no encontró un bloqueante nuevo.
+
+Validación acumulativa local:371tooling tests,17.588s,exit0;10tests focalizados
+(clasificación estricta+quiescencia),4.490s,exit0. JVM449connected/388offline,
+0failures/errors/skips, debug androidTest+unit suites build1m46/exit0.
+Offline unit task UP-TO-DATE: se conservan los XML388/0 del árbol productivo
+sin cambios, no se presentan como nueva ejecución física. Construcción R8 de
+observabilidad previa31s/exit0; R8 del helper integrado se registra al terminar.
+AccessGate productivo y pairing productivo no cambian en este diff. Los rojos de
+caducidad y motivo terminal aún requieren la nueva observación nativa: no se
+convierten en PASS ni se incrementan TTL/plazos.
+
+R8 del helper integrado: `assembleConnectedMediaLabAndroidTest` con flag
+`umbraMediaLab=true`,23s/exit0. Repository_guard final764fuentes/exit0;
+source_policy13/exit0;diffcheck/exit0. Ningún archivoUI ni AccessGate cambió
+respecto a95aabb6. La publicación siguiente es candidato en validación, no
+cierre29/29 ni autorización de instalación física.

@@ -40,6 +40,8 @@ public final class VoiceEngineFixtureListener extends RunListener {
     }
     private long nextPoll;
     private int expiredDeliveriesRejected, expiredSnapshotRejections;
+    private boolean wrongFingerprintRejectionExpected;
+    private final AtomicInteger captured=new AtomicInteger(),decoded=new AtomicInteger(),videoCaptured=new AtomicInteger();
     private VideoStopDeliveryGate videoStopGate;
     /** Deliberately bypass the client gate in this test to verify backend default denial from Android. */
     private static void unadmittedRelayDenied(String base) throws Exception {
@@ -77,18 +79,27 @@ public final class VoiceEngineFixtureListener extends RunListener {
             long remainingAtStart=envelope.getLong("expires")-Bytes.now();
             try { relay.sendAuthorized(engine,engine.contact(q.getString("peer")).getJSONObject("card"),envelope); }
             catch(SecurityException rejected) {
+                if(wrongFingerprintRejectionExpected && voice!=null) {
+                    NativeRejectionDeliveryAssertion.check(rejected,true,voice.state().name(),voice.failureStage(),
+                        captured.get(),decoded.get(),videoCaptured.get(),callId,q.optString("callSession"));
+                    // No upload/retry receipt: leave the immutable control rejected and
+                    // return to the mandatory native rejection/capture/closure observation.
+                    return;
+                }
                 if("Delivery expired".equals(rejected.getMessage())) {
                   try {
                     String type=q.optString("callType");
                     boolean known=app.umbra.calls.CallPayload.TYPES.contains(type) || app.umbra.calls.VideoPayload.CONTROLS.contains(type);
-                    write("synthetic-delivery-expiry.json",new JSONObject()
+                    JSONObject diagnostic=new JSONObject()
                         .put("type",known?type:"OTHER").put("generation",q.optInt("callGeneration",-1))
                         .put("remainingSecondsAtStart",remainingAtStart)
                         .put("remainingSecondsAtRejection",envelope.getLong("expires")-Bytes.now())
                         .put("authorizationElapsedNanos",SystemClock.elapsedRealtimeNanos()-deliveryStartedNanos)
                         .put("stopGatePresent",videoStopGate!=null)
                         .put("stopGateReleased",videoStopGate!=null && videoStopGate.released())
-                        .put("isStopControl",videoStopGate!=null && videoStopGate.matchesStop(type,q.optString("callSession"),q.optInt("callGeneration"))));
+                        .put("isStopControl",videoStopGate!=null && videoStopGate.matchesStop(type,q.optString("callSession"),q.optInt("callGeneration")));
+                    Bundle status=new Bundle();status.putString("syntheticDeliveryExpiry",diagnostic.toString());
+                    InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
                   } catch(Exception diagnosticUnavailable) {
                     rejected.addSuppressed(new IllegalStateException("Synthetic delivery expiry diagnostic unavailable"));
                     throw rejected;
@@ -199,6 +210,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
         Files.delete(files.resolve("synthetic-voice-engine.json"));
         boolean caller=configuration.getString("role").equals("A");
         boolean expectedRejection=configuration.optBoolean("expectedRejection");
+        wrongFingerprintRejectionExpected=expectedRejection && configuration.optBoolean("incorrectFingerprint");
         boolean withVideo=configuration.optBoolean("video");
         boolean modulation=configuration.optBoolean("modulation");
         boolean initialModulation=configuration.optBoolean("initialModulation");
@@ -209,7 +221,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
         var managers=TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()); managers.init(trust);
         var tls=SSLContext.getInstance("TLS"); tls.init(null,managers.getTrustManagers(),null);
         HttpsURLConnection.setDefaultSSLSocketFactory(tls.getSocketFactory()); // TEST APK only. Hostname verification unchanged.
-        AtomicInteger decoded=new AtomicInteger(),captured=new AtomicInteger(),modified=new AtomicInteger(),loud=new AtomicInteger(),playbackSamples=new AtomicInteger(),playbackRate=new AtomicInteger();
+        AtomicInteger modified=new AtomicInteger(),loud=new AtomicInteger(),playbackSamples=new AtomicInteger(),playbackRate=new AtomicInteger();
         NativeVoiceSession voice=null;
         TurnExpiryObservation turnExpiryObservation=null;
         Throwable turnFixtureFailure=null;
@@ -288,7 +300,6 @@ public final class VoiceEngineFixtureListener extends RunListener {
             NativeVoiceSession.initialize(context);
             var processingObservation=new java.util.concurrent.atomic.AtomicReference<DecodedAudioWindow>();
             var muteObservation=new java.util.concurrent.atomic.AtomicReference<DecodedAudioWindow>();
-            AtomicInteger videoCaptured=new AtomicInteger();
             var lastAudioCaptureNanos=new java.util.concurrent.atomic.AtomicLong();
             var lastVideoCaptureNanos=new java.util.concurrent.atomic.AtomicLong();
             SyntheticVideoCapturer.Decoded videoDecoded=new SyntheticVideoCapturer.Decoded(caller);
@@ -371,9 +382,20 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     if(!expectedRejection) throw new AssertionError("Native authenticated voice failed before audio: "+voice.failureStage()+"; "+voice.negotiationDiagnostic()+"; captured="+captured.get()+", decoded="+decoded.get());
                     if(captured.get()!=0 || decoded.get()!=0 || videoCaptured.get()!=0) throw new AssertionError("Rejected TURN path captured or decoded audio");
                     String terminalReason=voice.failureStage();
+                    String terminalState=voice.state().name();
                     // Observe actual scheduled teardown/callbacks after the terminal transition.
                     // Cancellation must not rewrite a certificate rejection as a generic tick error.
                     Thread.sleep(350);
+                    Bundle rejectionObservation=new Bundle();
+                    rejectionObservation.putString("syntheticRejectionBefore",terminalState+":"+terminalReason);
+                    rejectionObservation.putString("syntheticRejectionAfter",voice.state().name()+":"+voice.failureStage());
+                    rejectionObservation.putInt("syntheticRejectionCaptured",captured.get());
+                    rejectionObservation.putInt("syntheticRejectionDecoded",decoded.get());
+                    rejectionObservation.putInt("syntheticRejectionVideoCaptured",videoCaptured.get());
+                    var closureObservation=voice.closure().toCompletableFuture();
+                    rejectionObservation.putString("syntheticRejectionClosure",!closureObservation.isDone()?"PENDING":
+                        closureObservation.isCompletedExceptionally()?"INCOMPLETE":"CLOSED");
+                    InstrumentationRegistry.getInstrumentation().sendStatus(0,rejectionObservation);
                     if(voice.state()!=NativeVoiceSession.State.FAILED || !terminalReason.equals(voice.failureStage()) ||
                         captured.get()!=0 || decoded.get()!=0 || videoCaptured.get()!=0)
                         throw new AssertionError("Terminal rejection changed during late-callback observation");
@@ -553,11 +575,13 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         // its genuine scheduler-idle boundary before sealing the inventory.
                         // Inventory settling uses the existing scenario deadline; stage6 still
                         // verifies capture closure against the original request and two seconds.
-                        NativeVideoStopQuiescence.await(nativeWorker.get(),nativeWorker::get,
+                        var idleObservation=NativeVideoStopQuiescence.await(nativeWorker.get(),nativeWorker::get,
                             videoOffRequestedNanos,java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(deadline),SystemClock::elapsedRealtimeNanos,
                             nanos->java.util.concurrent.TimeUnit.NANOSECONDS.sleep(nanos));
-                        write("synthetic-stop-inventory-timing.json",new JSONObject()
-                            .put("elapsedFromLocalStopNanos",SystemClock.elapsedRealtimeNanos()-videoOffRequestedNanos));
+                        Bundle inventoryTiming=new Bundle();inventoryTiming.putLong("syntheticStopInventoryElapsedNanos",SystemClock.elapsedRealtimeNanos()-videoOffRequestedNanos);
+                        inventoryTiming.putInt("syntheticStopIdleSamples",idleObservation.samples());
+                        inventoryTiming.putString("syntheticStopLastBusyFrames",idleObservation.lastBusyFrames().toString());
+                        InstrumentationRegistry.getInstrumentation().sendStatus(0,inventoryTiming);
                         videoStopIssued(engine);
                         videoStage=6;
                     }
