@@ -80,6 +80,48 @@ class VoiceEvidenceTest(unittest.TestCase):
                 issue_turn_after_selection(('A','B'),{'A':object(),'B':object()},123,write,Mock(side_effect=reports),issue)
             issue.assert_not_called();write.assert_not_called()
 
+    def test_video_expiry_uses_remaining_scenario_budget_without_renewal(self):
+        # Native fixture began before selection. The host epoch precedes either
+        # ready receipt, so subtracting ALL elapsed host time is conservative.
+        rows=[{'selectedAndConsented':True,'remainingFixtureMillis':118_000},
+              {'selectedAndConsented':True,'remainingFixtureMillis':117_000}]
+        issued=[]
+        def issue(ttl):issued.append(ttl);return {'synthetic':True}
+        receipt=issue_turn_after_selection(('A','B'),{'A':object(),'B':object()},240,Mock(),
+            Mock(side_effect=rows),issue,expiry_started=100,clock=Mock(side_effect=[103,103.1,104,104.1]))
+        self.assertEqual([103,102],issued)
+        # Observed initial video + STOP coordination + allowed25s renegotiation
+        # can legitimately exceed60s; each credential is still issued exactly once.
+        self.assertGreater(min(issued),38+23+25)
+        self.assertEqual(10_000,receipt['closureReserveMillis'])
+        self.assertLessEqual(issued[0]*1000+3000+10_000,117_000)
+
+    def test_video_expiry_respects_earlier_host_deadline(self):
+        rows=[{'selectedAndConsented':True,'remainingFixtureMillis':118_000}]*2
+        issue=Mock(return_value={'synthetic':True})
+        issue_turn_after_selection(('A','B'),{'A':object(),'B':object()},130,Mock(),
+            Mock(side_effect=rows),issue,expiry_started=100,clock=lambda:103)
+        self.assertEqual([16,16],[call.args[0] for call in issue.call_args_list])
+
+    def test_video_expiry_rejects_slow_or_backwards_issuance_without_delivery(self):
+        for end in (104.001,102):
+            rows=[{'selectedAndConsented':True,'remainingFixtureMillis':118_000}]*2
+            issue=Mock(return_value={'synthetic':True});write=Mock()
+            with self.assertRaises(RuntimeError):
+                issue_turn_after_selection(('A','B'),{'A':object(),'B':object()},240,write,
+                    Mock(side_effect=rows),issue,expiry_started=100,clock=Mock(side_effect=[103,end]))
+            self.assertEqual(1,issue.call_count)
+            write.assert_not_called()
+
+    def test_video_expiry_cannot_extend_deadline_or_ignore_invalid_remaining(self):
+        for remaining in (True,0,-1,120_001,10_000):
+            issue=Mock()
+            rows=[{'selectedAndConsented':True,'remainingFixtureMillis':remaining}]*2
+            with self.assertRaises(RuntimeError):
+                issue_turn_after_selection(('A','B'),{'A':object(),'B':object()},140,Mock(),
+                    Mock(side_effect=rows),issue,expiry_started=100,clock=lambda:103)
+            issue.assert_not_called()
+
     def test_modulation_needs_decoded_output_and_positive_observation_windows(self):
         good=dict(natural=0,modified=80,loud=80,settleMillis=1300,observedMillis=2000,videoFrames=10,step=0,metrics=[200]*34)
         self.assertTrue(valid_processing(good,"modified",video=True))

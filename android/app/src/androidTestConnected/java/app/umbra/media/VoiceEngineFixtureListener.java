@@ -253,7 +253,9 @@ public final class VoiceEngineFixtureListener extends RunListener {
             if(id==null) throw new AssertionError("No authenticated call invitation");
             var consent=engine.calls().reviewMedia(id,REVISION);
             var lease=engine.calls().prepareMedia(consent,true);
-            write("synthetic-voice-turn-ready.json",new JSONObject().put("selectedAndConsented",true));
+            JSONObject turnReady=new JSONObject().put("selectedAndConsented",true);
+            if(configuration.optBoolean("credentialExpiryAfterVideo"))turnReady.put("remainingFixtureMillis",deadline-SystemClock.elapsedRealtime());
+            write("synthetic-voice-turn-ready.json",turnReady);
             // Keep delivering SELECT to the other endpoint while the host waits
             // for both Engines. No ADM/PeerConnection exists before this barrier.
             while(!Files.exists(files.resolve("synthetic-voice-turn.json"))) {

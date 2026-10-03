@@ -712,3 +712,42 @@ porque aún interceptaba la API anterior (intentaba ejecutar synthetic-adb).
 Se actualiza únicamente ese doble al punto de llamada real, manteniendo todas
 las aserciones y añadiendo comprobación explícita de timeout300s. El test del
 lector sí ejecuta subprocesos reales, preserva exit no-cero y timeout como fallo.
+
+### 2026-10-03 — a2867e5 final y presupuesto de expiración sintética
+
+HEAD a2867e5347b9fcd3f17d187ded2159af1fc5746e terminó9/11 workflows,
+26/29jobsSUCCESS,3FAIL,0pending. Verify AndroidSUCCESS; no se reutiliza como
+aceptación de un SHA posterior. Focuseddebug credential-expiry falló durante
+la preparación previa a la acción de expiración: ambos extremos habían probado
+video y STOP; la credencial de60s caducó antes de completar la renegociación.
+Artifact11273081807 SHA25639d7345c8d91bab8fe89dda78219a2be6283f2e4153ca35d8f56ba58d45cc3c8.
+Video debugshard1 falló también credential-expiry. Debugshard0 falló
+device-revoked antes de revocar, con Delivery expired; causa todavía en análisis.
+Artifact11273302291 SHA2560eee849dbfd050e6f892b1f5dd4926d6847acd0a0921a64e1599c59e6cc0aa16.
+
+La sonda AndroidR8 reprodujo el mecanismo EOF controlado: artifact11272618614
+SHA2562dff140f8d227c4e1ef2e8ae30d29b263c0f6bc12268fc07c1090ebc914f63a2,
+http-idle-probe.json REPRODUCED, androidEof=true, networkRevoked=true; cierre
+idle del socket propio5.000481868s después de respuesta. Esto confirma el
+mecanismo, NO identifica retroactivamente el socket de los fallos históricos.
+
+Corrección exclusivamente laboratorio credential-expiry con video: ambos
+Engines informan presupuesto restante después de selección/consentimiento.
+El emisor limita TTL por el mínimo conservador entre esos plazos nativos y el
+deadline absoluto host140s. Resta10s para cierre y1s para emisión; emite una
+vez por extremo, falla si emisión tarda más de1s o el reloj retrocede, sin retry
+ni renovación. Los deadlines nativos120s y productivos permanecen intactos.
+La reserva10s se refiere al expiry absoluto emitido; su observación nativa puede
+ocurrir menos de1s después por resolución del timestamp. Una escritura demorada
+no garantiza entrega antes del expiry: la validación nativa sigue rechazando
+credenciales caducadas. Casos de audio mantienen su TTL sintético30s.
+
+Regresión previa de helper: keyword no implementado produjo2errores; primer
+GREEN encontró import math ausente, corregido conservando ambos logs. Revisión
+adversarial detectó hostdeadline no incluido; corregido antes de publicar.
+Tests focalizados22PASS y tooling completo367PASS16.785s. Debuginstrumentación
+51tasks(6ejecutados)8s exit0; R8instrumentación80tasks(9ejecutados)24s exit0.
+El intento inicial de build desde directorio incorrecto no encontró task;
+se conserva /tmp/umbra-03b-expiry-budget-build.log y no se cuenta comoPASS.
+Repository/source guards y diff --check exit0. CI del siguiente SHA pendiente.
+No instalación física, UI ni cambio de AccessGate productivo.

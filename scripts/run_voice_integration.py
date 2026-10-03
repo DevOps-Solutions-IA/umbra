@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -31,17 +32,42 @@ def await_expired_turn_timestamp(expires, *, clock=time.time, monotonic=time.mon
         sleep(0.1)
 
 
-def issue_turn_after_selection(serials, processes, deadline, write, read, issue):
+def issue_turn_after_selection(serials, processes, deadline, write, read, issue, *, expiry_started=None, clock=time.monotonic):
     """Issue once, after both real Engines authorize their selected media device.
 
     Bootstrap/enrollment time must not consume the short credential-expiry test
     interval. This does not extend, renew or replace a credential in use.
     """
+    remaining=[]
     for serial in serials:
-        if read(serial,"synthetic-voice-turn-ready.json",processes[serial],deadline)!={"selectedAndConsented":True}:
+        ready=read(serial,"synthetic-voice-turn-ready.json",processes[serial],deadline)
+        if expiry_started is not None:
+            if (set(ready)!={'selectedAndConsented','remainingFixtureMillis'} or ready['selectedAndConsented'] is not True
+                    or type(ready['remainingFixtureMillis']) is not int or not 0<ready['remainingFixtureMillis']<=120_000):
+                raise RuntimeError('Missing remaining native video expiry budget')
+            remaining.append(ready['remainingFixtureMillis'])
+        elif ready!={"selectedAndConsented":True}:
             raise RuntimeError("TURN requested before selected media authorization")
+    issued=[]
     for serial in serials:
-        write(serial,"synthetic-voice-turn.json",issue())
+        if expiry_started is None:
+            value=issue()
+        else:
+            now=clock()
+            elapsed=math.ceil((now-expiry_started)*1000)
+            # Both native receipts were generated AFTER this host epoch. Subtracting
+            # its full elapsed interval overestimates their age; never extends a lease.
+            budget=min(min(remaining)-elapsed,math.floor((deadline-now)*1000))
+            ttl=(budget-10_000-1_000)//1000
+            if elapsed<0 or not 1<=ttl<=109:raise RuntimeError('No bounded TURN expiry observation budget remains')
+            value=issue(ttl)
+            issuance=clock()-now
+            if not 0<=issuance<=1:raise RuntimeError('TURN issuance exceeded bounded expiry preparation interval')
+            issued.append({'ttlSeconds':ttl,'hostElapsedMillis':elapsed,'issuanceMillis':math.ceil(issuance*1000)})
+        write(serial,"synthetic-voice-turn.json",value)
+    if expiry_started is not None:
+        return {'nativeRemainingMillis':remaining,'closureReserveMillis':10_000,'issuanceAllowanceMillis':1_000,'issued':issued,
+                'scope':'synthetic credential expiry inside unchanged native120s/host140s video deadlines'}
 
 
 def valid_impairment(value):
@@ -331,8 +357,8 @@ def main():
                     if direct_probe(serial,(args.a,args.b)[1-index],peer):
                         raise RuntimeError("Direct UDP route blocking was not demonstrated")
             clients_started=time.monotonic()
-            def issue_turn():
-                credentials=turn.credentials((60 if args.video else 30) if args.scenario=="credential-expiry" else 180)
+            def issue_turn(expiry_ttl=None):
+                credentials=turn.credentials(expiry_ttl if expiry_ttl is not None else (30 if args.scenario=="credential-expiry" else 180))
                 if args.scenario=="expired-auth":
                     credentials=turn.credentials(1)
                     await_expired_turn_timestamp(credentials["expires"])
@@ -344,7 +370,7 @@ def main():
                 return credentials
             for index,serial in enumerate((args.a,args.b)):
                 write(serial,"synthetic-voice-engine.json",{"stopVideoRace":args.scenario=="video-stop-race","initialModulation":args.modulated_start,"modulation":args.modulation,"video":args.video and args.scenario!="camera-denied","cameraDenied":args.scenario=="camera-denied","receiveOnlyCallee":args.scenario=="receive-only","incorrectFingerprint":args.scenario=="wrong-fingerprint","expectedRejection":rejection,"role":"A" if index==0 else "B","base":relay["base"],
-                    "httpIdleProbe":args.http_idle_probe and index==0,"admissionRevocationCheck":admission_revocation_check,"admissionRealm":relay["admission"].realm.encode(),"certificate":relay["certificate"],"invitation":relay["invitations"][index]})
+                    "credentialExpiryAfterVideo":args.video and args.scenario=="credential-expiry","httpIdleProbe":args.http_idle_probe and index==0,"admissionRevocationCheck":admission_revocation_check,"admissionRealm":relay["admission"].realm.encode(),"certificate":relay["certificate"],"invitation":relay["invitations"][index]})
                 stream=(args.reports/("engine-voice-a.log" if index==0 else "engine-voice-b.log")).open("w")
                 streams.append(stream)
                 processes[serial]=subprocess.Popen([adb,"-s",serial,"shell","am","instrument","-w","-r",
@@ -371,8 +397,10 @@ def main():
             write(args.a,"synthetic-voice-peer.json",b); write(args.b,"synthetic-voice-peer.json",a)
             for serial in (args.a,args.b):
                 if read(serial,"synthetic-voice-ready.json",processes[serial],deadline)!={"ready":True}: raise RuntimeError("Identity preparation failed")
+            expiry_started=time.monotonic() if args.video and args.scenario=='credential-expiry' else None
             for serial in (args.a,args.b): write(serial,"synthetic-voice-start.json",{"consent":True})
-            issue_turn_after_selection((args.a,args.b),processes,deadline,write,read,issue_turn)
+            expiry_budget=issue_turn_after_selection((args.a,args.b),processes,deadline,write,read,issue_turn,expiry_started=expiry_started)
+            if expiry_budget is not None:(args.reports/'turn-expiry-budget.json').write_text(json.dumps(expiry_budget,indent=2)+'\n')
             initial_processing=[]
             if args.modulated_start:
                 initial_processing=[read(serial,"synthetic-voice-initial-processing.json",processes[serial],deadline) for serial in (args.a,args.b)]
