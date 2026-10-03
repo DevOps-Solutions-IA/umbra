@@ -791,3 +791,22 @@ El primer intento HTTPS usó un classpath diagnóstico con directorios y fue
 rechazado antes de compilar; repetición con el classpath exacto resuelto del
 proyecto pasó, conservando ambos logs. Comparación del control negativo con su
 blob de origen: iguales tras retirar únicamente rename y comentario de procedencia.
+
+### 2026-10-03 — focalizadas del presupuesto y cierre de diagnósticos
+
+683b598e0c70aec668cca9ba57db98c7c49c7e92: Focused media regressions
+run37134770337SUCCESS. Tres credential-expiry por debug y tres por R8,
+con recibos completos/capturaFINALIZED revisados; emisión única98s por extremo,
+1ms observado para emitir, budgets nativos114861–116390ms, sin renovar.
+Artifact11278223935 SHA25652f01bd159ebc07b4c3dd7c953b5022df9e32f98fd7124d24a3eb8a9baa65e0e;
+R8artifact11277728927 SHA2566887ec5001b2c63d7c5274fdc816026430d2dd0433463727a8affb93082e3d26.
+Esto valida esas seis ejecuciones del fix; no identifica por sí solo la causa
+de otras carreras ni acepta un SHA posterior.
+
+Una segunda revisión del diagnóstico exige fallar también si no puede escribirse:
+se adjunta fallo fijo suprimido y se relanza el mismo rechazo original ANTES de
+cualquier rama de expiración esperada. No se permite PASS sin ese diagnóstico
+por fallo de storage. Debug/R8 de este último cambio8s/24s exit0.
+Build release+lint connected/offline38s y debugAPKs9s exit0. Políticas APK de
+los cuatro binarios PASS, incluidos DEX/mapping y permisos; JNI/empaquetado y
+contador JVM exit0. No ejecución física y aceptación CI acumulativa pendiente.

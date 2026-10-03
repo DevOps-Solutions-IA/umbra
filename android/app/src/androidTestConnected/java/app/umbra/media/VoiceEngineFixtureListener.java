@@ -91,6 +91,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         .put("isStopControl",videoStopGate!=null && videoStopGate.matchesStop(type,q.optString("callSession"),q.optInt("callGeneration"))));
                   } catch(Exception diagnosticUnavailable) {
                     rejected.addSuppressed(new IllegalStateException("Synthetic delivery expiry diagnostic unavailable"));
+                    throw rejected;
                   }
                 }
                 // Cancellation can occur after outbox enumeration and before the transport guard.
