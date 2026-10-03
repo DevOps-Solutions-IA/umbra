@@ -92,3 +92,23 @@ class DenialDiagnosticsTest(unittest.IsolatedAsyncioTestCase):
                 serialized=json.dumps(value)
                 for forbidden in ('123456789','secret','fresh-challenge','x-umbra'):
                     self.assertNotIn(forbidden,serialized)
+
+    async def test_actual_message_put_and_exact_bad_request_categories(self):
+        from voice_http_diagnostics import DenialDiagnostics
+        import json
+        for detail, expected in (("Invalid expiry", "INVALID_EXPIRY"),
+                                 ("Message id mismatch", "MESSAGE_ID_MISMATCH")):
+            with self.subTest(detail=detail):
+                d=DenialDiagnostics()
+                await self.response(d,400,json.dumps({"detail":detail}).encode(),method="PUT")
+                row=d.snapshot()["responses"][0]
+                self.assertEqual("MESSAGE_SEND",row["route"])
+                self.assertEqual(expected,row["denial"])
+                self.assertNotIn("secret",json.dumps(d.snapshot()))
+
+    async def test_nonexistent_collection_post_is_not_message_send(self):
+        from voice_http_diagnostics import DenialDiagnostics
+        d=DenialDiagnostics()
+        await self.response(d,405,b'{"detail":"Method Not Allowed"}',
+                            path="/v1/boxes/secret-box/messages",method="POST")
+        self.assertEqual("OTHER",d.snapshot()["responses"][0]["route"])

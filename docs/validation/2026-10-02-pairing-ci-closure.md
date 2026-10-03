@@ -903,3 +903,76 @@ R8 del helper integrado: `assembleConnectedMediaLabAndroidTest` con flag
 source_policy13/exit0;diffcheck/exit0. Ningún archivoUI ni AccessGate cambió
 respecto a95aabb6. La publicación siguiente es candidato en validación, no
 cierre29/29 ni autorización de instalación física.
+
+## 2026-10-03 — final 7063b41 receipt and bounded observability correction
+
+Candidate `7063b414453026598639ecaeb0d2437dad25d367`, tree
+`77ac9ea85e4faae7f7ca2f19d8f7e1a6e109f8a3`: 11 workflows/29 jobs,
+8 workflows/26 jobs SUCCESS, 3 jobs FAILURE, no pending. This supersedes the
+intermediate observation that all video shards passed; debug shard 1 completed
+later with a failure. Historical reds are retained, not accepted as green.
+
+* Verify run 37139669744, Android job 111252296272: build, JVM and Android
+  instrumentation passed before the two-AVD audio scenario failed waiting for
+  resumed decoded audio after mute. Initial decoded audio and quiet mute barriers
+  had already passed. B reported 143 decoded buffers, native failureStage=none,
+  TURN not expired. These observations do not prove microphone/decoder failure
+  or establish why post-unmute audio did not meet the unchanged threshold/deadline.
+  Artifact 11280437509 SHA-256
+  `a067a797e4bc87af1f56835714eb90b4e59bcf8b949ddaf42965599b3b38aab7`.
+* Focused run 37139669648, debug video job 111251305152: credential-expiry-3
+  failed HTTP 400 after STOP inventory settling took 27,966,348,661 ns on A
+  and 5,381,701,156 ns on B. Both had positive decoded audio/video first.
+  Artifact 11280172130 SHA-256
+  `3c4642c9e22477d72ddd68163cc2ed5be225cccc99aa65c6eac1e88d61150012`.
+* Video run 37139669640, debug shard 1 job 111251305056: storage-failure B
+  rejected an invalid STOP envelope set before storage-failure injection. Its
+  settling took 40,867,472,417 ns/793 samples; A took 5,964,578,573 ns/112 samples.
+  Artifact 11280263113 SHA-256
+  `c145cbdabc1cac0914f6ba5810ee0225de32ba8dead3db1577a2b0c0bfda829b`.
+  Engine.outbox filters TTL-expired controls; expiry alone does not delete them.
+  Missing initial inventory/expiry observations prevent definitive attribution.
+
+Proven lab diagnostic defect: DenialDiagnostics classified actual PUT message
+item paths as OTHER and the nonexistent POST collection route as MESSAGE_SEND.
+It also lacked the exact two message PUT HTTP-400 categories: Invalid expiry and
+Message id mismatch. New tests first failed (7 tests, 3 assertion failures), then
+passed after the fixed closed-category mapping. ASGI delivery remains transparent;
+unknown/oversized/extra-field responses remain OTHER, with no raw details retained.
+Commands: `python -m unittest discover -s scripts/tests -p test_voice_http_diagnostics.py -v`.
+Preserved local logs: `/tmp/umbra-03b-http-denial-{red,green}.log`.
+
+Audio failure diagnostics now distinguish API return from native queued execution:
+initial/mute/quiet/resume booleans, counter baseline/delta, native state, processing
+state, admission to transmission, monotonic phase times and deadline reached.
+The existing final assertion still fails. No 70-second scenario deadline or 50
+post-unmute decoded-buffer requirement changes. STOP diagnostics read raw synthetic
+Records in a transaction (no Engine.outbox maintenance), exporting only count,
+expired count and monotonic time before/after settling. No IDs, payloads, SDP,
+passwords, credentials, PCM or transport addresses are exported.
+
+Independent controlled executor experiment confirms global executor-idle is stronger
+than completion of a pre-STOP producer: unrelated work can block observation after
+that producer finished. This is a laboratory design finding, not proof of the
+historical Android workload. No fence/TTL/production scheduling change is made here;
+additional actual-CI observability is required before choosing the correction.
+
+Production AccessGate blob remains `14973c4e3626f39c8c21e1334db563c4a8bbdd9c`.
+No production files, Pairing semantics, admission, UI, policy or cryptography change
+in this checkpoint. No physical installation/execution. CONTRACT_CHANGE_REQUIRED=NO.
+These diagnostic changes do not close the three media failures.
+
+Local validation of this diagnostic checkpoint: tooling 375 tests PASS in 17.599s
+(includes two new source-inspection guards; those are not Android behavior tests).
+The earlier tool run failed one source guard because a new Bundle variable reused
+`diagnostic` before the audio callback; the diagnostic variable was scoped/named
+`inventory` and the existing assertion remained unchanged. Red log preserved at
+`/tmp/umbra-03b-denial-diagnostic-tooling-final.log`.
+Connected debug test APK rebuilt successfully in 2s. Initial combined relevant JVM
+command passed with both unit test tasks UP-TO-DATE (unchanged production/test-JVM
+sources); it is not a newly executed 449/388 behavioral run. R8 media-lab build and
+its instrumentation APK are compiled locally; runtime requires Actions/KVM.
+Repository guard 765 source files PASS; 13 source policies PASS; diff --check PASS.
+A first read/patch command used the android directory with a root-relative path
+and failed FileNotFoundError before writing; corrected with absolute path. It did
+not alter a different worktree or suppress a failed validation.

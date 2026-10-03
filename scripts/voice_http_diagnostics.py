@@ -45,6 +45,8 @@ class DenialDiagnostics:
                'Unauthorized': 'CAPABILITY_UNAUTHORIZED',
                'Storage temporarily unavailable': 'STORAGE_UNAVAILABLE',
                'Invalid request schema': 'INVALID_SCHEMA',
+               'Invalid expiry': 'INVALID_EXPIRY',
+               'Message id mismatch': 'MESSAGE_ID_MISMATCH',
                'Invalid or expired invitation': 'INVITATION_UNAVAILABLE',
                'Mailbox quota exceeded': 'MAILBOX_QUOTA',
                'Mailbox retention quota exceeded': 'MAILBOX_RETENTION_QUOTA'}
@@ -64,10 +66,10 @@ class DenialDiagnostics:
         path, method = scope.get('path', ''), scope.get('method', '')
         if path == '/v1/admission/challenge-batch' and method == 'POST':
             return 'ADMISSION_BATCH'
-        if re.fullmatch(r'/v1/boxes/[^/]+/messages/[^/]+', path) and method == 'DELETE':
-            return 'MESSAGE_ACK'
+        if re.fullmatch(r'/v1/boxes/[^/]+/messages/[^/]+', path):
+            return {'DELETE': 'MESSAGE_ACK', 'PUT': 'MESSAGE_SEND'}.get(method, 'OTHER')
         if re.fullmatch(r'/v1/boxes/[^/]+/messages', path):
-            return {'GET': 'MESSAGE_POLL', 'POST': 'MESSAGE_SEND'}.get(method, 'OTHER')
+            return {'GET': 'MESSAGE_POLL'}.get(method, 'OTHER')
         return 'OTHER'
 
     def wrap(self, app):

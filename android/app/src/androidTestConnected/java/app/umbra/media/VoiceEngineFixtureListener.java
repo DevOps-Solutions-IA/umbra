@@ -132,12 +132,33 @@ public final class VoiceEngineFixtureListener extends RunListener {
         for(int i=0;i<values.length();i++)ids.add(values.getString(i));
         return ids;
     }
+    /** Raw synthetic records only: no Engine.outbox maintenance or authorization mutation. */
+    private void stopInventoryDiagnostic(SqliteDeviceRecords db,Engine engine,String prefix) throws Exception {
+        int[] values=db.transaction(()->{
+            int count=0,expired=0;long now=Bytes.now();
+            for(String key:db.keys("outbox")) {
+                JSONObject queued=engine.get("outbox",key);
+                if(!videoStopGate.matchesStop(queued.optString("callType"),queued.optString("callSession"),queued.optInt("callGeneration")))continue;
+                count++;
+                if(queued.getJSONObject("envelope").getLong("expires")<=now)expired++;
+            }
+            return new int[]{count,expired};
+        });
+        Bundle inventory=new Bundle();inventory.putInt(prefix+"Count",values[0]);
+        inventory.putInt(prefix+"ExpiredCount",values[1]);
+        inventory.putLong(prefix+"ObservedNanos",SystemClock.elapsedRealtimeNanos());
+        InstrumentationRegistry.getInstrumentation().sendStatus(0,inventory);
+    }
     private void videoStopIssued(Engine engine) throws Exception {
         var stopEnvelopeIds=new ArrayList<String>();
         for(JSONObject queued:engine.outbox()) {
             if(!videoStopGate.matchesStop(queued.optString("callType"),queued.optString("callSession"),queued.optInt("callGeneration")))continue;
             stopEnvelopeIds.add(queued.getJSONObject("envelope").getString("id"));
         }
+        Bundle inventory=new Bundle();inventory.putInt("syntheticStopInventoryCount",stopEnvelopeIds.size());
+        inventory.putInt("syntheticStopInventoryGeneration",videoStopGate.generation());
+        inventory.putLong("syntheticStopInventoryElapsedMillis",SystemClock.elapsedRealtime());
+        InstrumentationRegistry.getInstrumentation().sendStatus(0,inventory);
         videoStopGate.issued(stopEnvelopeIds);
         write("synthetic-voice-video-stop-issued.json",new JSONObject().put("issued",true)
             .put("generation",videoStopGate.generation()).put("stopNonce",videoStopGate.nonce())
@@ -365,7 +386,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
             boolean cameraDeniedChecked=false,cameraDeniedEvidence=false;int cameraDeniedBaseline=0;
             int processingStep=0;
             long processingAt=0;String processingExpected="",processingDiagnostic="";
-            int resumeBaseline=0;
+            int resumeBaseline=0;long audioReadyAt=0,muteAppliedAt=0,muteObservedAt=0,resumeAppliedAt=0;
             while(SystemClock.elapsedRealtime()<deadline) {
                 boolean expiryExpected=evidence &&
                     Files.exists(files.resolve("synthetic-voice-loss.json")) &&
@@ -493,10 +514,10 @@ public final class VoiceEngineFixtureListener extends RunListener {
                 }
                 if(!evidence && (!initialModulation || initialNatural) && decoded.get()>=100 && captured.get()>=100 && voice.receivedAudioPackets()>=50 && voice.state()==NativeVoiceSession.State.ACTIVE) {
                     auditNativeDescriptions(engine.calls().session(id),credential.getJSONArray("urls").getString(0),credential.optString("relayAddress"));
-                    write("synthetic-voice-audio.json",new JSONObject().put("sdpAddressAudit",true).put("decodedBuffers",decoded.get()).put("capturedBuffers",captured.get()).put("verifiedNativeTransport",true).put("receivedAudioPackets",voice.receivedAudioPackets()).put("codec",voice.audioCodec()).put("nativeRelayProtocol",voice.nativeRelayProtocol())); evidence=true;
+                    write("synthetic-voice-audio.json",new JSONObject().put("sdpAddressAudit",true).put("decodedBuffers",decoded.get()).put("capturedBuffers",captured.get()).put("verifiedNativeTransport",true).put("receivedAudioPackets",voice.receivedAudioPackets()).put("codec",voice.audioCodec()).put("nativeRelayProtocol",voice.nativeRelayProtocol())); evidence=true;audioReadyAt=SystemClock.elapsedRealtime();
                 }
                 if(evidence && !muting && Files.exists(files.resolve("synthetic-voice-mute.json"))) {
-                    voice.mute(true); muting=true;
+                    voice.mute(true); muting=true;muteAppliedAt=SystemClock.elapsedRealtime();
                     write("synthetic-voice-mute-applied.json",new JSONObject().put("applied",true).put("elapsedMillis",SystemClock.elapsedRealtime()));
                 }
                 if(muting && !mutedEvidence && Files.exists(files.resolve("synthetic-voice-mute-observe.json"))) {
@@ -508,11 +529,11 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         int tones=observation.natural();
                         if(tones>3) throw new AssertionError("Decoded peer tone continued after both native mute confirmations: tones="+tones+", observedMillis="+observation.observedMillis());
                         write("synthetic-voice-muted.json",new JSONObject().put("quiet",true).put("observedMillis",observation.observedMillis()).put("decodedTones",tones));mutedEvidence=true;
-                        muteObservation.set(null);
+                        muteObservation.set(null);muteObservedAt=SystemClock.elapsedRealtime();
                     }
                 }
                 if(mutedEvidence && !resuming && Files.exists(files.resolve("synthetic-voice-resume.json"))) {
-                    voice.mute(false);resuming=true;resumeBaseline=decoded.get();
+                    voice.mute(false);resuming=true;resumeBaseline=decoded.get();resumeAppliedAt=SystemClock.elapsedRealtime();
                 }
                 if(resuming && !resumedEvidence && decoded.get()-resumeBaseline>=50) {
                     write("synthetic-voice-resumed.json",new JSONObject().put("decodedAfterUnmute",decoded.get()-resumeBaseline));resumedEvidence=true;
@@ -570,6 +591,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                             if(voice.state()!=NativeVoiceSession.State.ACTIVE)throw new AssertionError("Video-only cancellation terminated authorized audio: "+voice.failureStage());
                         } else {videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();}
                         videoOffAt=SystemClock.elapsedRealtime();videoCaptureBaseline=videoCaptured.get();videoAudioBaseline=decoded.get();
+                        stopInventoryDiagnostic(db,engine,"syntheticStopImmediate");
                         // A native worker may already hold a CONFIRMED snapshot and emit
                         // another authorized STOP after the foreground transaction. Observe
                         // its genuine scheduler-idle boundary before sealing the inventory.
@@ -582,6 +604,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         inventoryTiming.putInt("syntheticStopIdleSamples",idleObservation.samples());
                         inventoryTiming.putString("syntheticStopLastBusyFrames",idleObservation.lastBusyFrames().toString());
                         InstrumentationRegistry.getInstrumentation().sendStatus(0,inventoryTiming);
+                        stopInventoryDiagnostic(db,engine,"syntheticStopSettled");
                         videoStopIssued(engine);
                         videoStage=6;
                     }
@@ -720,7 +743,36 @@ public final class VoiceEngineFixtureListener extends RunListener {
                 throw videoEvidenceFailure;
             }
             if(modulation && processingStep!=10)throw new AssertionError("Incomplete remote modulation sequence");
-            if(!evidence || (!expectedRejection && !resumedEvidence)) throw new AssertionError("Missing native audio or mute/unmute evidence");
+            if(!evidence || (!expectedRejection && !resumedEvidence)) {
+                var audioFailure=new AssertionError("Missing native audio or mute/unmute evidence");
+                try {
+                    Bundle diagnostic=new Bundle();
+                    diagnostic.putBoolean("audioInitialEvidence",evidence);
+                    diagnostic.putBoolean("audioMuteApiReturned",muting);
+                    diagnostic.putBoolean("audioMuteObserved",mutedEvidence);
+                    diagnostic.putBoolean("audioResumeApiReturned",resuming);
+                    diagnostic.putBoolean("audioResumeObserved",resumedEvidence);
+                    diagnostic.putInt("audioResumeBaseline",resumeBaseline);
+                    diagnostic.putInt("audioDecodedAfterResume",decoded.get()-resumeBaseline);
+                    diagnostic.putInt("audioCapturedTotal",captured.get());
+                    diagnostic.putInt("audioDecodedTotal",decoded.get());
+                    diagnostic.putInt("audioLoudTotal",loud.get());
+                    diagnostic.putLong("audioReceivedPackets",voice.receivedAudioPackets());
+                    diagnostic.putString("audioNativeState",voice.state().name());
+                    diagnostic.putString("audioProcessingState",voice.modulationStatus());
+                    diagnostic.putBoolean("audioTransmitAllowed",voice.transmitVoiceAllowed());
+                    diagnostic.putLong("audioReadyElapsedMillis",audioReadyAt==0?-1:audioReadyAt-fixtureStarted);
+                    diagnostic.putLong("audioMuteElapsedMillis",muteAppliedAt==0?-1:muteAppliedAt-fixtureStarted);
+                    diagnostic.putLong("audioQuietElapsedMillis",muteObservedAt==0?-1:muteObservedAt-fixtureStarted);
+                    diagnostic.putLong("audioResumeElapsedMillis",resumeAppliedAt==0?-1:resumeAppliedAt-fixtureStarted);
+                    diagnostic.putLong("audioFailureElapsedMillis",SystemClock.elapsedRealtime()-fixtureStarted);
+                    diagnostic.putBoolean("audioDeadlineReached",SystemClock.elapsedRealtime()>=deadline);
+                    InstrumentationRegistry.getInstrumentation().sendStatus(0,diagnostic);
+                } catch(RuntimeException unavailable) {
+                    audioFailure.addSuppressed(new IllegalStateException("Fixed audio failure diagnostic unavailable"));
+                }
+                throw audioFailure;
+            }
             voice.close(); finishTransport(relay,engine,voice,localLockApplied,localTrustRemoved,peer,savedProfile);
             if(configuration.optBoolean("admissionRevocationCheck")) {
                 // Media is already closed. Test actual AVD -> HTTPS authorization independently
