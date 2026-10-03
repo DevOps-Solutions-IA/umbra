@@ -31,6 +31,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y tcpdump
+      - name: Install pinned relay primitives used by laboratory diagnostics tests
+        run: python -m pip install --require-hashes -r relay/requirements-hashed.lock
       - name: Handoff tooling tests (not Android tests)
         run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
   relay-and-core:

@@ -1141,3 +1141,18 @@ PASS, including concurrent reads. Production admission remains unchanged.
 The mistaken `python scripts/source_policy.py` command exited 2 because that
 file does not exist; the actual `python scripts/check_source_policy.py` passed
 all 13 checks. No missing command is counted as a pass.
+
+
+### 2026-10-03 — db3051a repository-guard dependency setup failure
+
+Own run 37145605720 repository-guard job 111268777706 failed importing
+`nacl` for the new real admission diagnostic tests. Dependent Android,
+relay/core and relay-container jobs did not execute; they are not counted as
+behavioral failures or passes. Other workflows continue; none were cancelled.
+A new clean virtual environment reproduced ModuleNotFoundError, exit 1.
+Installing the existing relay/requirements-hashed.lock with --require-hashes
+made all five focused tests pass, exit 0. No dependency version or hash was
+changed. The guard job now installs that exact lock before its unchanged
+unittest discovery, rather than skipping the tests or simulating primitives.
+Logs: /tmp/umbra-03b-clean-tooling-{red,green}.log and
+/tmp/umbra-03b-clean-tooling-install.log. The historical failed CI remains.
