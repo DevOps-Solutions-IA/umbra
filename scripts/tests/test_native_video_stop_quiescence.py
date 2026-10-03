@@ -57,7 +57,7 @@ class NativeVideoStopQuiescenceTest(unittest.TestCase):
         result=self.run_java(RACE+'''
  try {
   long requested=System.nanoTime();int[] pauses={0};
-  NativeVideoStopQuiescence.await(known.get(),known::get,requested,System::nanoTime,nanos->{
+  NativeVideoStopQuiescence.await(known.get(),known::get,requested,requested+2_000_000_000L,System::nanoTime,nanos->{
    pauses[0]++;release.countDown();check(emitted.await(1,TimeUnit.SECONDS));TimeUnit.NANOSECONDS.sleep(nanos);
   });
   check(pauses[0]>0 && ids.equals(List.of("foreground-stop","async-stop")));
@@ -68,26 +68,43 @@ class NativeVideoStopQuiescenceTest(unittest.TestCase):
 ''')
         self.assertEqual(0,result.returncode,result.stderr)
 
+    def test_valid_capture_can_precede_control_idle_after_two_seconds(self):
+        result=self.run_java(RACE+'''
+ try {
+  long requested=1L, deadline=10_000_000_001L;
+  check(VideoStopDeliveryGate.withinBounds(requested,100_000_001L,900_000_001L,1_500_000_001L));
+  long[] clock={1_900_000_001L};
+  NativeVideoStopQuiescence.await(known.get(),known::get,requested,deadline,()->clock[0],nanos->{
+   clock[0]+=nanos;
+   if(clock[0]>=2_100_000_001L){release.countDown();check(emitted.await(1,TimeUnit.SECONDS));Thread.sleep(10);}
+  });
+  check(clock[0]>=2_100_000_001L && clock[0]<deadline && ids.size()==2);
+  // Inventory settling never authorizes a late native capture closure.
+  check(!VideoStopDeliveryGate.withinBounds(requested,100_000_001L,900_000_001L,2_000_000_002L));
+ } finally {release.countDown();executor.shutdownNow();executor.awaitTermination(2,TimeUnit.SECONDS);}
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
     def test_wrong_or_dead_worker_fails_without_sleep(self):
         result=self.run_java('''
  var dead=new Thread(()->{});dead.start();dead.join();
  for(Thread worker:new Thread[]{null,dead,Thread.currentThread()}) {
-  reject(()->{try {NativeVideoStopQuiescence.await(worker,()->dead,1,()->2,
+  reject(()->{try {NativeVideoStopQuiescence.await(worker,()->dead,1,2_000_000_001L,()->2,
    nanos->{throw new AssertionError("Unexpected sleep");});}catch(InterruptedException e){throw new AssertionError(e);}});
  }
 ''')
         self.assertEqual(0,result.returncode,result.stderr)
 
-    def test_busy_worker_expires_at_original_request_budget_without_extension(self):
+    def test_busy_worker_expires_at_supplied_scenario_deadline_without_extension(self):
         result=self.run_java(RACE+'''
  try {
   long[] clock={1_000_000_001L};int[] pauses={0};
   try {
-   NativeVideoStopQuiescence.await(known.get(),known::get,1L,()->clock[0],nanos->{
+   NativeVideoStopQuiescence.await(known.get(),known::get,1L,2_000_000_001L,()->clock[0],nanos->{
     check(nanos==50_000_000L);clock[0]+=nanos;pauses[0]++;
    });
    throw new AssertionError("Busy worker accepted");
-  } catch(AssertionError expected) {check(expected.getMessage().contains("closure budget"));}
+  } catch(AssertionError expected) {check(expected.getMessage().contains("scenario deadline"));}
   check(clock[0]==2_000_000_001L && pauses[0]==20 && ids.equals(List.of("foreground-stop")));
  } finally {release.countDown();executor.shutdownNow();executor.awaitTermination(2,TimeUnit.SECONDS);}
 ''')
@@ -98,12 +115,12 @@ class NativeVideoStopQuiescenceTest(unittest.TestCase):
  try {
   known.get().setName("synthetic-private-thread-name");
   try {
-   NativeVideoStopQuiescence.await(known.get(),known::get,1L,()->2_000_000_001L,
+   NativeVideoStopQuiescence.await(known.get(),known::get,1L,2_000_000_001L,()->2_000_000_001L,
     nanos->{throw new AssertionError("Budget must not extend");});
    throw new AssertionError("Timeout accepted");
   } catch(AssertionError failure) {
    String message=failure.getMessage();
-   check(message.startsWith("Native stop worker did not become idle within closure budget"));
+   check(message.startsWith("Native stop worker did not become idle within scenario deadline"));
    check(message.contains("elapsedNanos=2000000000") && message.contains("observations=0"));
    check(message.contains("threadState=") && message.contains("frames="));
    check(!message.contains("synthetic-private-thread-name") && !message.contains(".java:") && !message.contains("/"));

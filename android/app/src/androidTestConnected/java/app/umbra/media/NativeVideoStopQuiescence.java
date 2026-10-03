@@ -8,14 +8,14 @@ final class NativeVideoStopQuiescence {
     private NativeVideoStopQuiescence() {}
     @FunctionalInterface interface Sleeper { void pause(long nanos) throws InterruptedException; }
 
-    static void await(Thread expected, Supplier<Thread> currentWorker, long requestedNanos,
+    static void await(Thread expected, Supplier<Thread> currentWorker, long requestedNanos, long scenarioDeadlineNanos,
                       LongSupplier clock, Sleeper sleeper) throws InterruptedException {
-        if(expected==null || requestedNanos<=0)throw new AssertionError("Missing native stop worker or request");
+        if(expected==null || requestedNanos<=0 || scenarioDeadlineNanos<=requestedNanos)throw new AssertionError("Missing native stop worker or request");
         int observations=0;
         while(true) {
             long elapsed=clock.getAsLong()-requestedNanos;
-            if(elapsed<0 || elapsed>=2_000_000_000L)
-                throw timeout("Native stop worker did not become idle within closure budget",expected,elapsed,observations);
+            if(elapsed<0 || elapsed>=scenarioDeadlineNanos-requestedNanos)
+                throw timeout("Native stop worker did not become idle within scenario deadline",expected,elapsed,observations);
             if(currentWorker.get()!=expected || !expected.isAlive())
                 throw new AssertionError("Native stop worker identity changed or exited");
             Thread.State state=expected.getState();
@@ -24,14 +24,14 @@ final class NativeVideoStopQuiescence {
                 if(currentWorker.get()!=expected || !expected.isAlive())
                     throw new AssertionError("Native stop worker identity changed or exited");
                 elapsed=clock.getAsLong()-requestedNanos;
-                if(elapsed<0 || elapsed>=2_000_000_000L)
-                    throw timeout("Native stop idle observation exceeded closure budget",expected,elapsed,observations);
+                if(elapsed<0 || elapsed>=scenarioDeadlineNanos-requestedNanos)
+                    throw timeout("Native stop idle observation exceeded scenario deadline",expected,elapsed,observations);
                 return;
             }
             elapsed=clock.getAsLong()-requestedNanos;
-            if(elapsed<0 || elapsed>=2_000_000_000L)
-                throw timeout("Native stop worker did not become idle within closure budget",expected,elapsed,observations);
-            sleeper.pause(Math.min(50_000_000L,2_000_000_000L-elapsed));
+            if(elapsed<0 || elapsed>=scenarioDeadlineNanos-requestedNanos)
+                throw timeout("Native stop worker did not become idle within scenario deadline",expected,elapsed,observations);
+            sleeper.pause(Math.min(50_000_000L,scenarioDeadlineNanos-requestedNanos-elapsed));
         }
     }
 

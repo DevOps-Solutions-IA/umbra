@@ -589,3 +589,37 @@ Resumen SHA256 66c6c0db186e6bc62c46d627b03578121d28d5214f32c85e9fd9af238e780139.
 Optimized turn-loss también: artifact11271195632 SHA256
 744a44a7c7b0fa27c6ac2f9f4391fc2581735e9ef3179ebe32e172d6ae98f0c3.
 La corrección acepta esos recibos válidos; no convierte sus ejecuciones rojas en PASS.
+
+### 2026-10-03 — distinguir inventario de controles y cierre de captura
+
+6d7b64b modulation debug job111176750442 vuelve a fallar en video. El diagnóstico
+nuevo registra elapsed2000355823ns,35observaciones y worker RUNNABLE dentro de
+SqliteDeviceRecords.transaction/CallService.MediaLease.snapshot. Artifact11270292793
+SHA256 4ebbc8ecde4cf9784ffda2076ecc9d90c4eec06a454c2b38a69e9d5c3ddb4584.
+Esto demuestra trabajo de autorización al muestrear, NO cierre de captura tardío
+ni un bucle permanente. El presupuesto añadido al arnés confundía inventario de
+controles en el executor con liberación de cámara en el watchdog independiente.
+
+Modelo causal RED: captura invalidada100ms/último callback900ms/cierre1.5s,
+control pendiente hasta2.1s antes del deadline original10s. El helper anterior
+rechaza un cierre válido. RED SHA256
+0285fa66fed059656afa07b1ed0935417a3eec6791cb544a27a251db0bcf30c0;
+GREEN8tests SHA256 c4578c21070769b1341ab158dc2bda2a9c5e010a22a5b1cde309295fd29ccb42.
+
+Corrección SOLO fixture: el inventario espera hasta el deadline absoluto ya
+existente del escenario, sin reiniciarlo/extenderlo. Sigue exigiendo identidad del
+worker, scheduler realmente idle y todos los STOP autenticados; no acepta un
+control tardío fuera del inventario. La aceptación posterior de captura conserva
+el reloj original: invalidación<=500ms,último callback<=1.5s,cierre<=2s. El test
+nuevo prueba que cierre>2s sigue fallando. No se amplían límites multimedia ni
+presupuesto total del escenario; no se toca producción.
+
+Tooling348PASS15.715s, debug+instrumentación1s(6/69),R8+instrumentación16s(9/80),
+exit0. La reproducción controlada no reemplaza los escenarios Android pendientes
+sobre el siguiente SHA. El fallo e32 sin diagnóstico suficiente se conserva;
+no se afirma que toda intermitencia histórica comparta necesariamente esta causa.
+Focused debug6d job111176739602 también falla ANTES de la barrera stop-issued:
+video-stop-race-1(A):2.000186691s/26observaciones;credential-expiry-3(B):
+2.000454785s/36observaciones. Ambos RUNNABLE en transacción SQLite; el segundo
+no llegó a provocar expiry. Artifact11270444418 SHA256
+e7e1e8a120dedf75726ae49114a0ea66cd7e5cd31c2ff5a965c6db2efdb7274a.

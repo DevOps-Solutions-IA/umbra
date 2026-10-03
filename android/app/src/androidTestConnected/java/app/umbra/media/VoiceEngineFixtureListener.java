@@ -509,9 +509,10 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         // A native worker may already hold a CONFIRMED snapshot and emit
                         // another authorized STOP after the foreground transaction. Observe
                         // its genuine scheduler-idle boundary before sealing the inventory.
-                        // Retain the original request clock and two-second closure budget.
+                        // Inventory settling uses the existing scenario deadline; stage6 still
+                        // verifies capture closure against the original request and two seconds.
                         NativeVideoStopQuiescence.await(nativeWorker.get(),nativeWorker::get,
-                            videoOffRequestedNanos,SystemClock::elapsedRealtimeNanos,
+                            videoOffRequestedNanos,java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(deadline),SystemClock::elapsedRealtimeNanos,
                             nanos->java.util.concurrent.TimeUnit.NANOSECONDS.sleep(nanos));
                         videoStopIssued(engine);
                         videoStage=6;
