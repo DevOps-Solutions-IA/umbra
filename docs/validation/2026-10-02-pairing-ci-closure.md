@@ -213,3 +213,22 @@ GREEN:23tests, SHA256
 `757be69c09e1978552f53b9bc92e79526218d7eff039c626c7dbcd7f32b5bf34`.
 Los pipes reales prueban lectura acotada y preservación de datagrama; los dobles
 prueban rechazo de socket/PID ajeno y ausencia de envío. No son aceptación de red.
+
+## 2026-10-03 — presupuesto acumulativo Verify, no timeout de prueba
+
+Verify37100252917 del HEADbd10e64/checkout478d619deebb2cbece38e9a5e2baa7676a3fa9ef
+terminó CANCELLED. GitHub annotation: `The job has exceeded the maximum execution
+time of 40m0s`. Artifact11266258054 SHA256
+`2d84b4272185ed57914b179c5b644678798c376b8d68c12392fc0c8f899475f6`.
+Connected123PASS(289.198s),offline120PASS(279.716s). El log termina los15casos
+nativos, RFCOMM positivo/negativo en ambos flavors, y `PASS finalized network
+evidence for 15 scenarios` a06:21:14.554Z. Hashes empieza06:21:14.575Z y se
+cancela06:21:16.122Z. Job iniciado05:41:10Z: controles terminados a40m04s.
+Build/JVM/lint8m12s, paso de dispositivos29m44s; no hay test colgado demostrado.
+
+Se cambia exclusivamente el presupuesto GLOBAL del job Android40→45min:
+aproximadamente4m56s adicionales tras la duración observada para hashes, subida
+y variación del runner. No cambia timeout de una prueba, duración productiva,
+aserción, inventario ni número de jobs. Mover hashes antes no elimina el exceso
+acumulativo; dividir el job alteraría el inventario solicitado. La cancelación
+histórica permanece sin aprobar. Un nuevo HEAD requiere CI propia completa.
