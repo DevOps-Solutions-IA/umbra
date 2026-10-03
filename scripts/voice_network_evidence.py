@@ -6,11 +6,16 @@ about IPv6, physical devices, arbitrary TCP media or unobserved platforms.
 import ipaddress
 from pathlib import Path
 import subprocess
+import json
+from pcap_integrity import sanitized_tcpdump_diagnostic
 
 
 def count(path: Path, expression: str, since: float = 0, until: float = float("inf")) -> int:
     result = subprocess.run(["tcpdump", "-tt", "-nn", "-q", "-r", str(path), expression],
-                            capture_output=True, text=True, check=True, timeout=30)
+                            capture_output=True, text=True, check=False, timeout=30)
+    if result.returncode != 0:
+        diagnostic = {'exitCode': result.returncode, **sanitized_tcpdump_diagnostic(result.stderr)}
+        raise RuntimeError('PCAP parser failed: ' + json.dumps(diagnostic, sort_keys=True))
     return sum(since <= float(line.split()[0]) <= until for line in result.stdout.splitlines() if line.strip())
 
 

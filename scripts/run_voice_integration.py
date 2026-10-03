@@ -3,16 +3,14 @@
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
 import subprocess
 import time
-import tempfile
 import ipaddress
-import shutil
 import shlex
-from voice_network_evidence import summarize, summarize_tls, summarize_ipv6_turn, count
 from turn_lab import TurnLab, docker
 from voice_relay_lab import voice_relay
 from android_apk_install import ensure_apk
@@ -34,17 +32,42 @@ def await_expired_turn_timestamp(expires, *, clock=time.time, monotonic=time.mon
         sleep(0.1)
 
 
-def issue_turn_after_selection(serials, processes, deadline, write, read, issue):
+def issue_turn_after_selection(serials, processes, deadline, write, read, issue, *, expiry_started=None, clock=time.monotonic):
     """Issue once, after both real Engines authorize their selected media device.
 
     Bootstrap/enrollment time must not consume the short credential-expiry test
     interval. This does not extend, renew or replace a credential in use.
     """
+    remaining=[]
     for serial in serials:
-        if read(serial,"synthetic-voice-turn-ready.json",processes[serial],deadline)!={"selectedAndConsented":True}:
+        ready=read(serial,"synthetic-voice-turn-ready.json",processes[serial],deadline)
+        if expiry_started is not None:
+            if (set(ready)!={'selectedAndConsented','remainingFixtureMillis'} or ready['selectedAndConsented'] is not True
+                    or type(ready['remainingFixtureMillis']) is not int or not 0<ready['remainingFixtureMillis']<=120_000):
+                raise RuntimeError('Missing remaining native video expiry budget')
+            remaining.append(ready['remainingFixtureMillis'])
+        elif ready!={"selectedAndConsented":True}:
             raise RuntimeError("TURN requested before selected media authorization")
+    issued=[]
     for serial in serials:
-        write(serial,"synthetic-voice-turn.json",issue())
+        if expiry_started is None:
+            value=issue()
+        else:
+            now=clock()
+            elapsed=math.ceil((now-expiry_started)*1000)
+            # Both native receipts were generated AFTER this host epoch. Subtracting
+            # its full elapsed interval overestimates their age; never extends a lease.
+            budget=min(min(remaining)-elapsed,math.floor((deadline-now)*1000))
+            ttl=(budget-10_000-1_000)//1000
+            if elapsed<0 or not 1<=ttl<=109:raise RuntimeError('No bounded TURN expiry observation budget remains')
+            value=issue(ttl)
+            issuance=clock()-now
+            if not 0<=issuance<=1:raise RuntimeError('TURN issuance exceeded bounded expiry preparation interval')
+            issued.append({'ttlSeconds':ttl,'hostElapsedMillis':elapsed,'issuanceMillis':math.ceil(issuance*1000)})
+        write(serial,"synthetic-voice-turn.json",value)
+    if expiry_started is not None:
+        return {'nativeRemainingMillis':remaining,'closureReserveMillis':10_000,'issuanceAllowanceMillis':1_000,'issued':issued,
+                'scope':'synthetic credential expiry inside unchanged native120s/host140s video deadlines'}
 
 
 def valid_impairment(value):
@@ -91,18 +114,55 @@ def coordinate_mute(serials, processes, deadline, write, read):
     return {"applied":applied,"observed":observed}
 
 
+
+def coordinate_video_stop(serials, processes, deadline, write, read):
+    """Release immutable VIDEO_STOP only after both local stop calls returned.
+
+    This is fixture coordination, not a production transport exception. A local
+    capture stop never waits for the other endpoint or for this host barrier.
+    """
+    if len(serials)!=2 or len(set(serials))!=2:
+        raise RuntimeError("Video stop requires two independent fixture endpoints")
+    uuid_pattern=r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    def valid_ids(values):
+        return (isinstance(values,list) and 1<=len(values)<=128
+                and all(isinstance(v,str) and re.fullmatch(uuid_pattern,v) for v in values)
+                and len(set(values))==len(values))
+    issued=[]
+    for serial in serials:
+        value=read(serial,"synthetic-voice-video-stop-issued.json",processes[serial],deadline)
+        if (not isinstance(value,dict) or set(value)!={"issued","generation","stopNonce","stopEnvelopeIds"}
+                or value["issued"] is not True or type(value["generation"]) is not int
+                or value["generation"]!=2 or not isinstance(value["stopNonce"],str)
+                or not valid_ids(value["stopEnvelopeIds"])
+                or re.fullmatch(uuid_pattern,value["stopNonce"]) is None):
+            raise RuntimeError("Missing or stale local video stop confirmation")
+        issued.append(value)
+    if (issued[0]["stopNonce"]==issued[1]["stopNonce"]
+            or set(issued[0]["stopEnvelopeIds"]) & set(issued[1]["stopEnvelopeIds"])):
+        raise RuntimeError("Video stop confirmations reused an endpoint nonce or envelope")
+    for index,(serial,value) in enumerate(zip(serials,issued)):
+        write(serial,"synthetic-voice-video-stop-release.json",{
+            "release":True,"generation":value["generation"],"stopNonce":value["stopNonce"],
+            "peerStopIds":issued[1-index]["stopEnvelopeIds"]})
+    return {"bothLocalStopsIssued":True,"generation":2,"endpoints":2}
+
+
 def valid_stop(report, *, expected_expiry=False):
-    return (set(report)=={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"}
+    # At most one audit rejection per 100ms iteration within the longest 140s fixture.
+    max_snapshot_rejections=140_000//100 if expected_expiry else 0
+    return (set(report)=={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected","expiredSnapshotRejections"}
             and report["failedClosed"] is True
-            and all(type(report[key]) is int for key in ("nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"))
+            and all(type(report[key]) is int for key in ("nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected","expiredSnapshotRejections"))
             and 1000<=report["nativeCaptureQuietAfterMillis"]<=2000
             and 500<=report["nativeCaptureObservedMillis"]<=1500
             and report["lateCaptureCallbacks"]==0
-            and 0<=report["expiredDeliveriesRejected"]<=(1 if expected_expiry else 0))
+            and 0<=report["expiredDeliveriesRejected"]<=(1 if expected_expiry else 0)
+            and 0<=report["expiredSnapshotRejections"]<=max_snapshot_rejections)
 
 
 def valid_emergency_stop(report, *, video=False):
-    base={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"}
+    base={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected","expiredSnapshotRejections"}
     extra={"emergencyState","requestedNanos","invalidatedNanos","confirmedNanos","lateVideoCallbacks","lastAudioCaptureNanos","lastVideoCaptureNanos"}
     return (set(report)==base|extra
             and valid_stop({key:report[key] for key in base})
@@ -152,8 +212,15 @@ def main():
     parser.add_argument("--modulation",action="store_true",help="Prove remote local-voice modulation with real native capture/Opus, never a preview")
     parser.add_argument("--video",action="store_true",help="Require decoded remote synthetic images, video off with audio, and freshly consented reactivation")
     parser.add_argument("--optimized",action="store_true",help="Run the isolated non-debuggable R8 mediaLab APK on rooted AOSP AVDs")
+    parser.add_argument("--http-idle-probe",action="store_true",help="Require a controlled Android pooled TLS EOF before media setup")
     parser.add_argument("--scenario",choices=("audio","expired-auth","allocation-expiry","invalid-auth","unreachable","turn-loss","trust-loss","lock","emergency-lock","credential-expiry","direct-blocked","force-stop","permission-revoked","device-revoked","storage-failure","unauthorized-redirect","wrong-fingerprint","receive-only","degraded-network","camera-denied","camera-permission-revoked","video-stop-race"),default="audio")
     args=parser.parse_args()
+    if args.http_idle_probe and (not args.optimized or args.scenario!='expired-auth'):
+        parser.error('The bounded HTTP probe belongs only to the initial R8 focused expired-auth setup')
+    capture_owner_pid = int(os.environ.get("UMBRA_CAPTURE_OWNER_PID", "0"))
+    if capture_owner_pid <= 1 or os.environ.get("UMBRA_FINALIZED_CAPTURE") != "1":
+        raise RuntimeError("Media acceptance requires the explicit CI capture owner")
+    os.kill(capture_owner_pid, 0)
     if (args.reports/"voice-evidence.json").exists():
         raise RuntimeError("Use a new media report directory; previous evidence must be preserved")
     if args.turn_ipv6 and args.scenario in ("unauthorized-redirect","unreachable"):
@@ -226,7 +293,7 @@ def main():
         if args.scenario=="camera-denied":run(serial,"shell","pm","revoke",PACKAGE,"android.permission.CAMERA")
         # Explicit names only, confined to this disposable debug UID.
         run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-","processing-applied-","processing-observe-")])
-        for suffix in ("admission-ready","admission-change","admission-result","public","peer","ready","start","turn-ready","turn","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
+        for suffix in ("admission-ready","admission-change","admission-result","public","peer","ready","start","turn-ready","turn","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stop-issued","video-stop-release","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
             run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
     args.reports.mkdir(parents=True,exist_ok=True)
     if optimized_evidence:
@@ -257,7 +324,7 @@ def main():
             try: evidence['after']=topology()
             finally: (args.reports/f'direct-route-{probe_number}.json').write_text(json.dumps(evidence,indent=2)+'\n')
     processes={}; streams=[]
-    with voice_relay(args.reports/"https-lifecycle.json") as relay, TurnLab(alternate_port=3479 if args.scenario=="unauthorized-redirect" else None, allocation_lifetime=180,tls_mode=args.turn_tls,ipv6=args.turn_ipv6) as turn:
+    with voice_relay(args.reports/"https-lifecycle.json",live_diagnostics=args.http_idle_probe) as relay, TurnLab(alternate_port=3479 if args.scenario=="unauthorized-redirect" else None, allocation_lifetime=180,tls_mode=args.turn_tls,ipv6=args.turn_ipv6) as turn:
         capture_paths=[]; blocked_routes=[]; shaped=[]; shape_evidence=[]; allocation_evidence=None
         try:
             addresses=[];addresses6=[]
@@ -290,8 +357,8 @@ def main():
                     if direct_probe(serial,(args.a,args.b)[1-index],peer):
                         raise RuntimeError("Direct UDP route blocking was not demonstrated")
             clients_started=time.monotonic()
-            def issue_turn():
-                credentials=turn.credentials((60 if args.video else 30) if args.scenario=="credential-expiry" else 180)
+            def issue_turn(expiry_ttl=None):
+                credentials=turn.credentials(expiry_ttl if expiry_ttl is not None else (30 if args.scenario=="credential-expiry" else 180))
                 if args.scenario=="expired-auth":
                     credentials=turn.credentials(1)
                     await_expired_turn_timestamp(credentials["expires"])
@@ -303,7 +370,7 @@ def main():
                 return credentials
             for index,serial in enumerate((args.a,args.b)):
                 write(serial,"synthetic-voice-engine.json",{"stopVideoRace":args.scenario=="video-stop-race","initialModulation":args.modulated_start,"modulation":args.modulation,"video":args.video and args.scenario!="camera-denied","cameraDenied":args.scenario=="camera-denied","receiveOnlyCallee":args.scenario=="receive-only","incorrectFingerprint":args.scenario=="wrong-fingerprint","expectedRejection":rejection,"role":"A" if index==0 else "B","base":relay["base"],
-                    "admissionRevocationCheck":admission_revocation_check,"admissionRealm":relay["admission"].realm.encode(),"certificate":relay["certificate"],"invitation":relay["invitations"][index]})
+                    "credentialExpiryAfterVideo":args.video and args.scenario=="credential-expiry","httpIdleProbe":args.http_idle_probe and index==0,"admissionRevocationCheck":admission_revocation_check,"admissionRealm":relay["admission"].realm.encode(),"certificate":relay["certificate"],"invitation":relay["invitations"][index]})
                 stream=(args.reports/("engine-voice-a.log" if index==0 else "engine-voice-b.log")).open("w")
                 streams.append(stream)
                 processes[serial]=subprocess.Popen([adb,"-s",serial,"shell","am","instrument","-w","-r",
@@ -311,17 +378,29 @@ def main():
                     PACKAGE+".test/androidx.test.runner.AndroidJUnitRunner"],stdout=stream,stderr=subprocess.STDOUT)
             deadline=time.monotonic()+(160 if args.modulation else 140 if args.video else 90)
             approvals={}
+            # Both endpoints have finished their unadmitted probes before isolating A's
+            # one new TLS socket. B remains at the explicit admission approval barrier.
+            requests={serial:read(serial,"synthetic-admission-request.json",processes[serial],deadline)
+                      for serial in (args.a,args.b)} if args.http_idle_probe else {}
+            previous_ids={row['id'] for row in json.loads(relay['lifecycle'].read_text())['connections']} if args.http_idle_probe else set()
             for serial in (args.a,args.b):
-                request=read(serial,"synthetic-admission-request.json",processes[serial],deadline)
+                request=requests[serial] if args.http_idle_probe else read(serial,"synthetic-admission-request.json",processes[serial],deadline)
                 approvals[serial]=relay["admission"].approve(request["request"])
                 write(serial,"synthetic-admission-credential.json",approvals[serial])
+                if args.http_idle_probe and serial==args.a:
+                    from relay_idle_probe import coordinate
+                    coordinate(relay['lifecycle'],previous_ids,
+                               lambda name:read(serial,name,processes[serial],deadline),
+                               lambda name,value:write(serial,name,value),args.reports/'http-idle-probe.json')
             a=read(args.a,"synthetic-voice-public.json",processes[args.a],deadline)
             b=read(args.b,"synthetic-voice-public.json",processes[args.b],deadline)
             write(args.a,"synthetic-voice-peer.json",b); write(args.b,"synthetic-voice-peer.json",a)
             for serial in (args.a,args.b):
                 if read(serial,"synthetic-voice-ready.json",processes[serial],deadline)!={"ready":True}: raise RuntimeError("Identity preparation failed")
+            expiry_started=time.monotonic() if args.video and args.scenario=='credential-expiry' else None
             for serial in (args.a,args.b): write(serial,"synthetic-voice-start.json",{"consent":True})
-            issue_turn_after_selection((args.a,args.b),processes,deadline,write,read,issue_turn)
+            expiry_budget=issue_turn_after_selection((args.a,args.b),processes,deadline,write,read,issue_turn,expiry_started=expiry_started)
+            if expiry_budget is not None:(args.reports/'turn-expiry-budget.json').write_text(json.dumps(expiry_budget,indent=2)+'\n')
             initial_processing=[]
             if args.modulated_start:
                 initial_processing=[read(serial,"synthetic-voice-initial-processing.json",processes[serial],deadline) for serial in (args.a,args.b)]
@@ -365,6 +444,9 @@ def main():
                 video_evidence={}
                 for command,result in (("start","active"),("off","stopped"),("resume","resumed")):
                     for serial in (args.a,args.b): write(serial,"synthetic-voice-video-"+command+".json",{"consentedSyntheticOwnerAction":True})
+                    if result=="stopped":
+                        barrier=coordinate_video_stop((args.a,args.b),processes,deadline,write,read)
+                        (args.reports/"video-stop-barrier.json").write_text(json.dumps(barrier,indent=2)+"\n")
                     values=[]
                     for serial in (args.a,args.b):
                         value=read(serial,"synthetic-voice-video-"+result+".json",processes[serial],deadline)
@@ -488,36 +570,17 @@ def main():
                 for index,serial in enumerate((args.a,args.b)):
                     if not direct_probe(serial,(args.a,args.b)[1-index],addresses[1-index]):
                         raise RuntimeError("Direct UDP route unavailable after TURN loss")
-            network=[]
-            with tempfile.TemporaryDirectory(prefix="umbra-owned-wifi-snapshot-") as snapshot_dir:
-                for index,path in enumerate(capture_paths):
-                    snapshot=Path(snapshot_dir)/f"endpoint-{index}.pcap"
-                    shutil.copyfile(path,snapshot)
-                    if args.turn_ipv6:
-                        from urllib.parse import urlparse
-                        if args.scenario in ("unauthorized-redirect","unreachable"):
-                            raise RuntimeError("IPv6 redirect/unreachable evidence not implemented; do not count as passed")
-                        network.append(summarize_ipv6_turn(snapshot,turn.address,addresses[index],addresses6[index],urlparse(relay["base"]).port,
-                            capture_since,capture_until,tls=bool(args.turn_tls),require_turn=index==0 or not rejection))
-                        continue
-                    if args.scenario=="unauthorized-redirect":
-                        redirected=count(snapshot,f"ip and src host {addresses[index]} and (udp or tcp) and dst host {turn.address} and dst port 3479",capture_since,capture_until)
-                        if redirected!=0: raise RuntimeError("Native allocator contacted an unauthorized TURN redirect")
-                        if args.turn_tls:
-                            from urllib.parse import urlparse
-                            checked=summarize_tls(snapshot,turn.address,urlparse(relay["base"]).port,capture_since,capture_until,require_turn=index==0,source_address=addresses[index])
-                        else:
-                            checked=summarize(snapshot,turn.address,since=capture_since,until=capture_until,require_turn=index==0)
-                        network.append({**checked,"unapprovedTurnPackets":redirected,"redirectPolicy":"REJECTED_BEFORE_IO"})
-                    else:
-                        if args.turn_tls:
-                            from urllib.parse import urlparse
-                            network.append(summarize_tls(snapshot,turn.address,urlparse(relay["base"]).port,capture_since,capture_until,require_turn=index==0 or not rejection,source_address=addresses[index],turn_port=5348 if args.scenario=="unreachable" else 5349))
-                            continue
-                        network.append(summarize(snapshot,turn.address,turn_port=3479 if args.scenario=="unreachable" else 3478,
-                                                 since=capture_since,until=capture_until,require_turn=(index==0 or args.scenario not in ("expired-auth","invalid-auth","unreachable"))))
-            (args.reports/"voice-evidence.json").write_text(json.dumps({"apkSha256":apk_hashes,"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn TLS" if args.turn_tls else "native WebRTC through coturn UDP","turnTlsCase":args.turn_tls,"scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":not rejection,"muteBarrier":mute_evidence,"network":network,"audio":evidence,"allocationExpiry":allocation_evidence,"nativeCaptureClosure":stop_evidence,"networkImpairment":shape_evidence},indent=2)+"\n")
-            print("PASS two AVD native voice scenario: "+args.scenario)
+            from urllib.parse import urlparse
+            voice = {"apkSha256":apk_hashes,"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn TLS" if args.turn_tls else "native WebRTC through coturn UDP","turnTlsCase":args.turn_tls,"scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":not rejection,"muteBarrier":mute_evidence,"network":[],"audio":evidence,"allocationExpiry":allocation_evidence,"nativeCaptureClosure":stop_evidence,"networkImpairment":shape_evidence}
+            staged = {"status": "PENDING_CAPTURE_FINALIZATION", "ownerPid": capture_owner_pid,
+                "capturePaths": [str(path.resolve()) for path in capture_paths],
+                "since": capture_since, "until": capture_until,
+                "scenario": args.scenario, "turnAddress": turn.address, "tls": bool(args.turn_tls),
+                "ipv6": args.turn_ipv6, "relayPort": urlparse(relay["base"]).port,
+                "addresses": addresses, "addresses6": addresses6, "rejection": rejection, "voice": voice}
+            (args.reports/"network-pending.json").write_text(json.dumps(staged,indent=2)+"\n")
+            print("PENDING_CAPTURE_FINALIZATION: native scenario completed, network not yet accepted")
+
         finally:
             errors=[]
             for serial in shaped:
@@ -550,7 +613,7 @@ def main():
                 except Exception as failure: errors.append(failure)
                 try: run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-","processing-applied-","processing-observe-")])
                 except Exception as failure: errors.append(failure)
-                for suffix in ("engine","admission-ready","admission-change","admission-result","public","peer","ready","start","turn-ready","turn","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
+                for suffix in ("engine","admission-ready","admission-change","admission-result","public","peer","ready","start","turn-ready","turn","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stop-issued","video-stop-release","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
                     try: run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
                     except Exception as failure: errors.append(failure)
                 # These exact files belong solely to this named synthetic fixture, including failed runs.
@@ -559,7 +622,7 @@ def main():
                     except Exception as failure: errors.append(failure)
             for stream in streams: stream.close()
             if errors: raise RuntimeError("Voice lab cleanup failed; all endpoints were attempted") from errors[0]
-    return args.reports/"voice-evidence.json"
+    return args.reports/"network-pending.json"
 
 
 def require_completed_run(result):
@@ -575,4 +638,15 @@ def require_completed_run(result):
         raise RuntimeError("Incomplete multimedia acceptance receipt")
 
 
-if __name__=="__main__": require_completed_run(main())
+def require_staged_run(result):
+    if not isinstance(result, Path) or not result.is_file():
+        raise RuntimeError("Native staging ended without its pending receipt")
+    report = json.loads(result.read_text())
+    if (report.get('status') != 'PENDING_CAPTURE_FINALIZATION'
+            or report.get('ownerPid') != int(os.environ.get('UMBRA_CAPTURE_OWNER_PID', '0'))
+            or len(report.get('capturePaths', [])) != 2
+            or report.get('voice', {}).get('network') != []):
+        raise RuntimeError("Invalid native staging receipt")
+
+
+if __name__=="__main__": require_staged_run(main())

@@ -193,6 +193,9 @@ public final class RelayClient implements AutoCloseable {
             connection.setConnectTimeout(10_000); connection.setReadTimeout(10_000);
             connection.setUseCaches(false); connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Accept-Encoding", "identity");
+            // A streamed one-use proof cannot be replayed after an idle pooled TLS
+            // connection closes between its health check and this request's write.
+            connection.setRequestProperty("Connection", "close");
             if (token != null) {
                 if (!token.matches("[A-Za-z0-9_-]{43}")) throw new SecurityException("Invalid capability");
                 connection.setRequestProperty("Authorization", "Bearer " + token);
@@ -227,8 +230,8 @@ public final class RelayClient implements AutoCloseable {
         } finally {
             if (deadline != null) deadline.cancel(false);
             connection.disconnect(); active.compareAndSet(connection,null);
-            // Keep ownership of idle reusable sockets until client cancellation.
-            // Closing every socket here turns each poll into another TLS handshake.
+            // Retain cancellation ownership until the transport confirms socket closure.
+            // Connection: close prevents successful requests from entering the idle pool.
             plainSockets.removeIf(java.net.Socket::isClosed);
             tlsSockets.removeIf(java.net.Socket::isClosed);
         }
@@ -347,4 +350,28 @@ public final class RelayClient implements AutoCloseable {
             transportClosed=true;confirmClosure();
         }
     }
+    // Opaque pairing courier. Existing request() enforces admission and explicit online consent.
+    public JSONObject publishPairingRendezvous(String box,String token,JSONObject body)throws Exception {
+        Wire.uuid(box);return request("POST","/v1/boxes/"+box+"/pairing-rendezvous",token,body);
+    }
+    public JSONObject claimPairingCode(String locator,String token,String requestId)throws Exception {
+        app.umbra.pairing.PairingService.token(locator);app.umbra.pairing.PairingService.token(requestId);
+        return request("POST","/v1/pairing-codes/"+locator+"/claim",token,new JSONObject().put("request_id",requestId));
+    }
+    public JSONObject submitPairingRequest(String id,String token,JSONObject body)throws Exception {
+        app.umbra.pairing.PairingService.token(id);return request("POST","/v1/pairing-rendezvous/"+id+"/requests",token,body);
+    }
+    public JSONObject pairingRequests(String id,String token)throws Exception {
+        app.umbra.pairing.PairingService.token(id);return request("GET","/v1/pairing-rendezvous/"+id+"/requests",token,null);
+    }
+    public JSONObject selectPairingAck(String id,String token,JSONObject body)throws Exception {
+        app.umbra.pairing.PairingService.token(id);return request("POST","/v1/pairing-rendezvous/"+id+"/ack",token,body);
+    }
+    public JSONObject pairingAck(String id,String hash,String token)throws Exception {
+        app.umbra.pairing.PairingService.token(id);Wire.identity(hash);return request("GET","/v1/pairing-rendezvous/"+id+"/requests/"+hash+"/ack",token,null);
+    }
+    public void revokePairingRendezvous(String id,String token)throws Exception {
+        app.umbra.pairing.PairingService.token(id);request("DELETE","/v1/pairing-rendezvous/"+id,token,null);
+    }
+
 }

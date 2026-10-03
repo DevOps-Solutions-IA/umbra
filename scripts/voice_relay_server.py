@@ -2,7 +2,7 @@
 import argparse
 import json
 from pathlib import Path
-from voice_http_diagnostics import ConnectionDiagnostics
+from voice_http_diagnostics import ConnectionDiagnostics, DenialDiagnostics, AdmissionRejectionDiagnostics
 
 
 def main():
@@ -11,12 +11,19 @@ def main():
     parser.add_argument('--cert',type=Path,required=True)
     parser.add_argument('--key',type=Path,required=True)
     parser.add_argument('--diagnostics',type=Path,required=True)
+    parser.add_argument('--live-diagnostics',action='store_true')
     args=parser.parse_args()
     import uvicorn
     from uvicorn.protocols.http.h11_impl import H11Protocol
     diagnostic=ConnectionDiagnostics()
+    denials=DenialDiagnostics()
+    admission_rejections=AdmissionRejectionDiagnostics()
     def snapshot():
-        args.diagnostics.write_text(json.dumps(diagnostic.snapshot(),indent=2)+'\n')
+        value=diagnostic.snapshot();value['httpDenials']=denials.snapshot()
+        value['admissionRejections']=admission_rejections.snapshot()
+        temporary=args.diagnostics.with_suffix('.tmp')
+        temporary.write_text(json.dumps(value,indent=2)+'\n')
+        temporary.replace(args.diagnostics)
     class ObservedServer(uvicorn.Server):
         async def shutdown(self,sockets=None):
             try:await super().shutdown(sockets=sockets)
@@ -31,16 +38,24 @@ def main():
         def on_response_complete(self):
             diagnostic.event(self.diagnostic_id,'response')
             super().on_response_complete()
+            if args.live_diagnostics:snapshot()
         def timeout_keep_alive_handler(self):
             diagnostic.event(self.diagnostic_id,'keepalive')
             super().timeout_keep_alive_handler()
+            if args.live_diagnostics:snapshot()
         def connection_lost(self,exc):
             diagnostic.event(self.diagnostic_id,'closed',
                              incomplete=bool(self.cycle and not self.cycle.response_complete),error=exc is not None)
             super().connection_lost(exc)
     try:
         # No keepalive/HTTP/TLS deadline change. Locked dependencies use h11 already.
-        config=uvicorn.Config('umbra_relay.app:create_app',factory=True,fd=args.fd,workers=1,
+        def observed_app():
+            from umbra_relay.app import create_app
+            app=create_app()
+            if app.state.admission is not None:
+                app.state.admission.consume=admission_rejections.wrap_consume(app.state.admission.consume)
+            return denials.wrap(app)
+        config=uvicorn.Config(observed_app,factory=True,fd=args.fd,workers=1,
                     ssl_certfile=str(args.cert),ssl_keyfile=str(args.key),
                     http=ObservedH11,access_log=False,proxy_headers=False,log_level='warning')
         ObservedServer(config).run()

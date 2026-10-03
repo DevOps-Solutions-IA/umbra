@@ -88,3 +88,75 @@ class StartupRestoreTest(unittest.TestCase):
                 self.assertEqual(['initialize','route'],events)
                 init.assert_called_once_with('adb','emulator-5554',root/'initial-wifi-initialization.json')
                 wait.assert_called_once_with('adb','emulator-5554',root/'initial-wifi-route.json',associate=changed)
+
+    def test_failure_observation_attempts_both_and_never_exports_exception(self):
+        import json
+        from run_private_startup import observe_startup_failure
+        with tempfile.TemporaryDirectory() as d,patch('run_private_startup.observe_owned_network',side_effect=RuntimeError('synthetic-secret')) as network,patch('run_private_startup.observe_startup_wifi') as wifi:
+            root=Path(d);observe_startup_failure('adb','emulator-5554',root)
+            network.assert_called_once_with('adb','emulator-5554',root/'network-at-failure.json')
+            wifi.assert_called_once_with('adb','emulator-5554',root/'wifi-at-failure.json')
+            text=(root/'failure-observation.json').read_text()
+            self.assertNotIn('synthetic-secret',text)
+            self.assertEqual({'network':'DIAGNOSTIC_FAILED','wifi':'RECORDED'},json.loads(text))
+
+    def test_failure_is_reraised_before_cleanup_without_retry(self):
+        import ast
+        tree=ast.parse((Path(__file__).resolve().parents[1]/'run_private_startup.py').read_text())
+        observed=[]
+        for node in ast.walk(tree):
+            if isinstance(node,ast.Try) and node.finalbody:
+                for handler in node.handlers:
+                    if any(isinstance(call,ast.Call) and isinstance(call.func,ast.Name) and call.func.id=='observe_startup_failure' for call in ast.walk(handler)):
+                        observed.append(handler)
+                        self.assertIsInstance(handler.body[-1],ast.Raise)
+                        self.assertIsNone(handler.body[-1].exc)
+        self.assertEqual(1,len(observed))
+
+    def test_cold_return_selects_owned_ap_before_quiet_observation_without_cellular_fallback(self):
+        """Execute the actual cold-toggle wiring against a disconnected fake AP.
+
+        This models the observed enabled-but-disconnected state; it is not an
+        Android association acceptance test.
+        """
+        import run_private_startup as startup
+        from types import SimpleNamespace
+        source=Path(startup.__file__).read_text()
+        began=source.index("            run('shell','svc','wifi','disable');run('shell','svc','data','disable');time.sleep(2)")
+        ended=source.index("            run('shell','am','force-stop',package)",began)
+        import textwrap
+        block=textwrap.dedent(source[began:ended])
+        state={'enabled':True,'associated':True};events=[]
+        def run(*command):
+            events.append(command)
+            if command==('shell','svc','wifi','disable'):state.update(enabled=False,associated=False)
+            if command==('shell','svc','wifi','enable'):state['enabled']=True
+        def radio(command,**kwargs):
+            run(*command[3:]);return subprocess.CompletedProcess(command,0)
+        def select(adb,serial,path):
+            self.assertTrue(state['enabled']);self.assertFalse(state['associated'])
+            self.assertEqual('cold-restore',path.parent.name)
+            self.assertTrue(path.parent.is_dir());state['associated']=True;events.append('selected-owned-ap')
+        def observe(stage,dns):
+            self.assertEqual('cold-activity-network-return',stage)
+            self.assertTrue(state['associated'],'Quiet observation cannot prove return without AP association')
+            events.append('quiet-observation')
+        with tempfile.TemporaryDirectory() as d,patch('run_private_startup.observe_owned_network'),\
+                patch('run_private_startup.observe_startup_wifi'),\
+                patch('run_private_startup.select_owned_wifi',side_effect=select),\
+                patch('run_private_startup.subprocess.run',side_effect=radio),\
+                patch('run_private_startup.time.sleep') as sleep,\
+                patch('run_private_startup.wait_wifi_ipv4') as readiness:
+            root=Path(d);args=SimpleNamespace(serial='emulator-5554',reports=root)
+            recovery=root/'network-before-restore.json';recovery.write_text('existing-recovery-evidence')
+            exec(block,{'run':run,'reset':lambda:events.append('reset'),'time':startup.time,
+                        'observe':observe,'dns_log':root/'dns','adb':['adb','-s',args.serial],
+                        'args':args,'restore_startup_wifi':startup.restore_startup_wifi})
+            self.assertEqual([2,5],[call.args[0] for call in sleep.call_args_list])
+            self.assertNotIn(('shell','svc','data','enable'),events)
+            self.assertEqual(1,events.count(('shell','svc','wifi','enable')))
+            self.assertEqual(1,events.count(('shell','svc','wifi','disable')))
+            self.assertEqual(1,events.count('selected-owned-ap'))
+            self.assertLess(events.index('selected-owned-ap'),events.index('quiet-observation'))
+            readiness.assert_not_called()
+            self.assertEqual('existing-recovery-evidence',recovery.read_text())

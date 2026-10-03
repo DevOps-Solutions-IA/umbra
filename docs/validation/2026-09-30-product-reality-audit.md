@@ -368,3 +368,22 @@ passed the corrected probe plus access/password suites in connected/offline,
 debug/R8. See `2026-09-30-access-readiness-contract.md` for SHA/tree, artifacts,
 limits and the separate preserved UI-fixture expiry failure. This does not alter
 the physical/product-flow findings of the original audit.
+
+## Addendum — Execution03: candidato pairing (2026-10-02)
+
+Sobre base `c117051ac5353c84ef840d9b5f1eafa81f86ddb4` se prepara
+[PAIRING_PRODUCT_V1](../contracts/PAIRING_PRODUCT_V1.md), con coordinador local,
+QR de invitación firmado, código humano y courier cifrado. La
+[evidencia nueva y matriz de 60 requisitos](2026-10-02-pairing-p0-hardening.md)
+distingue JVM, fuente/compilación Android, relay y pendientes físicos.
+
+El diagnóstico histórico de QR no implementado sigue describiendo el SHA auditado.
+Ahora existe codec de píxeles y API candidata, pero no scanner/cámara ni ceremonia
+humana integrada. No se reescribe aquel resultado como aceptación. Se conserva
+el rechazo de membresía inválida/realm distinto y la confianza UNVERIFIED; el
+pairing mixto puede bloquearse asimétricamente y debe explicarse en presentación.
+
+La preparación física solo lee metadata/hashes de dos USB explícitos. No instala,
+no ejecuta pairing ni concede autorización de instalación. Ningún recibo JVM o
+relay cierra el primer chat humano, Nearby físico o UI de Claude. El cierre de
+producto y producción permanece pendiente.

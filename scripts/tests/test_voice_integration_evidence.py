@@ -4,7 +4,7 @@ import sys
 import unittest
 from unittest.mock import patch, Mock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from run_voice_integration import valid_audio, valid_report, valid_stop, valid_impairment, valid_processing, coordinate_mute, processing_barrier, issue_turn_after_selection, require_completed_run, await_expired_turn_timestamp
+from run_voice_integration import valid_audio, valid_report, valid_stop, valid_emergency_stop, valid_impairment, valid_processing, coordinate_mute, processing_barrier, issue_turn_after_selection, require_completed_run, await_expired_turn_timestamp
 import voice_network_evidence as network
 
 class VoiceEvidenceTest(unittest.TestCase):
@@ -35,6 +35,32 @@ class VoiceEvidenceTest(unittest.TestCase):
                 bad=good.copy();del bad[field];receipt.write_text(json.dumps(bad))
                 with self.assertRaises(RuntimeError):require_completed_run(receipt)
 
+    def test_actual_emergency_receipt_includes_strict_snapshot_counter(self):
+        # Exact nonsecret receipt from aa0ccfe artifact11269409884, emulator5554.
+        good=dict(failedClosed=True,nativeCaptureQuietAfterMillis=1000,
+                  nativeCaptureObservedMillis=500,lateCaptureCallbacks=0,
+                  expiredDeliveriesRejected=0,expiredSnapshotRejections=0,
+                  emergencyState="CLOSED",requestedNanos=122672453510,
+                  invalidatedNanos=122672457167,confirmedNanos=122715853374,
+                  lateVideoCallbacks=0,lastAudioCaptureNanos=122711424586,
+                  lastVideoCaptureNanos=0)
+        self.assertTrue(valid_emergency_stop(good))
+        missing=dict(good);del missing["expiredSnapshotRejections"]
+        self.assertFalse(valid_emergency_stop(missing))
+        for value in (-1,True,1,1401):
+            self.assertFalse(valid_emergency_stop({**good,"expiredSnapshotRejections":value}))
+        self.assertFalse(valid_emergency_stop({**good,"unknown":0}))
+        base={key:good[key] for key in ("failedClosed","nativeCaptureQuietAfterMillis",
+            "nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected",
+            "expiredSnapshotRejections")}
+        for value in (0,1,1400):
+            self.assertTrue(valid_stop({**base,"expiredSnapshotRejections":value},expected_expiry=True))
+        for value in (-1,True,1401):
+            self.assertFalse(valid_stop({**base,"expiredSnapshotRejections":value},expected_expiry=True))
+        missing=dict(base);del missing["expiredSnapshotRejections"]
+        self.assertFalse(valid_stop(missing,expected_expiry=True))
+        self.assertFalse(valid_stop({**base,"unknown":0},expected_expiry=True))
+
     def test_turn_issued_once_only_after_both_selected_engines_request_it(self):
         events=[]
         def read(serial,*args):
@@ -53,6 +79,48 @@ class VoiceEvidenceTest(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 issue_turn_after_selection(('A','B'),{'A':object(),'B':object()},123,write,Mock(side_effect=reports),issue)
             issue.assert_not_called();write.assert_not_called()
+
+    def test_video_expiry_uses_remaining_scenario_budget_without_renewal(self):
+        # Native fixture began before selection. The host epoch precedes either
+        # ready receipt, so subtracting ALL elapsed host time is conservative.
+        rows=[{'selectedAndConsented':True,'remainingFixtureMillis':118_000},
+              {'selectedAndConsented':True,'remainingFixtureMillis':117_000}]
+        issued=[]
+        def issue(ttl):issued.append(ttl);return {'synthetic':True}
+        receipt=issue_turn_after_selection(('A','B'),{'A':object(),'B':object()},240,Mock(),
+            Mock(side_effect=rows),issue,expiry_started=100,clock=Mock(side_effect=[103,103.1,104,104.1]))
+        self.assertEqual([103,102],issued)
+        # Observed initial video + STOP coordination + allowed25s renegotiation
+        # can legitimately exceed60s; each credential is still issued exactly once.
+        self.assertGreater(min(issued),38+23+25)
+        self.assertEqual(10_000,receipt['closureReserveMillis'])
+        self.assertLessEqual(issued[0]*1000+3000+10_000,117_000)
+
+    def test_video_expiry_respects_earlier_host_deadline(self):
+        rows=[{'selectedAndConsented':True,'remainingFixtureMillis':118_000}]*2
+        issue=Mock(return_value={'synthetic':True})
+        issue_turn_after_selection(('A','B'),{'A':object(),'B':object()},130,Mock(),
+            Mock(side_effect=rows),issue,expiry_started=100,clock=lambda:103)
+        self.assertEqual([16,16],[call.args[0] for call in issue.call_args_list])
+
+    def test_video_expiry_rejects_slow_or_backwards_issuance_without_delivery(self):
+        for end in (104.001,102):
+            rows=[{'selectedAndConsented':True,'remainingFixtureMillis':118_000}]*2
+            issue=Mock(return_value={'synthetic':True});write=Mock()
+            with self.assertRaises(RuntimeError):
+                issue_turn_after_selection(('A','B'),{'A':object(),'B':object()},240,write,
+                    Mock(side_effect=rows),issue,expiry_started=100,clock=Mock(side_effect=[103,end]))
+            self.assertEqual(1,issue.call_count)
+            write.assert_not_called()
+
+    def test_video_expiry_cannot_extend_deadline_or_ignore_invalid_remaining(self):
+        for remaining in (True,0,-1,120_001,10_000):
+            issue=Mock()
+            rows=[{'selectedAndConsented':True,'remainingFixtureMillis':remaining}]*2
+            with self.assertRaises(RuntimeError):
+                issue_turn_after_selection(('A','B'),{'A':object(),'B':object()},140,Mock(),
+                    Mock(side_effect=rows),issue,expiry_started=100,clock=lambda:103)
+            issue.assert_not_called()
 
     def test_modulation_needs_decoded_output_and_positive_observation_windows(self):
         good=dict(natural=0,modified=80,loud=80,settleMillis=1300,observedMillis=2000,videoFrames=10,step=0,metrics=[200]*34)
@@ -161,7 +229,7 @@ class VoiceEvidenceTest(unittest.TestCase):
 
     def test_state_flag_does_not_prove_native_capture_stopped(self):
         good={"failedClosed":True,"nativeCaptureQuietAfterMillis":1000,
-              "nativeCaptureObservedMillis":500,"lateCaptureCallbacks":0,"expiredDeliveriesRejected":0}
+              "nativeCaptureObservedMillis":500,"lateCaptureCallbacks":0,"expiredDeliveriesRejected":0,"expiredSnapshotRejections":0}
         self.assertTrue(valid_stop(good))
         self.assertTrue(valid_stop({**good,"expiredDeliveriesRejected":1},expected_expiry=True))
         self.assertFalse(valid_stop({**good,"expiredDeliveriesRejected":1}))

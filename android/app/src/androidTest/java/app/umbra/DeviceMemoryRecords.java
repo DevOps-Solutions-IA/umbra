@@ -5,8 +5,11 @@ import java.util.*;
 
 /** Instrumentation APK only: synthetic persistence, never installed into the production app. */
 final class DeviceMemoryRecords implements Records {
-    private final app.umbra.core.AccessGate gate = new app.umbra.core.AccessGate();
-    DeviceMemoryRecords() { gate.unlock(); }
+    private final app.umbra.core.AccessGate gate;
+    DeviceMemoryRecords() { this(new app.umbra.core.AccessGate()); }
+    DeviceMemoryRecords(app.umbra.core.AccessGate gate) { this.gate=gate; gate.unlock(); }
+    /** Explicit synthetic authority setup only; never called by authorization(). */
+    void reauthorizeSyntheticSession() { gate.unlock(); }
     public Runnable authorization() { var lease=gate.enter(); return () -> gate.check(lease); }
     private Map<String,byte[]> entries = new LinkedHashMap<>();
     private static String address(String bucket, String key) { return bucket + "\u0000" + key; }

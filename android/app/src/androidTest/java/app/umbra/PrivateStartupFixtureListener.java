@@ -34,6 +34,25 @@ public final class PrivateStartupFixtureListener extends RunListener {
         catch(SecurityException expected) { /* Gate must reject before opening a connection or resolving DNS. */ }
         require(!engine.connectivity().isNetworkSessionAllowed(),"Network grant survived");
     }
+    private void awaitDefaultNetwork(android.content.Context context,Engine engine,String origin,
+                                     StartupNetworkReadiness.Stage stage) throws Exception {
+        var manager=context.getSystemService(android.net.ConnectivityManager.class);
+        StartupNetworkReadiness.await(stage,SystemClock::elapsedRealtime,
+            ()->{require(manager!=null,"Lab network observation unavailable");return manager.getActiveNetwork()!=null;},
+            ()->denied(engine,origin),Thread::sleep,receipt->{
+                JSONObject value=new JSONObject().put("stage",receipt.stage().name())
+                    .put("elapsedMillis",receipt.elapsedMillis())
+                    .put("defaultNetworkPresent",receipt.defaultNetworkPresent())
+                    .put("outcome",receipt.outcome().name());
+                publish(files.resolve("synthetic-startup-readiness-"+receipt.stage().name()+".json"),value);
+                android.os.Bundle status=new android.os.Bundle();
+                status.putString("networkReadinessStage",receipt.stage().name());
+                status.putLong("networkReadinessElapsedMillis",receipt.elapsedMillis());
+                status.putBoolean("networkReadinessDefaultPresent",receipt.defaultNetworkPresent());
+                status.putString("networkReadinessOutcome",receipt.outcome().name());
+                InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
+            });
+    }
     @Override public void testRunStarted(Description description) throws Exception {
         var context=InstrumentationRegistry.getInstrumentation().getTargetContext();files=context.getFilesDir().toPath();
         String phase=InstrumentationRegistry.getArguments().getString("startupPhase","");
@@ -74,6 +93,7 @@ public final class PrivateStartupFixtureListener extends RunListener {
                 Engine receiver=new Engine(receiverRecords);receiver.initialize("Synthetic startup receiver");
                 AdmissionLab.provision(receiver,files,"synthetic-startup-peer",config.getString("realm"));
                 receiver.connectivity().vaultUnlocked();
+                awaitDefaultNetwork(context,engine,trap,StartupNetworkReadiness.Stage.INITIAL);
                 AndroidConnectivity.connect(context,engine.connectivity(),base,true);
                 receiver.connectivity().connect(base,true);
                 try(var relay=new RelayClient(base,()->true,engine.admission())) {
@@ -107,16 +127,7 @@ public final class PrivateStartupFixtureListener extends RunListener {
                 checkpoint("network-lost");denied(engine,trap);
                 // svc wifi enable is asynchronous. Observe OS readiness, without
                 // retrying connect or performing DNS/I/O, inside the host's 45s barrier.
-                long recoveryBegan=SystemClock.elapsedRealtime();
-                var manager=context.getSystemService(android.net.ConnectivityManager.class);
-                while(manager.getActiveNetwork()==null) {
-                    denied(engine,trap);
-                    if(SystemClock.elapsedRealtime()-recoveryBegan>=15_000)throw new AssertionError("Lab network did not return before explicit action");
-                    Thread.sleep(50);
-                }
-                android.os.Bundle recovery=new android.os.Bundle();
-                recovery.putLong("networkRecoveryWaitMillis",SystemClock.elapsedRealtime()-recoveryBegan);
-                InstrumentationRegistry.getInstrumentation().sendStatus(0,recovery);
+                awaitDefaultNetwork(context,engine,trap,StartupNetworkReadiness.Stage.RECOVERY);
                 AndroidConnectivity.connect(context,engine.connectivity(),base,true);records.gate.lock();
                 require(engine.connectivity().getConnectivityState()==ConnectivityService.State.LOCKED_PRIVATE,"Vault lock left online");checkpoint("locked");
                 records.gate.unlock();engine.connectivity().vaultUnlocked();AndroidConnectivity.connect(context,engine.connectivity(),base,true);

@@ -34,7 +34,8 @@ class GateRegressionTests(unittest.TestCase):
         check_apk_policy.validate_mapping(safe)
         for origin in ("app.umbra.lab.SoftwareKeys.unlock", "app.umbra.accesslab.AccessLifecycleHarness.attach", "androidx.test.runner.Helper.run",
                        "app.umbra.MemoryRecords.get", "app.umbra.DeviceMemoryRecords$Nested.get",
-                       "app.umbra.VoiceNativeFixtureListener.run", "app.umbra.media.VoiceEngineFixtureListener.run", "app.umbra.media.SyntheticVideoCapturer.run"):
+                       "app.umbra.VoiceNativeFixtureListener.run", "app.umbra.media.VoiceEngineFixtureListener.run", "app.umbra.media.SyntheticVideoCapturer.run", "app.umbra.transport.LegacyPooledRelayClient.request",
+                       "app.umbra.transport.RelayIdleReuseProbe$GateSocket.write"):
             with self.subTest(origin=origin):
                 mapping = "app.umbra.crypto.Engine -> a:\n    1:1:void " + origin + "():10:10 -> a\n"
                 with self.assertRaisesRegex(RuntimeError, "inlined"):
@@ -58,6 +59,16 @@ class GateRegressionTests(unittest.TestCase):
             with zipfile.ZipFile(apk) as archive:
                 with self.assertRaisesRegex(RuntimeError, "Test/lab"):
                     check_apk_policy.validate_dex(archive)
+
+    def test_pooled_negative_control_and_probe_cannot_enter_application_dex(self):
+        for name in ('LegacyPooledRelayClient', 'RelayIdleReuseProbe$GateSocket'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as temporary:
+                apk=Path(temporary)/'probe.apk'
+                with zipfile.ZipFile(apk,'w') as archive:
+                    archive.writestr('classes.dex', ('Lapp/umbra/transport/'+name+';').encode())
+                with zipfile.ZipFile(apk) as archive:
+                    with self.assertRaisesRegex(RuntimeError,'Test/lab'):
+                        check_apk_policy.validate_dex(archive)
 
     def test_empty_r8_map_is_rejected(self):
         with self.assertRaisesRegex(RuntimeError, "Missing"):

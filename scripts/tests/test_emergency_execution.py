@@ -22,7 +22,7 @@ class EmergencyReceiptTests(unittest.TestCase):
 
     def test_emergency_media_receipt_has_its_own_strict_schema(self):
         report=dict(failedClosed=True,nativeCaptureQuietAfterMillis=1000,
-                    nativeCaptureObservedMillis=500,lateCaptureCallbacks=0,expiredDeliveriesRejected=0,
+                    nativeCaptureObservedMillis=500,lateCaptureCallbacks=0,expiredDeliveriesRejected=0,expiredSnapshotRejections=0,
                     emergencyState='CLOSED',requestedNanos=100,invalidatedNanos=101,
                     confirmedNanos=200,lateVideoCallbacks=0,lastAudioCaptureNanos=150,lastVideoCaptureNanos=0)
         self.assertFalse(valid_stop(report))  # old schema deliberately remains strict

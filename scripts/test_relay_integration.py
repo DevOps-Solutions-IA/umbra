@@ -52,9 +52,72 @@ def wait_healthy(process: subprocess.Popen, url: str, context: ssl.SSLContext) -
     raise RuntimeError("Isolated HTTPS relay health deadline exceeded")
 
 
+def inspect_pairing_storage(database):
+    """Inspect this real fixture's rows without emitting capabilities, codes or blob bytes."""
+    import base64
+    import hashlib
+    def reject(condition):
+        if not condition:
+            raise RuntimeError("Pairing SQLite privacy/shape inspection failed")
+    def url(value, length):
+        raw = base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+        reject(len(raw) == length and base64.urlsafe_b64encode(raw).decode().rstrip("=") == value)
+        return raw
+    def wrapper(value, direction, row):
+        raw = base64.b64decode(value, validate=True)
+        reject(base64.b64encode(raw).decode() == value and 28 <= len(raw) <= 65536)
+        fields = raw.decode("ascii").split("\n")
+        reject(len(fields) == 8 and fields[0] == "UMBRA-PAIR-BLOB-1" and fields[1] == direction and fields[7] == "")
+        url(fields[2], 32)
+        reject(hashlib.sha256(fields[2].encode()).hexdigest() == row["id_hash"])
+        reject(re.fullmatch("[0-9a-f]{64}", fields[3]) is not None and fields[4] == str(row["expires"]))
+        url(fields[5], 12)
+        ciphertext = base64.urlsafe_b64decode(fields[6] + "=" * (-len(fields[6]) % 4))
+        reject(16 <= len(ciphertext) <= 24016 and base64.urlsafe_b64encode(ciphertext).decode().rstrip("=") == fields[6])
+        reject(all(marker not in raw for marker in (b"umbra:invite:", b"umbra:request:", b"umbra:ack:", b"Synthetic pairing")))
+        return fields[3]
+    with database.connect() as db:
+        rendezvous = [dict(r) for r in db.execute("SELECT * FROM pairing_rendezvous")]
+        candidates = [dict(r) for r in db.execute("SELECT * FROM pairing_candidates")]
+    reject(len(rendezvous) == 3 and len(candidates) == 3)
+    reject(all(set(r) == {"id_hash", "box", "owner_hash", "request_hash", "locator_hash", "code_hash",
+                         "invite_blob", "expires", "code_claim_hash", "selected_hash", "ack_blob", "revoked"} for r in rendezvous))
+    reject(all(set(r) == {"rendezvous", "request_hash", "ack_hash", "request_blob"} for r in candidates))
+    for row in rendezvous + candidates:
+        for value in row.values():
+            if isinstance(value, str):
+                reject(all(marker not in value for marker in ("umbra:invite:", "umbra:request:", "umbra:ack:", "Synthetic pairing")))
+    invalid = 0
+    wrapped = 0
+    revoked = 0
+    for row in rendezvous:
+        if row["revoked"]:
+            reject(row["ack_blob"] is None and row["selected_hash"] is None and row["code_claim_hash"] is None)
+            reject(not any(c["rendezvous"] == row["id_hash"] for c in candidates))
+            wrapper(row["invite_blob"], "INVITE", row)
+            wrapped += 1; revoked += 1
+            continue
+        digest = wrapper(row["ack_blob"], "ACK", row); wrapped += 1
+        if row["invite_blob"] is not None:
+            reject(wrapper(row["invite_blob"], "INVITE", row) == digest); wrapped += 1
+        for candidate in candidates:
+            if candidate["rendezvous"] != row["id_hash"]:
+                continue
+            # The deliberate malformed first claimant is retained as a bounded rejected slot.
+            if candidate["request_blob"] == base64.b64encode(bytes(40)).decode():
+                reject(candidate["request_hash"] != row["selected_hash"])
+                invalid += 1
+            else:
+                reject(wrapper(candidate["request_blob"], "REQUEST", row) == digest)
+                reject(candidate["request_hash"] == row["selected_hash"]); wrapped += 1
+    reject(invalid == 1 and wrapped == 6 and revoked == 1)
+    print("PASS real pairing SQLite inspection: six encrypted wrappers, one revoked unclaimed code, one rejected synthetic invalid candidate; no raw signed transcripts or aliases. Public locator/digest/timing metadata remains observable.")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--classpath-file", type=Path, help="Use an already resolved Gradle classpath")
+    parser.add_argument("--pairing-only", action="store_true", help="Fresh isolated pairing fixture with unchanged production limits")
     args = parser.parse_args()
     if sys.version_info < (3, 12) or os.name != "posix":
         raise RuntimeError("Requires Python 3.12+ and POSIX socket descriptor inheritance")
@@ -87,7 +150,7 @@ def main() -> int:
     java_sources += [sources / "protocol/Wire.java", sources / "data/Records.java",
                      sources / "transport/RelayClient.java",
                      ROOT / "android/app/src/test/java/app/umbra/MemoryRecords.java",
-                     ROOT / "scripts/RelayIntegrationTest.java", ROOT / "scripts/RestrictedRelayIntegration.java", ROOT / "scripts/DeviceRelayIntegration.java", ROOT / "scripts/AdmissionRelayIntegration.java"]
+                     ROOT / "scripts/RelayIntegrationTest.java", ROOT / "scripts/RestrictedRelayIntegration.java", ROOT / "scripts/DeviceRelayIntegration.java", ROOT / "scripts/AdmissionRelayIntegration.java", ROOT / "scripts/PairingRelayIntegration.java"]
     with tempfile.TemporaryDirectory(prefix="umbra-https-integration-") as directory:
         temporary = Path(directory)
         classes = temporary / "classes"
@@ -109,7 +172,7 @@ def main() -> int:
         exchange = temporary / "exchange"
         exchange.mkdir(mode=0o700)
         invitations = exchange / "invitations"
-        invitations.write_text("".join(database.issue_invite() + "\n" for _ in range(8)))
+        invitations.write_text("".join(database.issue_invite() + "\n" for _ in range(12)))
         invitations.chmod(0o600)
         admission = AdmissionLab()
         (exchange / "admission-realm").write_text(admission.realm.encode())
@@ -165,7 +228,8 @@ def main() -> int:
                 test = subprocess.Popen(["java", f"-Djavax.net.ssl.trustStore={truststore}",
                                          "-Djavax.net.ssl.trustStorePassword=integration-only",
                                          "-cp", str(classes) + os.pathsep + classpath,
-                                         "app.umbra.RelayIntegrationTest", base, str(exchange), hostile_base], cwd=ROOT)
+                                         "app.umbra.RelayIntegrationTest", base, str(exchange), hostile_base,
+                                         *(["pairing-only"] if args.pairing_only else [])], cwd=ROOT)
                 deadline = time.monotonic() + 120
                 restarted = False
                 while test.poll() is None:
@@ -200,9 +264,11 @@ def main() -> int:
                     time.sleep(0.05)
                 if test.returncode != 0:
                     return test.returncode
-                if not restarted:
+                if not restarted and not args.pairing_only:
                     raise RuntimeError("JVM exited without exercising relay restart")
                 wait_healthy(server, base, context)
+                if args.pairing_only:
+                    inspect_pairing_storage(database)
                 print("Real HTTPS integration succeeded with isolated SQLite, verified TLS and libsignal JNI.")
                 return 0
             finally:
@@ -216,7 +282,14 @@ def main() -> int:
 
 if __name__ == "__main__":
     try:
-        raise SystemExit(main())
+        result = main()
+        if result == 0 and "--pairing-only" not in sys.argv[1:]:
+            # Different fixture scope, database and process: legacy acceptance already uses
+            # almost the full production per-IP ingress budget. Pairing gets the same
+            # unchanged limits and its own 120-second deadline, never a 429 bypass/retry.
+            result = subprocess.run([sys.executable, str(Path(__file__).resolve()),
+                                     *sys.argv[1:], "--pairing-only"], check=False).returncode
+        raise SystemExit(result)
     except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
         print(f"HTTPS integration failed: {exc}", file=sys.stderr)
         raise SystemExit(1)

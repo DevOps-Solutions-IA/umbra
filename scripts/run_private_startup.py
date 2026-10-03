@@ -58,6 +58,19 @@ def confirm_startup_recovery(adb,serial,reports,read_checkpoint):
     return wait_wifi_ipv4(adb,serial,reports/'network-restored-route.json',timeout=0)
 
 
+def observe_startup_failure(adb,serial,reports):
+    """Read-only owned-AVD diagnostics before cleanup; never change acceptance."""
+    outcomes={}
+    for name,observer in (("network",observe_owned_network),("wifi",observe_startup_wifi)):
+        try:
+            observer(adb,serial,reports/(name+"-at-failure.json"))
+            outcomes[name]="RECORDED"
+        except Exception:
+            # Fixed category only: exception messages may contain command output.
+            outcomes[name]="DIAGNOSTIC_FAILED"
+    (reports/'failure-observation.json').write_text(json.dumps(outcomes,indent=2)+'\n')
+
+
 def valid_report(text):
     return (re.search(r'^OK \(3 tests\)$',text,re.M) is not None
             and 'INSTRUMENTATION_CODE: -1' in text
@@ -172,7 +185,11 @@ def main():
             # Integrated Claude UI (locked, no device credential): a default-network return and a cold
             # relaunch must not open connections, resolve names or start sensors/scans on their own.
             run('shell','svc','wifi','disable');run('shell','svc','data','disable');time.sleep(2)
-            reset();run('shell','svc','wifi','enable');run('shell','svc','data','enable')
+            reset()
+            # Enabling Wi-Fi alone can leave the owned virtual AP disconnected.
+            # Restore the same Wi-Fi-only topology before observing app silence.
+            cold_restore=args.reports/'cold-restore';cold_restore.mkdir(exist_ok=True)
+            restore_startup_wifi(adb[0],args.serial,cold_restore)
             observe('cold-activity-network-return',dns_log)
             run('shell','am','force-stop',package)
             reset();run('shell','am','start','-W','-n',package+'/app.umbra.ui.MainActivity')
@@ -232,6 +249,12 @@ def main():
                 read('synthetic-startup-restarted.json');observe('process-restart',dns_log);go('restarted')
                 if process.wait(timeout=60) or not valid_report(after.read_text()):raise RuntimeError('Restart instrumentation failed')
             evidence['result']='PASS';evidence['limits']=['AOSP emulator, no physical Keystore claim','Synthetic SQLite integration; encrypted Vault covered separately','IPv6 absence counters, no positive IPv6 route claim','No media or sensor acquisition requested'];save()
+        except Exception as failure:
+            try:
+                observe_startup_failure(adb[0],args.serial,args.reports)
+            except Exception:
+                failure.add_note('Startup failure observation could not be persisted')
+            raise
         finally:
             # Attempt every cleanup even if ADB or the fixture has failed. Errors
             # are reported together; none is converted into successful acceptance.

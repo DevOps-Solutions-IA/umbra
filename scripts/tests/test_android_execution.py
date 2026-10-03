@@ -14,7 +14,7 @@ import run_bluetooth_emulation as nearby
 
 
 class AndroidExecutionTests(unittest.TestCase):
-    def run_single(self, report, returncode=0, flavor="offline", evidence=None):
+    def run_single(self, report, returncode=0, flavor="offline", evidence=None, required_runtime=0):
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder)
             for name in ('app.apk', 'test.apk'):
@@ -30,11 +30,20 @@ class AndroidExecutionTests(unittest.TestCase):
                         (Path(command[-1]) / f'{index:02d}.png').write_bytes(b'png')
                     return subprocess.CompletedProcess(command, 0)
                 if 'instrument' in command:
-                    kwargs['stdout'].write(report)
+                    if kwargs['timeout'] < required_runtime:
+                        raise subprocess.TimeoutExpired(command,kwargs['timeout'])
+                    self.assertEqual(330,kwargs['timeout'])
+                    kwargs['stream'].write(report)
                     return subprocess.CompletedProcess(command, returncode)
                 return subprocess.CompletedProcess(command, 0)
-            with patch.object(sys, 'argv', args), patch.object(single.subprocess, 'run', side_effect=execute), redirect_stdout(io.StringIO()):
+            with patch.object(sys, 'argv', args), patch.object(single.subprocess, 'run', side_effect=execute), patch.object(single,'run_with_progress',side_effect=execute), redirect_stdout(io.StringIO()):
                 single.main()
+
+    def test_measured_full_inventory_tail_has_bounded_execution_budget(self):
+        # Host-timing receipt: test120 started at296.444s. Remaining four tests
+        # took13.536s in the earlier complete123 run. This is orchestration only.
+        self.run_single('OK (123 tests)\nINSTRUMENTATION_CODE: -1\n',
+                        flavor='connected',required_runtime=310)
 
     def test_zero_tests_is_failure_even_with_successful_adb(self):
         with self.assertRaises(SystemExit):
@@ -42,39 +51,39 @@ class AndroidExecutionTests(unittest.TestCase):
 
     def test_skip_cannot_be_hidden_by_summary(self):
         with self.assertRaises(SystemExit):
-            self.run_single('INSTRUMENTATION_STATUS_CODE: -3\nOK (115 tests)\nINSTRUMENTATION_CODE: -1\n')
+            self.run_single('INSTRUMENTATION_STATUS_CODE: -3\nOK (120 tests)\nINSTRUMENTATION_CODE: -1\n')
 
     def test_missing_completion_is_failure(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (115 tests)\n')
+            self.run_single('OK (120 tests)\n')
 
     def test_adb_failure_is_not_overridden_by_test_summary(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (115 tests)\nINSTRUMENTATION_CODE: -1\n', returncode=1)
+            self.run_single('OK (120 tests)\nINSTRUMENTATION_CODE: -1\n', returncode=1)
 
     def test_complete_executed_checks_and_completion_pass(self):
-        self.run_single('OK (115 tests)\nINSTRUMENTATION_CODE: -1\n')
+        self.run_single('OK (120 tests)\nINSTRUMENTATION_CODE: -1\n')
 
     def test_offline_requires_technical_and_ui_checks(self):
         # 67 = Codex technical only (UI missing), 98 = UI + pre-audit technical (admission snapshot test missing).
         for stale in (62, 66, 67, 84, 97, 98):
             with self.subTest(stale=stale), self.assertRaises(SystemExit):
                 self.run_single(f'OK ({stale} tests)\nINSTRUMENTATION_CODE: -1\n')
-        self.run_single('OK (115 tests)\nINSTRUMENTATION_CODE: -1\n')
+        self.run_single('OK (120 tests)\nINSTRUMENTATION_CODE: -1\n')
 
     def test_ui_evidence_must_be_present_when_requested(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (115 tests)\nINSTRUMENTATION_CODE: -1\n', evidence=0)
-        self.run_single('OK (115 tests)\nINSTRUMENTATION_CODE: -1\n', evidence=single.MIN_EVIDENCE)
+            self.run_single('OK (120 tests)\nINSTRUMENTATION_CODE: -1\n', evidence=0)
+        self.run_single('OK (120 tests)\nINSTRUMENTATION_CODE: -1\n', evidence=single.MIN_EVIDENCE)
 
     def test_connected_requires_new_surface_lifecycle_checks(self):
         with self.assertRaises(SystemExit):
-            self.run_single('OK (115 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
+            self.run_single('OK (120 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
         # 70 = Codex technical only, 101 = UI + pre-audit technical.
         for stale in (64, 69, 70, 87, 100, 101):
             with self.subTest(stale=stale), self.assertRaises(SystemExit):
                 self.run_single(f'OK ({stale} tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
-        self.run_single('OK (118 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
+        self.run_single('OK (123 tests)\nINSTRUMENTATION_CODE: -1\n',flavor='connected')
 
     def test_pre_admission_suite_counts_are_no_longer_complete(self):
         for flavor,count in [('connected',69),('offline',66),('connected',67),('offline',64),('connected',66),('offline',63),('connected',63),('offline',60),('connected',61),('offline',58),('connected',36),('offline',34),('connected',48),('offline',46),('connected',51),('offline',49),('connected',56),('offline',54),('connected',58),('offline',55)]:

@@ -7,6 +7,31 @@ import unittest
 ROOT=Path(__file__).resolve().parents[2]
 
 class ExpiredDeliveryTest(unittest.TestCase):
+    def test_snapshot_rejection_requires_requested_reached_expiry_and_exact_reason(self):
+        source=ROOT/'android/app/src/androidTestConnected/java/app/umbra/media/ExpiredDeliveryAssertion.java'
+        harness='''package app.umbra.media;
+public final class SnapshotCheck {
+  public static void main(String[] args) {
+    SecurityException rejection=new SecurityException("Call interrupted");
+    ExpiredDeliveryAssertion.checkSnapshot(rejection,true,true);
+    reject(rejection,false,true);
+    reject(rejection,true,false);
+    reject(rejection,false,false);
+    reject(new SecurityException("Call expired"),true,true);
+    reject(new SecurityException("Identity changed"),true,true);
+    reject(new SecurityException(),true,true);
+  }
+  static void reject(SecurityException original,boolean requested,boolean reached) {
+    try { ExpiredDeliveryAssertion.checkSnapshot(original,requested,reached); }
+    catch(SecurityException failure) { if(failure!=original)throw new AssertionError("Rejection replaced"); return; }
+    throw new AssertionError("Unexpected snapshot rejection hidden");
+  }
+}'''
+        with tempfile.TemporaryDirectory() as folder:
+            test=Path(folder)/'SnapshotCheck.java';test.write_text(harness)
+            subprocess.run(['javac','-d',folder,str(source),str(test)],check=True,capture_output=True)
+            subprocess.run(['java','-cp',folder,'app.umbra.media.SnapshotCheck'],check=True,capture_output=True)
+
     def test_only_expected_terminal_same_call_rejection_is_evidence(self):
         source=ROOT/'android/app/src/androidTestConnected/java/app/umbra/media/ExpiredDeliveryAssertion.java'
         harness='''package app.umbra.media;

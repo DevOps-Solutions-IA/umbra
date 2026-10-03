@@ -123,7 +123,20 @@ class AdmissionStore:
         # One atomic bounded pool; no partial issuance or increased ingress rate limit.
         credential = Credential.parse(wire, self.realm)
         with self.database.connect(write=True) as conn:
-            return [self._challenge(conn, credential, "0" * 64) for _ in range(8)]
+            self.authorize(conn, credential)
+            now, elapsed = int(self.clock()), self.elapsed()
+            conn.execute("DELETE FROM admission_challenges WHERE expires<=? OR runtime!=? OR deadline<=?",
+                         (now, self.runtime, elapsed))
+            outstanding = conn.execute(
+                "SELECT wire FROM admission_challenges WHERE credential=? AND used=0 ORDER BY nonce",
+                (credential.credential_id,)).fetchall()
+            pool = [Challenge.parse(row["wire"]) for row in outstanding]
+            # Recover a lost client's public pool without expiring another live client's
+            # proofs or granting extra quota. Bound operations remain outside this pool.
+            if len(pool) > 8 or any(challenge.fields[5] != "0" * 64 for challenge in pool):
+                raise AdmissionError()
+            pool.extend(self._challenge(conn, credential, "0" * 64) for _ in range(8 - len(pool)))
+            return pool
 
     def consume(self, conn, credential_wire, challenge_wire, proof, operation):
         credential = Credential.parse(credential_wire, self.realm)

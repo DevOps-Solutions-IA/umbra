@@ -27,6 +27,12 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Install packet parser for synthetic PCAP regressions
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y tcpdump
+      - name: Install pinned relay primitives used by laboratory diagnostics tests
+        run: python -m pip install --require-hashes -r relay/requirements-hashed.lock
       - name: Handoff tooling tests (not Android tests)
         run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
   relay-and-core:
@@ -81,10 +87,10 @@ jobs:
   android:
     needs: repository-guard
     runs-on: ubuntu-24.04
-    # Measured run36627792335 completed device checks and reached artifact
-    # hashing at35m05s. Keep all per-test deadlines; reserve bounded
-    # completion/upload headroom for this cumulative build+device job.
-    timeout-minutes: 40
+    # Run37100252917 completed all device checks and finalized15 network cases
+    # at40m04s, then hit the outer40m limit during hashes. Reserve ~5m for
+    # receipts/uploads and runner variation; every per-test deadline is unchanged.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
         with:
@@ -151,6 +157,7 @@ jobs:
           free -m
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y tcpdump
+          export UMBRA_FINALIZED_CAPTURE=1
           source scripts/ci_emulator.sh
           umbra_start_avd umbra-ci 5554
           python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor connected --log android/app/build/reports/device/connected.log --evidence-dir android/app/build/reports/device/ui-evidence/connected
@@ -160,6 +167,8 @@ jobs:
           python scripts/smoke_release_launch.py --serial emulator-5554 > android/app/build/reports/device/release-launch.log
           python scripts/run_voice_probe.py --serial emulator-5554 --log android/app/build/reports/device/native-voice-probe.log
           source scripts/ci_bluetooth.sh
+          umbra_finalize_capture
+          python scripts/finalize_media_capture.py --reports "$UMBRA_DEVICE_REPORTS/voice-integration" --owner "$UMBRA_DEVICE_REPORTS/capture-owner.json"
       - name: Record checked-out commit and APK digests
         run: |
           git rev-parse HEAD > android/app/build/reports/commit.txt

@@ -1,38 +1,102 @@
 """Probe result validation; these doubles are not a network acceptance test."""
 from pathlib import Path
 import subprocess
+import os
+import time
 import sys
 import unittest
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from voice_direct_route import probe_udp, wifi_ipv4_route, wait_wifi_ipv4, observe_owned_network, initialize_owned_wifi
+from voice_direct_route import probe_udp, wifi_ipv4_route, wait_wifi_ipv4, observe_owned_network, initialize_owned_wifi, _listener_header, _owned_listener_inode
 
 class DirectRouteProbeTest(unittest.TestCase):
-    def test_only_exact_challenge_from_bound_receiver_proves_delivery(self):
+    HELP='If no -p specified, -l prints the port it bound to and backgrounds itself'
+    TABLE='sl local_address rem_address st tx_queue rx_queue tr uid timeout inode\n0: 00000000:9FD6 00000000:0000 07 0:0 00:0 0 1020 0 6943\n'
+    OWN='toybox\0nc\0-4\0-u\0-l\0-W\0'+'1\0\nsocket:[6943]\n'
+
+    def replies(self,ownership=None):
+        return [subprocess.CompletedProcess([],0,self.HELP,''),
+                subprocess.CompletedProcess([],0,self.TABLE,''),
+                subprocess.CompletedProcess([],0,self.OWN if ownership is None else ownership,''),
+                subprocess.CompletedProcess([],0,b'',b'')]
+
+    def header_pipe(self,data):
+        read,write=os.pipe();os.write(write,data);os.close(write)
+        stream=os.fdopen(read,'rb',buffering=0);self.addCleanup(stream.close)
+        return Mock(stdout=stream)
+
+    def test_only_exact_challenge_from_owned_receiver_proves_delivery(self):
         expected=('umbra-owned-route-'+'a'*32).encode()
         for received,proved in ((expected,True),(b'unrelated synthetic datagram',False),(b'',False)):
-            listener=Mock(returncode=0)
-            listener.poll.side_effect=[None,0]
+            listener=Mock(returncode=0);listener.poll.return_value=None
             listener.communicate.return_value=(received,b'')
-            replies=[subprocess.CompletedProcess([],0,'sl local_address\n0: 00000000:9C40\n'),subprocess.CompletedProcess([],0,b'')]
-            with patch('voice_direct_route.secrets.randbelow',return_value=0),patch('voice_direct_route.secrets.token_hex',return_value='a'*32),patch('voice_direct_route.subprocess.Popen',return_value=listener),patch('voice_direct_route.subprocess.run',side_effect=replies):
+            with patch('voice_direct_route._listener_header',return_value=(123,40918)),patch('voice_direct_route.secrets.token_hex',return_value='a'*32),patch('voice_direct_route.subprocess.Popen',return_value=listener) as popen,patch('voice_direct_route.subprocess.run',side_effect=self.replies()):
                 self.assertEqual(proved,probe_udp('adb','emulator-5554','emulator-5556','10.0.2.17'))
+                command=popen.call_args.args[0]
+                self.assertNotIn('-p',command[-1].split())
+                self.assertIn('exec toybox nc -4 -u -l -W 1',command[-1])
+
     def test_failed_listener_is_an_error_not_proof_that_firewall_blocks(self):
         listener=Mock(returncode=1);listener.poll.return_value=1
-        with patch('voice_direct_route.subprocess.Popen',return_value=listener):
-            with self.assertRaises(RuntimeError): probe_udp('adb','emulator-5554','emulator-5556','10.0.2.17')
-        with self.assertRaises(ValueError): probe_udp('adb','physical','emulator-5556','10.0.2.17')
+        with patch('voice_direct_route._listener_header',return_value=(123,40918)),patch('voice_direct_route.subprocess.run',side_effect=self.replies()),patch('voice_direct_route.subprocess.Popen',return_value=listener):
+            with self.assertRaises(RuntimeError):probe_udp('adb','emulator-5554','emulator-5556','10.0.2.17')
+        with self.assertRaises(ValueError):probe_udp('adb','physical','emulator-5556','10.0.2.17')
 
     def test_receiver_tool_failure_preserves_bounded_escaped_diagnostic(self):
-        listener=Mock(returncode=1);listener.poll.side_effect=[None,1]
+        listener=Mock(returncode=1);listener.poll.return_value=None
         listener.communicate.return_value=(b'',b'nc: synthetic failure\n'+b'x'*300)
-        replies=[subprocess.CompletedProcess([],0,'sl local_address\n0: 00000000:9C40\n'),subprocess.CompletedProcess([],0,b'')]
-        with patch('voice_direct_route.secrets.randbelow',return_value=0),patch('voice_direct_route.subprocess.Popen',return_value=listener),patch('voice_direct_route.subprocess.run',side_effect=replies):
-            with self.assertRaises(RuntimeError) as failure: probe_udp('adb','emulator-5554','emulator-5556','10.0.2.17')
+        with patch('voice_direct_route._listener_header',return_value=(123,40918)),patch('voice_direct_route.subprocess.Popen',return_value=listener),patch('voice_direct_route.subprocess.run',side_effect=self.replies()):
+            with self.assertRaises(RuntimeError) as failure:probe_udp('adb','emulator-5554','emulator-5556','10.0.2.17')
         diagnostic=str(failure.exception)
-        self.assertIn('nc: synthetic failure',diagnostic)
-        self.assertNotIn('\n',diagnostic)
-        self.assertLess(len(diagnostic),450)
+        self.assertIn('nc: synthetic failure',diagnostic);self.assertNotIn('\n',diagnostic);self.assertLess(len(diagnostic),450)
+
+    def test_foreign_existing_socket_cannot_trigger_sender(self):
+        listener=Mock(returncode=0);listener.poll.return_value=None
+        # Same historical occupied port/UID/inode, but not our process's FD.
+        with patch('voice_direct_route._listener_header',return_value=(123,40918)),patch('voice_direct_route.subprocess.Popen',return_value=listener),patch('voice_direct_route.subprocess.run',side_effect=self.replies(self.OWN.replace('6943','8888'))) as run:
+            with self.assertRaisesRegex(RuntimeError,'socket identity mismatch'):
+                probe_udp('adb','emulator-5554','emulator-5556','10.0.2.17')
+        self.assertFalse(any('emulator-5554' in call.args[0] for call in run.call_args_list))
+
+    def test_header_failure_preserves_bounded_listener_diagnostic(self):
+        listener=Mock(returncode=1);listener.poll.return_value=1
+        listener.communicate.return_value=(b'',b'nc: bind: synthetic failure\n'+b'x'*400)
+        evidence={}
+        with patch('voice_direct_route._listener_header',side_effect=RuntimeError('header failure')),patch('voice_direct_route.subprocess.Popen',return_value=listener),patch('voice_direct_route.subprocess.run',side_effect=self.replies()) as run:
+            with self.assertRaisesRegex(RuntimeError,'header failure'):
+                probe_udp('adb','emulator-5554','emulator-5556','10.0.2.17',evidence)
+        self.assertEqual(1,evidence['listenerExit'])
+        self.assertIn('synthetic failure',evidence['listenerStderr'])
+        self.assertNotIn('\n',evidence['listenerStderr'])
+        self.assertLess(len(evidence['listenerStderr']),280)
+        self.assertFalse(any('emulator-5554' in call.args[0] for call in run.call_args_list))
+
+    def test_header_preserves_following_datagram_bytes(self):
+        listener=self.header_pipe(b'UMBRA_PID=123\n40918\nchallenge')
+        self.assertEqual((123,40918),_listener_header(listener,time.monotonic()+2))
+        self.assertEqual(b'challenge',listener.stdout.read())
+
+    def test_header_rejects_malformed_truncated_privileged_or_unbounded_values(self):
+        for header in (b'',b'123\n40918\n',b'UMBRA_PID=1\n40918\n',b'UMBRA_PID=123\n0\n',
+                       b'UMBRA_PID=123\n65536\n',b'UMBRA_PID=123\n22\n',b'UMBRA_PID=123\n09\n',
+                       b'UMBRA_PID='+b'1'*40+b'\n40918\n',b'UMBRA_PID=123\n'+b'1'*10+b'\n'):
+            with self.subTest(header=header),self.assertRaises(RuntimeError):
+                _listener_header(self.header_pipe(header),time.monotonic()+2)
+        with self.assertRaises(RuntimeError):_listener_header(self.header_pipe(b'UMBRA_PID=123\n40918\n'),time.monotonic()-1)
+
+    def test_socket_ownership_rejects_wrong_process_inode_port_or_ambiguous_table(self):
+        self.assertEqual(6943,_owned_listener_inode(self.TABLE,self.OWN,40918))
+        for table,owner,port in ((self.TABLE,self.OWN.replace('toybox','foreign'),40918),
+                                 (self.TABLE,self.OWN.replace('6943','8888'),40918),
+                                 (self.TABLE,self.OWN,40919),
+                                 (self.TABLE+self.TABLE.splitlines()[1]+'\n',self.OWN,40918)):
+            with self.assertRaises(RuntimeError):_owned_listener_inode(table,owner,port)
+
+    def test_unsupported_installed_toybox_fails_before_start_or_sender(self):
+        for reply in (subprocess.CompletedProcess([],0,'different CLI',''),subprocess.CompletedProcess([],1,self.HELP,'')):
+            with patch('voice_direct_route.subprocess.run',return_value=reply),patch('voice_direct_route.subprocess.Popen') as popen:
+                with self.assertRaises(RuntimeError):probe_udp('adb','emulator-5554','emulator-5556','10.0.2.17')
+                popen.assert_not_called()
 
     def test_address_without_a_matching_ipv4_wifi_route_is_not_ready(self):
         self.assertTrue(wifi_ipv4_route('10.0.2.2 dev wlan0 src 10.0.2.16 uid 2000','10.0.2.16'))

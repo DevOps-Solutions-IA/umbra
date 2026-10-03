@@ -10,9 +10,14 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from instrumentation_progress import run as run_with_progress
 
 ROOT = Path(__file__).resolve().parents[1]
 MIN_EVIDENCE = 30
+# 123-case suite: prior complete run299.233s; current test120 began296.444s
+# and the measured four-test tail needs13.536s. Budget310s plus20s bounded
+# host variability, without filtering/splitting tests or altering product leases.
+SUITE_TIMEOUT_SECONDS = 330
 
 
 def main() -> None:
@@ -36,17 +41,18 @@ def main() -> None:
         subprocess.run([*adb, 'install', '-r', str(apk)], check=True, timeout=180)
     args.log.parent.mkdir(parents=True, exist_ok=True)
     with args.log.open('w', encoding='utf-8') as stream:
-        result = subprocess.run([*adb, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'syntheticNoHostAudio', 'true',
-            package + '.test/androidx.test.runner.AndroidJUnitRunner'], stdout=stream,
-            stderr=subprocess.STDOUT, timeout=300)
+        result = run_with_progress([*adb, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'syntheticNoHostAudio', 'true',
+            package + '.test/androidx.test.runner.AndroidJUnitRunner'], stream=stream,
+            report=args.log.with_suffix('.timing.json'), timeout=SUITE_TIMEOUT_SECONDS)
     output = args.log.read_text(encoding='utf-8')
     # Inventory: 83 shared technical methods (including concurrent Vault ONCE open, encrypted DB/WAL
     # inspection, native clipboard, SQLite admission snapshots that preserve corruption, and
     # sixteen access-readiness/deadline real-Vault domain cases; the opt-in lifecycle harness is a separate lab) + 32 Claude UI
     # methods (UiScreensRenderTest, UiSecurityFlowTest, UiContentIntegrationTest); connected adds capture and
     # two video surface lifecycle methods.
+    # Pairing adds five encrypted SQLite/Argon2 persistence and lifecycle methods per flavor.
     # Exact counts remain fail-closed: adding a class requires updating this contract.
-    expected=118 if args.flavor=='connected' else 115
+    expected=123 if args.flavor=='connected' else 120
     failed = result.returncode != 0 or not re.search(r'^OK \('+str(expected)+r' tests\)$', output, re.MULTILINE)
     failed |= 'INSTRUMENTATION_CODE: -1' not in output
     failed |= bool(re.search(r'INSTRUMENTATION_STATUS_CODE: -(?:1|2|3|4)\b', output))

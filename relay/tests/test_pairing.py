@@ -157,7 +157,9 @@ def test_v2_migration_preserves_mailboxes_and_messages(context):
         db.execute('DROP TABLE pairing_invites')
         db.execute('DROP TABLE device_revocations')
         # Construct the actual legacy schema, without later admission tables.
-        from umbra_relay.schema import ADMISSION_TABLES
+        from umbra_relay.schema import ADMISSION_TABLES, RENDEZVOUS_TABLES
+        for table in sorted(RENDEZVOUS_TABLES):
+            db.execute(f'DROP TABLE {table}')
         for table in sorted(ADMISSION_TABLES):
             db.execute(f'DROP TABLE {table}')  # Fixed schema constants.
         db.execute('PRAGMA user_version=2')
@@ -166,7 +168,7 @@ def test_v2_migration_preserves_mailboxes_and_messages(context):
         assert inbox(restarted, box).json()['messages'] == [message]
         assert create(restarted, box, invitation()).status_code == 201
     with migrated.state.database.connect() as db:
-        assert db.execute('PRAGMA user_version').fetchone()[0] == 5
+        assert db.execute('PRAGMA user_version').fetchone()[0] == 6
 
 
 def test_missing_v3_pairing_table_rejected(context):
@@ -183,7 +185,9 @@ def test_v2_migration_failure_rolls_back_pairing_table(context):
         db.execute('DROP TABLE pairing_invites')
         db.execute('DROP TABLE device_revocations')
         # Construct the actual legacy schema, without later admission tables.
-        from umbra_relay.schema import ADMISSION_TABLES
+        from umbra_relay.schema import ADMISSION_TABLES, RENDEZVOUS_TABLES
+        for table in sorted(RENDEZVOUS_TABLES):
+            db.execute(f'DROP TABLE {table}')
         for table in sorted(ADMISSION_TABLES):
             db.execute(f'DROP TABLE {table}')  # Fixed schema constants.
         db.execute('PRAGMA user_version=2')

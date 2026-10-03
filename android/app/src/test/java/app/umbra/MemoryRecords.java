@@ -5,8 +5,11 @@ import java.util.*;
 
 /** Test-only memory backend. Never selected by the Android application. */
 final class MemoryRecords implements Records {
-    private final app.umbra.core.AccessGate gate=new app.umbra.core.AccessGate();
-    MemoryRecords() { gate.unlock(); }
+    private final app.umbra.core.AccessGate gate;
+    MemoryRecords() { this(new app.umbra.core.AccessGate()); }
+    MemoryRecords(app.umbra.core.AccessGate gate) { this.gate=gate; gate.unlock(); }
+    /** Explicit synthetic authority setup only; never called by authorization(). */
+    void reauthorizeSyntheticSession() { gate.unlock(); }
     public Runnable authorization() { var lease=gate.enter(); return () -> gate.check(lease); }
     private Map<String,byte[]> entries = new LinkedHashMap<>();
     private static String key(String bucket, String key) { return bucket + "\u0000" + key; }

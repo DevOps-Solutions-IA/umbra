@@ -26,3 +26,89 @@ class HttpDiagnosticsTest(unittest.TestCase):
         with self.assertRaises(TypeError):d.event(old,'received',body='not accepted')
         value['connections'][0]['responses']=999
         self.assertEqual(0,d.snapshot()['connections'][0]['responses'])
+
+
+class DenialDiagnosticsTest(unittest.IsolatedAsyncioTestCase):
+    async def response(self, diagnostic, status, body, path='/v1/boxes/secret-box/messages/secret-id', method='DELETE', headers=None):
+        sent=[];received=[]
+        request={'type':'http.request','body':b'secret-request'}
+        async def receive():received.append(request);return request
+        async def send(message):sent.append(message)
+        messages=[{'type':'http.response.start','status':status,'headers':headers if headers is not None else [(b'x-secret',b'secret-value')]},
+                  {'type':'http.response.body','body':body[:4],'more_body':True},
+                  {'type':'http.response.body','body':body[4:]}]
+        async def app(scope,recv,emit):
+            self.assertIs(await recv(),request)
+            for message in messages:await emit(message)
+        await diagnostic.wrap(app)({'type':'http','path':path,'method':method},receive,send)
+        self.assertEqual(messages,sent)
+        self.assertTrue(all(a is b for a,b in zip(messages,sent)))
+        self.assertEqual([request],received)
+
+    async def test_closed_categories_and_transparent_delivery(self):
+        from voice_http_diagnostics import DenialDiagnostics
+        import json
+        d=DenialDiagnostics(clock=iter(range(10)).__next__)
+        await self.response(d,403,b'{"detail":"Admission unavailable"}')
+        self.assertEqual('ADMISSION_UNAVAILABLE',d.snapshot()['responses'][0]['denial'])
+        self.assertEqual('MESSAGE_ACK',d.snapshot()['responses'][0]['route'])
+        await self.response(d,200,b'secret-success')
+        self.assertEqual(1,d.snapshot()['total'])
+        self.assertNotIn('secret',json.dumps(d.snapshot()))
+
+    async def test_unknown_oversized_and_extra_fields_redacted_with_capacity(self):
+        from voice_http_diagnostics import DenialDiagnostics
+        import json
+        d=DenialDiagnostics(capacity=2)
+        for body in (b'{"detail":"secret-error"}',b'x'*300,
+                     b'{"detail":"Admission unavailable","secret":"secret-value"}'):
+            await self.response(d,403,body,path='/secret-path')
+        value=d.snapshot()
+        self.assertEqual(3,value['total']);self.assertEqual(1,value['dropped'])
+        self.assertEqual({403:3},value['statusCounts'])
+        self.assertTrue(all(r['denial']=='OTHER' and r['route']=='OTHER' for r in value['responses']))
+        self.assertNotIn('secret',json.dumps(value))
+        value['responses'][0]['route']='mutated'
+        self.assertEqual('OTHER',d.snapshot()['responses'][0]['route'])
+
+    async def test_only_exact_retry_header_is_reduced_to_boolean(self):
+        from voice_http_diagnostics import DenialDiagnostics
+        import json
+        key=b'x-umbra-admission-retry'
+        cases=[(403,[(key,b'fresh-challenge')],True),
+               (403,[(key.upper(),b'fresh-challenge')],True),
+               (403,[(b'x-secret',b'fresh-challenge')],False),
+               (403,[(key,b'fresh-challenge secret')],False),
+               (403,[(key,b'Fresh-Challenge')],False),
+               (403,[(key,b'fresh-challenge'),(key,b'fresh-challenge')],False),
+               (401,[(key,b'fresh-challenge')],False)]
+        for status,headers,expected in cases:
+            with self.subTest(status=status,expected=expected,headers=headers):
+                d=DenialDiagnostics()
+                await self.response(d,status,b'{"detail":123456789}',headers=headers)
+                value=d.snapshot();row=value['responses'][0]
+                self.assertIs(expected,row['freshChallengeRequired'])
+                self.assertEqual('OTHER',row['denial'])
+                serialized=json.dumps(value)
+                for forbidden in ('123456789','secret','fresh-challenge','x-umbra'):
+                    self.assertNotIn(forbidden,serialized)
+
+    async def test_actual_message_put_and_exact_bad_request_categories(self):
+        from voice_http_diagnostics import DenialDiagnostics
+        import json
+        for detail, expected in (("Invalid expiry", "INVALID_EXPIRY"),
+                                 ("Message id mismatch", "MESSAGE_ID_MISMATCH")):
+            with self.subTest(detail=detail):
+                d=DenialDiagnostics()
+                await self.response(d,400,json.dumps({"detail":detail}).encode(),method="PUT")
+                row=d.snapshot()["responses"][0]
+                self.assertEqual("MESSAGE_SEND",row["route"])
+                self.assertEqual(expected,row["denial"])
+                self.assertNotIn("secret",json.dumps(d.snapshot()))
+
+    async def test_nonexistent_collection_post_is_not_message_send(self):
+        from voice_http_diagnostics import DenialDiagnostics
+        d=DenialDiagnostics()
+        await self.response(d,405,b'{"detail":"Method Not Allowed"}',
+                            path="/v1/boxes/secret-box/messages",method="POST")
+        self.assertEqual("OTHER",d.snapshot()["responses"][0]["route"])

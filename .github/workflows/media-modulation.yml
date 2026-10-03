@@ -67,6 +67,7 @@ jobs:
           export UMBRA_SYNTHETIC_CAMERA=emulated
           mkdir -p "$UMBRA_DEVICE_REPORTS"
           git rev-parse HEAD > "$UMBRA_DEVICE_REPORTS/commit.txt"
+          export UMBRA_FINALIZED_CAPTURE=1
           source scripts/ci_emulator.sh
           umbra_start_avd umbra-modulated-a 5554
           umbra_start_avd umbra-modulated-b 5556
@@ -76,6 +77,8 @@ jobs:
           python scripts/run_voice_integration.py --a emulator-5554 --b emulator-5556 "${options[@]}" --modulation --video --reports "$UMBRA_DEVICE_REPORTS/video"
           python scripts/run_voice_integration.py --a emulator-5554 --b emulator-5556 "${options[@]}" --modulation --scenario lock --reports "$UMBRA_DEVICE_REPORTS/lock"
           python scripts/run_voice_integration.py --a emulator-5554 --b emulator-5556 "${options[@]}" --modulation --video --scenario device-revoked --reports "$UMBRA_DEVICE_REPORTS/revocation"
+          umbra_finalize_capture
+          python scripts/finalize_media_capture.py --reports "$UMBRA_DEVICE_REPORTS" --owner "$UMBRA_DEVICE_REPORTS/capture-owner.json"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
