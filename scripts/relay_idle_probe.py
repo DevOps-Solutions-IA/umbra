@@ -36,6 +36,6 @@ def coordinate(path, previous_ids, read, write, report, *, clock=time.monotonic,
     if observed is None:raise RuntimeError('Owned HTTPS idle close not observed')
     write('synthetic-http-closed.json',{'idleCloseObserved':True})
     result=read('synthetic-http-reproduced.json')
-    if result!={'androidEof':True,'networkRevoked':True}:raise RuntimeError('Android pooled EOF not reproduced')
-    report.write_text(json.dumps({'scope':'controlled Android pooled TLS idle-close race; not historical socket attribution',
+    if result!={'androidEof':True,'networkRevoked':True,'freshSocketVerified':True}:raise RuntimeError('Android pooled EOF not reproduced')
+    report.write_text(json.dumps({'scope':'controlled legacy Android pooled TLS race plus fresh-socket fixed transport; not historical socket attribution',
                                  'result':'REPRODUCED','server':observed,'client':result},indent=2)+'\n')

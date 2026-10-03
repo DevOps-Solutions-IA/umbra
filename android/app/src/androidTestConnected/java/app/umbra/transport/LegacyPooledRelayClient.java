@@ -10,7 +10,11 @@ import java.util.function.BooleanSupplier;
 import javax.net.ssl.HttpsURLConnection;
 
 /** Untrusted HTTPS courier; cancellation on lock and no redirects or plaintext fallback. */
-public final class RelayClient implements AutoCloseable {
+/** Lab-only frozen negative control from a2867e5347b9fcd3f17d187ded2159af1fc5746e.
+ * Original RelayClient blob: fe6ac9be27019cdb6ff1b66472ce6713ac8a9d7d. Never include in production APKs.
+ * Intentionally retains pooled TLS behavior to reproduce the known idle-close race.
+ */
+public final class LegacyPooledRelayClient implements AutoCloseable {
     private final String base;
     private final app.umbra.connectivity.ConnectivityService.Lease network;
     private final BooleanSupplier permitted;
@@ -28,9 +32,9 @@ public final class RelayClient implements AutoCloseable {
     // by factory identity. A new wrapper per request defeats reuse unnecessarily.
     private final CancellableTls socketFactory=new CancellableTls(HttpsURLConnection.getDefaultSSLSocketFactory());
     private final java.util.ArrayDeque<app.umbra.admission.AdmissionChallenge> challenges=new java.util.ArrayDeque<>();
-    public RelayClient(String address) throws Exception { this(address, () -> true); }
-    public RelayClient(String address, BooleanSupplier permitted) throws Exception { this(address,permitted,null); }
-    public RelayClient(String address, BooleanSupplier permitted, app.umbra.admission.AdmissionService admission) throws Exception {
+    public LegacyPooledRelayClient(String address) throws Exception { this(address, () -> true); }
+    public LegacyPooledRelayClient(String address, BooleanSupplier permitted) throws Exception { this(address,permitted,null); }
+    public LegacyPooledRelayClient(String address, BooleanSupplier permitted, app.umbra.admission.AdmissionService admission) throws Exception {
         base=validate(address); this.permitted=permitted; this.admission=admission;
         network=admission==null?null:admission.connectivity().networkLease(base);
         if(network!=null) {
@@ -193,9 +197,6 @@ public final class RelayClient implements AutoCloseable {
             connection.setConnectTimeout(10_000); connection.setReadTimeout(10_000);
             connection.setUseCaches(false); connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Accept-Encoding", "identity");
-            // A streamed one-use proof cannot be replayed after an idle pooled TLS
-            // connection closes between its health check and this request's write.
-            connection.setRequestProperty("Connection", "close");
             if (token != null) {
                 if (!token.matches("[A-Za-z0-9_-]{43}")) throw new SecurityException("Invalid capability");
                 connection.setRequestProperty("Authorization", "Bearer " + token);
@@ -230,8 +231,8 @@ public final class RelayClient implements AutoCloseable {
         } finally {
             if (deadline != null) deadline.cancel(false);
             connection.disconnect(); active.compareAndSet(connection,null);
-            // Retain cancellation ownership until the transport confirms socket closure.
-            // Connection: close prevents successful requests from entering the idle pool.
+            // Keep ownership of idle reusable sockets until client cancellation.
+            // Closing every socket here turns each poll into another TLS handshake.
             plainSockets.removeIf(java.net.Socket::isClosed);
             tlsSockets.removeIf(java.net.Socket::isClosed);
         }

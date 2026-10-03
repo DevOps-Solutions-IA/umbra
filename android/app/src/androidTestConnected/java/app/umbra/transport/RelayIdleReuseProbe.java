@@ -20,17 +20,17 @@ public final class RelayIdleReuseProbe {
         GateFactory gate=new GateFactory(original);
         ExecutorService worker=Executors.newSingleThreadExecutor();
         ExecutorService observer=Executors.newSingleThreadExecutor();
-        RelayClient relay=null;
+        LegacyPooledRelayClient relay=null;
         try {
             HttpsURLConnection.setDefaultSSLSocketFactory(gate);
-            relay=new RelayClient(base,()->engine.connectivity().isNetworkSessionAllowed(),engine.admission());
+            relay=new LegacyPooledRelayClient(base,()->engine.connectivity().isNetworkSessionAllowed(),engine.admission());
             HttpsURLConnection.setDefaultSSLSocketFactory(original);
             String credential=engine.admission().requireAdmission().wire();
             relay.publicRealm(); // Real pinned authority endpoint + explicit network lease; drains response.
             if(gate.created.get()!=1)throw new AssertionError("Probe warmup did not own exactly one TLS socket");
             control.warmed();
             gate.armed.set(true);
-            RelayClient owned=relay;
+            LegacyPooledRelayClient owned=relay;
             Future<Throwable> result=worker.submit(()->{
                 try {owned.publishAdmissionCredential(credential);return null;}
                 catch(Throwable failure){return failure;}
@@ -54,6 +54,28 @@ public final class RelayIdleReuseProbe {
             if(relay!=null)relay.close();
             worker.shutdownNow();observer.shutdownNow();
             if(!worker.awaitTermination(5,TimeUnit.SECONDS) || !observer.awaitTermination(5,TimeUnit.SECONDS))throw new AssertionError("Probe worker did not close");
+        }
+    }
+    /** Invoke only after a new explicit laboratory connect following the negative control. */
+    public static void verifyFreshTransport(Engine engine,String base) throws Exception {
+        SSLSocketFactory original=HttpsURLConnection.getDefaultSSLSocketFactory();
+        GateFactory observer=new GateFactory(original);
+        RelayClient relay=null;
+        try {
+            HttpsURLConnection.setDefaultSSLSocketFactory(observer);
+            relay=new RelayClient(base,()->engine.connectivity().isNetworkSessionAllowed(),engine.admission());
+            HttpsURLConnection.setDefaultSSLSocketFactory(original);
+            String credential=engine.admission().requireAdmission().wire();
+            relay.publicRealm();
+            if(observer.created.get()!=1)throw new AssertionError("Fixed transport warmup socket mismatch");
+            relay.publishAdmissionCredential(credential);
+            if(observer.created.get()!=2 || observer.intercepted.get()!=0)
+                throw new AssertionError("Fixed transport did not use exactly two fresh TLS sockets");
+            if(!engine.connectivity().isNetworkSessionAllowed())
+                throw new AssertionError("Fixed transport lost network authorization");
+        } finally {
+            HttpsURLConnection.setDefaultSSLSocketFactory(original);
+            if(relay!=null)relay.close();
         }
     }
     private static final class GateFactory extends SSLSocketFactory {
