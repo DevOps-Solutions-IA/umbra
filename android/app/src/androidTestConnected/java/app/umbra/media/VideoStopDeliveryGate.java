@@ -5,7 +5,7 @@ final class VideoStopDeliveryGate {
     private final String call, nonce;
     private final int generation;
     private boolean issued, released, peerStopApplied;
-    private String stopEnvelopeId, peerStopId;
+    private java.util.Set<String> stopEnvelopeIds=java.util.Set.of(), peerStopIds=java.util.Set.of();
     private final java.util.Set<String> receivedBeforeRelease=new java.util.HashSet<>();
 
     VideoStopDeliveryGate(String call,int generation,String nonce) {
@@ -13,26 +13,37 @@ final class VideoStopDeliveryGate {
             throw new IllegalArgumentException("Invalid synthetic stop gate");
         this.call=call;this.generation=generation;this.nonce=nonce;
     }
+    void requireAnnounced(String type,String queuedCall,int queuedGeneration,String envelopeId) {
+        if(issued && matchesStop(type,queuedCall,queuedGeneration) && !stopEnvelopeIds.contains(envelopeId))
+            throw new AssertionError("Synthetic stop inventory changed after issued receipt");
+    }
     boolean defer(String type,String queuedCall,int queuedGeneration) {
         return issued && !released && matchesStop(type,queuedCall,queuedGeneration);
     }
-    void issued(String stopEnvelopeId) {
-        if(stopEnvelopeId==null || stopEnvelopeId.isEmpty())throw new IllegalArgumentException("Missing synthetic stop envelope");
-        if(issued)throw new IllegalStateException("Synthetic local stop already issued");
-        this.stopEnvelopeId=stopEnvelopeId;issued=true;
+    private static java.util.Set<String> boundedIds(java.util.Collection<String> ids) {
+        if(ids==null || ids.isEmpty() || ids.size()>128)throw new SecurityException("Invalid synthetic stop envelope set");
+        var copy=new java.util.LinkedHashSet<String>();
+        for(String id:ids)if(id==null || id.isEmpty() || !copy.add(id))
+            throw new SecurityException("Duplicate or missing synthetic stop envelope");
+        return java.util.Collections.unmodifiableSet(copy);
     }
-    void release(boolean confirmed,int generation,String nonce,String peerStopId) {
+    void issued(java.util.Collection<String> stopEnvelopeIds) {
+        if(issued)throw new IllegalStateException("Synthetic local stop already issued");
+        this.stopEnvelopeIds=boundedIds(stopEnvelopeIds);issued=true;
+    }
+    void release(boolean confirmed,int generation,String nonce,java.util.Collection<String> peerStopIds) {
+        var peer=boundedIds(peerStopIds);
         if(!issued || !confirmed || this.generation!=generation || !this.nonce.equals(nonce) ||
-                peerStopId==null || peerStopId.isEmpty() || peerStopId.equals(stopEnvelopeId) ||
-                (released && !peerStopId.equals(this.peerStopId)))
+                !java.util.Collections.disjoint(peer,stopEnvelopeIds) || (released && !peer.equals(this.peerStopIds)))
             throw new SecurityException("Synthetic stop release lacks matching local request");
-        this.peerStopId=peerStopId;released=true;
-        peerStopApplied=peerStopApplied || receivedBeforeRelease.contains(peerStopId);
-        receivedBeforeRelease.clear();
+        this.peerStopIds=peer;released=true;
+        receivedBeforeRelease.retainAll(peer);
+        peerStopApplied=receivedBeforeRelease.containsAll(peer);
     }
     void received(String envelopeId) {
         if(released) {
-            if(peerStopId.equals(envelopeId))peerStopApplied=true;
+            if(peerStopIds.contains(envelopeId))receivedBeforeRelease.add(envelopeId);
+            peerStopApplied=receivedBeforeRelease.containsAll(peerStopIds);
         } else if(issued) {
             // The host releases endpoints sequentially. A peer's released stop
             // may be applied here before this endpoint reads its own release.
@@ -42,7 +53,7 @@ final class VideoStopDeliveryGate {
         }
     }
     boolean peerStopApplied() { return peerStopApplied; }
-    String stopEnvelopeId() { return stopEnvelopeId; }
+    java.util.Set<String> stopEnvelopeIds() { return stopEnvelopeIds; }
     boolean matchesStop(String type,String queuedCall,int queuedGeneration) {
         return type.equals("VIDEO_STOP") && call.equals(queuedCall) && generation==queuedGeneration;
     }

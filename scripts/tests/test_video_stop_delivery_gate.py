@@ -41,18 +41,18 @@ public final class Check {
  byte[] ciphertext={1,2,3};byte[] original=ciphertext.clone();int transported=0;
  // Before the controlled local action, automatic VIDEO_STOP is never hidden.
  check(!a.defer("VIDEO_STOP","call",2));
- a.issued("stop-a");
+ a.issued(java.util.List.of("stop-a"));
  if(!a.defer("VIDEO_STOP","call",2))transported++;
  check(transported==0);check(java.util.Arrays.equals(ciphertext,original));
  check(!a.defer("ICE","call",2));check(!a.defer("VIDEO_STOP","other",2));
  check(!a.defer("VIDEO_STOP","call",3));
- reject(()->b.release(true,2,"nonce-b","stop-a"));
- b.issued("stop-b");
- reject(()->a.release(true,3,"nonce-a","stop-b"));reject(()->a.release(true,2,"nonce-b","stop-b"));
- reject(()->a.release(false,2,"nonce-a","stop-b"));
- reject(()->a.release(true,2,"nonce-a","stop-a"));
+ reject(()->b.release(true,2,"nonce-b",java.util.List.of("stop-a")));
+ b.issued(java.util.List.of("stop-b"));
+ reject(()->a.release(true,3,"nonce-a",java.util.List.of("stop-b")));reject(()->a.release(true,2,"nonce-b",java.util.List.of("stop-b")));
+ reject(()->a.release(false,2,"nonce-a",java.util.List.of("stop-b")));
+ reject(()->a.release(true,2,"nonce-a",java.util.List.of("stop-a")));
  // Host releases only after observing both issued acknowledgments.
- a.release(true,2,"nonce-a","stop-b");b.release(true,2,"nonce-b","stop-a");
+ a.release(true,2,"nonce-a",java.util.List.of("stop-b"));b.release(true,2,"nonce-b",java.util.List.of("stop-a"));
  if(!a.defer("VIDEO_STOP","call",2))transported++;
  check(transported==1);check(java.util.Arrays.equals(ciphertext,original));
  check(!b.defer("VIDEO_STOP","call",2));
@@ -61,20 +61,48 @@ public final class Check {
  // Release is not proof of receipt; a delayed peer keeps resume blocked.
  a.received("stop-b");check(a.peerStopApplied());check(!b.peerStopApplied());
  b.received("stop-a");check(b.peerStopApplied());
- reject(()->a.release(true,2,"nonce-a","replacement-stop"));
+ reject(()->a.release(true,2,"nonce-a",java.util.List.of("replacement-stop")));
  check(VideoStopDeliveryGate.withinBounds(100,110,120,150));
  check(VideoStopDeliveryGate.withinBounds(200,210,220,250));
  // A stale first-generation release cannot unlock a fresh generation gate.
- var next=new VideoStopDeliveryGate("call",3,"nonce-next");next.issued("stop-next");
- reject(()->next.release(true,2,"nonce-a","stop-a"));check(next.defer("VIDEO_STOP","call",3));
+ var next=new VideoStopDeliveryGate("call",3,"nonce-next");next.issued(java.util.List.of("stop-next"));
+ reject(()->next.release(true,2,"nonce-a",java.util.List.of("stop-a")));check(next.defer("VIDEO_STOP","call",3));
  // A can transmit after host releases A but before host releases B.
- var early=new VideoStopDeliveryGate("call",2,"nonce-early");early.issued("stop-early");
+ var early=new VideoStopDeliveryGate("call",2,"nonce-early");early.issued(java.util.List.of("stop-early"));
  early.received("peer-already-applied");check(!early.peerStopApplied());
- early.release(true,2,"nonce-early","peer-already-applied");check(early.peerStopApplied());
- var wrongEarly=new VideoStopDeliveryGate("call",2,"nonce-wrong");wrongEarly.issued("stop-wrong");
- wrongEarly.received("unrelated");wrongEarly.release(true,2,"nonce-wrong","required-peer-stop");
+ early.release(true,2,"nonce-early",java.util.List.of("peer-already-applied"));check(early.peerStopApplied());
+ var wrongEarly=new VideoStopDeliveryGate("call",2,"nonce-wrong");wrongEarly.issued(java.util.List.of("stop-wrong"));
+ wrongEarly.received("unrelated");wrongEarly.release(true,2,"nonce-wrong",java.util.List.of("required-peer-stop"));
  check(!wrongEarly.peerStopApplied());
 
+''')
+        self.assertEqual(0, result.returncode, result.stderr)
+
+    def test_bounded_sets_require_every_peer_control_without_dropping_duplicates(self):
+        result = self.run_java('''
+ var g=new VideoStopDeliveryGate("call",2,"nonce");
+ g.requireAnnounced("VIDEO_STOP","call",2,"automatic-before-issued");
+ g.issued(java.util.List.of("a1","a2"));
+ g.requireAnnounced("VIDEO_STOP","call",2,"a1");
+ g.requireAnnounced("VIDEO_STOP","other",2,"unrelated");
+ g.requireAnnounced("VIDEO_STOP","call",3,"later-generation");
+ boolean guarded=false;
+ try {g.requireAnnounced("VIDEO_STOP","call",2,"late-stop");}
+ catch(AssertionError expected) {guarded=true;check(!expected.getMessage().contains("late-stop"));}
+ check(guarded);
+
+ g.received("b1");
+ g.release(true,2,"nonce",java.util.List.of("b1","b2"));
+ check(!g.peerStopApplied());g.received("unrelated");check(!g.peerStopApplied());
+ g.received("b2");check(g.peerStopApplied());
+ check(g.stopEnvelopeIds().size()==2);
+ reject(()->new VideoStopDeliveryGate("call",2,"n").issued(java.util.List.of("dup","dup")));
+ reject(()->new VideoStopDeliveryGate("call",2,"n").issued(java.util.List.of()));
+ reject(()->g.release(true,2,"nonce",java.util.List.of("b1","b1")));
+ reject(()->g.release(true,2,"nonce",java.util.List.of("a1","b2")));
+ var many=new java.util.ArrayList<String>();for(int i=0;i<128;i++)many.add("s"+i);
+ var bounded=new VideoStopDeliveryGate("call",2,"bounded");bounded.issued(many);
+ many.add("overflow");reject(()->new VideoStopDeliveryGate("call",2,"over").issued(many));
 ''')
         self.assertEqual(0, result.returncode, result.stderr)
 

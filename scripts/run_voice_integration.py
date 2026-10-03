@@ -97,23 +97,28 @@ def coordinate_video_stop(serials, processes, deadline, write, read):
     """
     if len(serials)!=2 or len(set(serials))!=2:
         raise RuntimeError("Video stop requires two independent fixture endpoints")
+    uuid_pattern=r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+    def valid_ids(values):
+        return (isinstance(values,list) and 1<=len(values)<=128
+                and all(isinstance(v,str) and re.fullmatch(uuid_pattern,v) for v in values)
+                and len(set(values))==len(values))
     issued=[]
     for serial in serials:
         value=read(serial,"synthetic-voice-video-stop-issued.json",processes[serial],deadline)
-        if (not isinstance(value,dict) or set(value)!={"issued","generation","stopNonce","stopEnvelopeId"}
+        if (not isinstance(value,dict) or set(value)!={"issued","generation","stopNonce","stopEnvelopeIds"}
                 or value["issued"] is not True or type(value["generation"]) is not int
                 or value["generation"]!=2 or not isinstance(value["stopNonce"],str)
-                or not isinstance(value["stopEnvelopeId"],str)
-                or re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",value["stopEnvelopeId"]) is None
-                or re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",value["stopNonce"]) is None):
+                or not valid_ids(value["stopEnvelopeIds"])
+                or re.fullmatch(uuid_pattern,value["stopNonce"]) is None):
             raise RuntimeError("Missing or stale local video stop confirmation")
         issued.append(value)
-    if issued[0]["stopNonce"]==issued[1]["stopNonce"] or issued[0]["stopEnvelopeId"]==issued[1]["stopEnvelopeId"]:
-        raise RuntimeError("Video stop confirmations reused an endpoint nonce")
+    if (issued[0]["stopNonce"]==issued[1]["stopNonce"]
+            or set(issued[0]["stopEnvelopeIds"]) & set(issued[1]["stopEnvelopeIds"])):
+        raise RuntimeError("Video stop confirmations reused an endpoint nonce or envelope")
     for index,(serial,value) in enumerate(zip(serials,issued)):
         write(serial,"synthetic-voice-video-stop-release.json",{
             "release":True,"generation":value["generation"],"stopNonce":value["stopNonce"],
-            "peerStopId":issued[1-index]["stopEnvelopeId"]})
+            "peerStopIds":issued[1-index]["stopEnvelopeIds"]})
     return {"bothLocalStopsIssued":True,"generation":2,"endpoints":2}
 
 

@@ -299,3 +299,44 @@ No acredita ejecución multimedia. El primer nombre intentado
 `check_optimized_voice_apk.py` no existe; el verificador real es
 `check_optimized_media.py`. Todos los fallos de comandos anteriores se conservan.
 Verifyddd6dca Android:123connected(296,644s),120offline(287,057s),0fallos.
+
+## 2026-10-03 — rechazo incorrecto de multiplicidad en el fixture0e27cfe
+
+Focused37107049833, R8job111157518442, artifact11268792240 SHA256
+`cdde7e01053f5361408ddb430794ccf50975d29fce69ef2aeb751e22aeeb0a4c`:
+`camera-permission-revoked-2`(B) y `credential-expiry-2`(A) fallan ANTES de la
+revocación/expiración, con video ACTIVE y `Ambiguous synthetic local stop envelope`.
+El helper nuevo asumía un único STOP por llamada/generación. El protocolo no
+establece esa unicidad: dos solicitudes autorizadas pueden producir dos eventos
+firmados/cifrados distintos con el mismo efecto de parada. No es evidencia de
+fallo de cámara, credenciales ni cifrado.
+
+Reproducción mínima con Engine/libsignal reales, ConnectedVideoStopMultiplicityTest:
+dos `CallService.stopVideo` autorizados en la misma generación; la aserción de un
+único envelope falla(RED1test/1failure). Log SHA256
+`4360c43f19167e9227d7c5fce36d6a7f15b2bf99d293452ed53607d9e35de423`.
+GREEN1/1 confirma ambos envelopes distintos, misma llamada/generación/change,
+autorización de entrega, recepción de ambos, retry inmutable, ambos STOPPED y
+posterior consentimiento generación3. Log SHA256
+`4b96574e1f1090c86ff4846d6ff3d1382e859d7cccdd06e3b9cd25420edd67e6`.
+No demuestra cuál callback concreto produjo el segundo STOP en el AVD histórico.
+Una carrera entre stop local asíncrono y solicitud explícita es posible por código,
+pero esa intercalación exacta se mantiene como no observada.
+
+El arnés ahora conserva el conjunto COMPLETO de1..128IDs distintos, acotado por
+el límite de controles existente. No elige el primero, elimina mensajes ni ignora
+excepciones. Requiere aplicar TODOS los IDs del otro extremo antes de reactivar.
+Rechaza conjuntos vacíos, repetidos, excesivos, compartidos entre extremos o de
+otra generación. Si aparece otro STOP de esa generación después del recibo,
+falla con diagnóstico fijo: no se oculta un productor tardío no observado.
+
+La prueba nativa existente `video-stop-race` conserva su rendezvous de activación
+bloqueada y añade una segunda parada local explícita, sin reiniciar el reloj ni
+cambiar500ms/2s/1,5s. Esto obliga al recorrido nativo debug/R8 a comprobar la
+multiplicidad; no se quita ninguna repetición ni escenario. Producción intacta.
+
+Host RED ante conjunto válido no admitido por formato anterior: log SHA256
+`a5ed7f4d3acafc274141f7beb34d328efd1310bd3143970e11f964a5e7e4d784`.
+Host GREEN5tests: `9a53d38596c712e401c2563f2d03fcd250f090a1b468b88d93af9ace5fc5ec8e`.
+Helper Java4tests PASS. Falta ejecutar aceptación nativa y CI completa del commit
+que incorpora esta corrección; los resultados anteriores no la sustituyen.

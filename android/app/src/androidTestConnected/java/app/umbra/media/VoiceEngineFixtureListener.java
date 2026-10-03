@@ -60,12 +60,15 @@ public final class VoiceEngineFixtureListener extends RunListener {
     private void pump(RelayClient relay,Engine engine,String callId,NativeVoiceSession voice,boolean expiryExpected,long credentialExpiry) throws Exception {
         if(videoStopGate!=null && !videoStopGate.released() && Files.exists(files.resolve("synthetic-voice-video-stop-release.json"))) {
             JSONObject release=read("synthetic-voice-video-stop-release.json");
-            videoStopGate.release(release.getBoolean("release"),release.getInt("generation"),release.getString("stopNonce"),release.getString("peerStopId"));
+            videoStopGate.release(release.getBoolean("release"),release.getInt("generation"),release.getString("stopNonce"),stopIds(release.getJSONArray("peerStopIds")));
         }
         for(JSONObject q:engine.outbox()) {
             // Keep the same queued ciphertext untransported until both synthetic
             // owners have made their independently measured local stop request.
-            if(videoStopGate!=null && videoStopGate.defer(q.optString("callType"),q.optString("callSession"),q.optInt("callGeneration")))continue;
+            if(videoStopGate!=null) {
+                videoStopGate.requireAnnounced(q.optString("callType"),q.optString("callSession"),q.optInt("callGeneration"),q.getJSONObject("envelope").getString("id"));
+                if(videoStopGate.defer(q.optString("callType"),q.optString("callSession"),q.optInt("callGeneration")))continue;
+            }
             // Match production scheduling. A successful upload is not a request
             // to repost the same immutable envelope on every 100 ms fixture tick.
             if(q.optLong("nextRelay",0)>Bytes.now()) continue;
@@ -93,17 +96,22 @@ public final class VoiceEngineFixtureListener extends RunListener {
             relay.acknowledge(engine.profile(),envelope.getString("id"));
         }
     }
+    private static List<String> stopIds(JSONArray values) throws Exception {
+        if(values.length()<1 || values.length()>128)throw new SecurityException("Invalid synthetic stop envelope count");
+        var ids=new ArrayList<String>();
+        for(int i=0;i<values.length();i++)ids.add(values.getString(i));
+        return ids;
+    }
     private void videoStopIssued(Engine engine) throws Exception {
-        String stopEnvelopeId=null;
+        var stopEnvelopeIds=new ArrayList<String>();
         for(JSONObject queued:engine.outbox()) {
             if(!videoStopGate.matchesStop(queued.optString("callType"),queued.optString("callSession"),queued.optInt("callGeneration")))continue;
-            if(stopEnvelopeId!=null)throw new AssertionError("Ambiguous synthetic local stop envelope");
-            stopEnvelopeId=queued.getJSONObject("envelope").getString("id");
+            stopEnvelopeIds.add(queued.getJSONObject("envelope").getString("id"));
         }
-        videoStopGate.issued(stopEnvelopeId);
+        videoStopGate.issued(stopEnvelopeIds);
         write("synthetic-voice-video-stop-issued.json",new JSONObject().put("issued",true)
             .put("generation",videoStopGate.generation()).put("stopNonce",videoStopGate.nonce())
-            .put("stopEnvelopeId",videoStopGate.stopEnvelopeId()));
+            .put("stopEnvelopeIds",new JSONArray(videoStopGate.stopEnvelopeIds())));
     }
     private void assertBlockedPeer(Engine engine,String peer) throws Exception {
         if(!engine.contact(peer).optBoolean("blocked"))throw new AssertionError("Trust-loss action did not persist");
@@ -489,7 +497,10 @@ public final class VoiceEngineFixtureListener extends RunListener {
                             };
                             try {
                                 if(!entered.await(2,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("Native activation rendezvous not reached");
-                                videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();videoStopIssued(engine);
+                                videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();
+                                // Exercise multiple authorized same-change stop controls in the
+                                // native race fixture without resetting the first request clock.
+                                voice.stopVideo();videoStopIssued(engine);
                             } finally {db.beforeTransaction=null;resume.countDown();}
                             Thread.sleep(350);
                             if(voice.state()!=NativeVoiceSession.State.ACTIVE)throw new AssertionError("Video-only cancellation terminated authorized audio: "+voice.failureStage());
