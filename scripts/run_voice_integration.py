@@ -8,11 +8,8 @@ from pathlib import Path
 import re
 import subprocess
 import time
-import tempfile
 import ipaddress
-import shutil
 import shlex
-from voice_network_evidence import summarize, summarize_tls, summarize_ipv6_turn, count
 from turn_lab import TurnLab, docker
 from voice_relay_lab import voice_relay
 from android_apk_install import ensure_apk
@@ -154,6 +151,10 @@ def main():
     parser.add_argument("--optimized",action="store_true",help="Run the isolated non-debuggable R8 mediaLab APK on rooted AOSP AVDs")
     parser.add_argument("--scenario",choices=("audio","expired-auth","allocation-expiry","invalid-auth","unreachable","turn-loss","trust-loss","lock","emergency-lock","credential-expiry","direct-blocked","force-stop","permission-revoked","device-revoked","storage-failure","unauthorized-redirect","wrong-fingerprint","receive-only","degraded-network","camera-denied","camera-permission-revoked","video-stop-race"),default="audio")
     args=parser.parse_args()
+    capture_owner_pid = int(os.environ.get("UMBRA_CAPTURE_OWNER_PID", "0"))
+    if capture_owner_pid <= 1 or os.environ.get("UMBRA_FINALIZED_CAPTURE") != "1":
+        raise RuntimeError("Media acceptance requires the explicit CI capture owner")
+    os.kill(capture_owner_pid, 0)
     if (args.reports/"voice-evidence.json").exists():
         raise RuntimeError("Use a new media report directory; previous evidence must be preserved")
     if args.turn_ipv6 and args.scenario in ("unauthorized-redirect","unreachable"):
@@ -488,36 +489,17 @@ def main():
                 for index,serial in enumerate((args.a,args.b)):
                     if not direct_probe(serial,(args.a,args.b)[1-index],addresses[1-index]):
                         raise RuntimeError("Direct UDP route unavailable after TURN loss")
-            network=[]
-            with tempfile.TemporaryDirectory(prefix="umbra-owned-wifi-snapshot-") as snapshot_dir:
-                for index,path in enumerate(capture_paths):
-                    snapshot=Path(snapshot_dir)/f"endpoint-{index}.pcap"
-                    shutil.copyfile(path,snapshot)
-                    if args.turn_ipv6:
-                        from urllib.parse import urlparse
-                        if args.scenario in ("unauthorized-redirect","unreachable"):
-                            raise RuntimeError("IPv6 redirect/unreachable evidence not implemented; do not count as passed")
-                        network.append(summarize_ipv6_turn(snapshot,turn.address,addresses[index],addresses6[index],urlparse(relay["base"]).port,
-                            capture_since,capture_until,tls=bool(args.turn_tls),require_turn=index==0 or not rejection))
-                        continue
-                    if args.scenario=="unauthorized-redirect":
-                        redirected=count(snapshot,f"ip and src host {addresses[index]} and (udp or tcp) and dst host {turn.address} and dst port 3479",capture_since,capture_until)
-                        if redirected!=0: raise RuntimeError("Native allocator contacted an unauthorized TURN redirect")
-                        if args.turn_tls:
-                            from urllib.parse import urlparse
-                            checked=summarize_tls(snapshot,turn.address,urlparse(relay["base"]).port,capture_since,capture_until,require_turn=index==0,source_address=addresses[index])
-                        else:
-                            checked=summarize(snapshot,turn.address,since=capture_since,until=capture_until,require_turn=index==0)
-                        network.append({**checked,"unapprovedTurnPackets":redirected,"redirectPolicy":"REJECTED_BEFORE_IO"})
-                    else:
-                        if args.turn_tls:
-                            from urllib.parse import urlparse
-                            network.append(summarize_tls(snapshot,turn.address,urlparse(relay["base"]).port,capture_since,capture_until,require_turn=index==0 or not rejection,source_address=addresses[index],turn_port=5348 if args.scenario=="unreachable" else 5349))
-                            continue
-                        network.append(summarize(snapshot,turn.address,turn_port=3479 if args.scenario=="unreachable" else 3478,
-                                                 since=capture_since,until=capture_until,require_turn=(index==0 or args.scenario not in ("expired-auth","invalid-auth","unreachable"))))
-            (args.reports/"voice-evidence.json").write_text(json.dumps({"apkSha256":apk_hashes,"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn TLS" if args.turn_tls else "native WebRTC through coturn UDP","turnTlsCase":args.turn_tls,"scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":not rejection,"muteBarrier":mute_evidence,"network":network,"audio":evidence,"allocationExpiry":allocation_evidence,"nativeCaptureClosure":stop_evidence,"networkImpairment":shape_evidence},indent=2)+"\n")
-            print("PASS two AVD native voice scenario: "+args.scenario)
+            from urllib.parse import urlparse
+            voice = {"apkSha256":apk_hashes,"synthetic":True,"endpoints":2,"observedSeconds":round(capture_until-capture_since,3),"transport":"native WebRTC through coturn TLS" if args.turn_tls else "native WebRTC through coturn UDP","turnTlsCase":args.turn_tls,"scenario":args.scenario,"directIpv4Reachability":True,"directBlockedDuringMedia":args.scenario=="direct-blocked","muteUnmute":not rejection,"muteBarrier":mute_evidence,"network":[],"audio":evidence,"allocationExpiry":allocation_evidence,"nativeCaptureClosure":stop_evidence,"networkImpairment":shape_evidence}
+            staged = {"status": "PENDING_CAPTURE_FINALIZATION", "ownerPid": capture_owner_pid,
+                "capturePaths": [str(path.resolve()) for path in capture_paths],
+                "since": capture_since, "until": capture_until,
+                "scenario": args.scenario, "turnAddress": turn.address, "tls": bool(args.turn_tls),
+                "ipv6": args.turn_ipv6, "relayPort": urlparse(relay["base"]).port,
+                "addresses": addresses, "addresses6": addresses6, "rejection": rejection, "voice": voice}
+            (args.reports/"network-pending.json").write_text(json.dumps(staged,indent=2)+"\n")
+            print("PENDING_CAPTURE_FINALIZATION: native scenario completed, network not yet accepted")
+
         finally:
             errors=[]
             for serial in shaped:
@@ -559,7 +541,7 @@ def main():
                     except Exception as failure: errors.append(failure)
             for stream in streams: stream.close()
             if errors: raise RuntimeError("Voice lab cleanup failed; all endpoints were attempted") from errors[0]
-    return args.reports/"voice-evidence.json"
+    return args.reports/"network-pending.json"
 
 
 def require_completed_run(result):
@@ -575,4 +557,15 @@ def require_completed_run(result):
         raise RuntimeError("Incomplete multimedia acceptance receipt")
 
 
-if __name__=="__main__": require_completed_run(main())
+def require_staged_run(result):
+    if not isinstance(result, Path) or not result.is_file():
+        raise RuntimeError("Native staging ended without its pending receipt")
+    report = json.loads(result.read_text())
+    if (report.get('status') != 'PENDING_CAPTURE_FINALIZATION'
+            or report.get('ownerPid') != int(os.environ.get('UMBRA_CAPTURE_OWNER_PID', '0'))
+            or len(report.get('capturePaths', [])) != 2
+            or report.get('voice', {}).get('network') != []):
+        raise RuntimeError("Invalid native staging receipt")
+
+
+if __name__=="__main__": require_staged_run(main())

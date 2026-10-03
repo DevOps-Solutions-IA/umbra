@@ -39,7 +39,7 @@ def execute(commands,report):
         with (report/(name+'-driver.log')).open('w') as log:
             result=subprocess.run(command,stdout=log,stderr=subprocess.STDOUT)
         results.append({'case':name,'exitCode':result.returncode,'seconds':round(time.monotonic()-start,3),
-                        'status':'PASS' if result.returncode==0 else 'FAIL'})
+                        'status':('PENDING_CAPTURE_FINALIZATION' if (report/name/'network-pending.json').is_file() else 'PASS') if result.returncode==0 else 'FAIL'})
         (report/'matrix.json').write_text(json.dumps(results,indent=2)+'\n')
         print(name+': '+results[-1]['status'],flush=True)
         if result.returncode:

@@ -132,9 +132,12 @@ Offline conserva parsing/render/file sin añadir INTERNET ni canal de laboratori
 Límite de metadata preexistente: AdmissionCredential contiene la clave pública
 Signal y se presenta al relay para autenticación. El courier cifra las tarjetas,
 prekeys y transcripts; no oculta información pública ya revelada por admisión.
-El servidor tampoco recibe las claves privadas. Interpretar la fase11 como
-ocultación adicional de esa clave pública requiere una decisión de contrato de
-admisión; no está implementada ni implícitamente aprobada en esta entrega.
+El servidor tampoco recibe las claves privadas. La decisión explícita de Execution03B conserva AdmissionCredential actual:
+no se oculta esa metadata pública en este cierre. Ninguna clave privada,
+ratchet ni plaintext de mensajes se entrega al relay; invite/request/ack se
+mantienen cifrados en rendezvous y el código humano y sus secretos no se revelan.
+Admisión no enlazable/pseudónima queda como FUTURE PRIVACY WORK separado.
+CONTRACT_CHANGE_REQUIRED=NO para Execution03B.
 
 El cliente persiste ciphertext de retry; el courier exige bytes inmutables. El
 invitador valida firmas localmente antes de seleccionar candidato. Código robado

@@ -27,6 +27,10 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Install packet parser for synthetic PCAP regressions
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y tcpdump
       - name: Handoff tooling tests (not Android tests)
         run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
   relay-and-core:

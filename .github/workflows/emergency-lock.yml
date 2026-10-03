@@ -133,6 +133,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --no-install-recommends -y tcpdump
           export UMBRA_DEVICE_REPORTS=android/app/build/reports/emergency-media
+          export UMBRA_FINALIZED_CAPTURE=1
           source scripts/ci_emulator.sh
           umbra_start_avd umbra-r8-a 5554
           umbra_start_avd umbra-r8-b 5556
@@ -140,6 +141,8 @@ jobs:
           if [ "${{ matrix.optimized }}" = true ]; then options+=(--optimized); fi
           python scripts/run_voice_integration.py --a emulator-5554 --b emulator-5556 "${options[@]}" --scenario emergency-lock --reports "$UMBRA_DEVICE_REPORTS/voice"
           python scripts/run_voice_integration.py --a emulator-5554 --b emulator-5556 "${options[@]}" --video --scenario emergency-lock --reports "$UMBRA_DEVICE_REPORTS/video"
+          umbra_finalize_capture
+          python scripts/finalize_media_capture.py --reports "$UMBRA_DEVICE_REPORTS" --owner "$UMBRA_DEVICE_REPORTS/capture-owner.json"
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         if: always()
         with:
