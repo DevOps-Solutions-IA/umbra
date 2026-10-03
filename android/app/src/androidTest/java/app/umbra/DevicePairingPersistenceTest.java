@@ -219,7 +219,22 @@ public final class DevicePairingPersistenceTest {
         var created=owner.createPairing();String invite=created.delivery().payload();
         var qr=app.umbra.pairing.PairingQrCodec.render(invite,512);byte[] plane=new byte[512*512];
         for(int y=0;y<512;y++)for(int x=0;x<512;x++)plane[y*512+x]=qr.get(x,y)?0:(byte)255;
-        safeEqual(invite,app.umbra.pairing.PairingQrCodec.decodeLuminance(plane,512,512));
+        try {safeEqual(invite,app.umbra.pairing.PairingQrCodec.decodeLuminance(plane,512,512));}
+        catch(app.umbra.pairing.PairingException originalFailure) {
+            // Diagnostic only: alternate readers can never satisfy this assertion.
+            try {
+                var diagnostic=new android.os.Bundle();
+                diagnostic.putInt("pairingQrWidth",512);diagnostic.putInt("pairingQrHeight",512);
+                diagnostic.putInt("pairingQrPayloadCharacters",invite.length());
+                diagnostic.putString("pairingQrDefault",qrDiagnostic(plane,invite,null));
+                diagnostic.putString("pairingQrTryHarder",qrDiagnostic(plane,invite,com.google.zxing.DecodeHintType.TRY_HARDER));
+                diagnostic.putString("pairingQrPureBarcode",qrDiagnostic(plane,invite,com.google.zxing.DecodeHintType.PURE_BARCODE));
+                androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().sendStatus(0,diagnostic);
+            } catch(RuntimeException diagnosticUnavailable) {
+                originalFailure.addSuppressed(new IllegalStateException("Fixed QR failure diagnostic unavailable"));
+            }
+            throw originalFailure;
+        }
         char[] code=app.umbra.pairing.PairingSecrets.newCode();
         try {
             String blob=app.umbra.pairing.PairingSecrets.sealInvite(code,invite);
@@ -233,6 +248,21 @@ public final class DevicePairingPersistenceTest {
             assertTrue(complete.snapshot().verificationRequired());
             safeEqual(Engine.TrustState.UNVERIFIED,b.engine.trustState(a.engine.id()));
         } finally {Arrays.fill(code,'\0');Arrays.fill(plane,(byte)0);}
+    }
+
+    private static String qrDiagnostic(byte[] plane,String expected,com.google.zxing.DecodeHintType extra) {
+        try {
+            var hints=new java.util.EnumMap<com.google.zxing.DecodeHintType,Object>(com.google.zxing.DecodeHintType.class);
+            hints.put(com.google.zxing.DecodeHintType.POSSIBLE_FORMATS,java.util.List.of(com.google.zxing.BarcodeFormat.QR_CODE));
+            if(extra!=null)hints.put(extra,Boolean.TRUE);
+            var source=new com.google.zxing.PlanarYUVLuminanceSource(plane,512,512,0,0,512,512,false);
+            var bitmap=new com.google.zxing.BinaryBitmap(new com.google.zxing.common.HybridBinarizer(source));
+            String decoded=new com.google.zxing.qrcode.QRCodeReader().decode(bitmap,hints).getText();
+            return expected.equals(decoded)?"SUCCESS":"OTHER";
+        } catch(com.google.zxing.NotFoundException failure) {return "NotFound";}
+        catch(com.google.zxing.FormatException failure) {return "Format";}
+        catch(com.google.zxing.ChecksumException failure) {return "Checksum";}
+        catch(RuntimeException failure) {return "OTHER";}
     }
 
 }

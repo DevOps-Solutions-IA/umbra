@@ -387,3 +387,141 @@ Build local `gradle -p android --no-daemon -PumbraVaultLab=true
 exit0,1m16s,46tareas ejecutadas/111up-to-date. Esto comprueba compilación/R8,
 no ejecución Android. SDK36,Gradle8.14.4,JDK21.0.11. KVM local no autorizado:
 la aceptación Android corresponde a Actions, no a este build.
+
+## 2026-10-03 — inventario STOP publicado antes de terminar el worker
+
+c78f910 Video37108831683/R8shard0 job111163137547, artifact11269601678
+SHA256 `229c69d22cf0d5bd340ddcd41d5733870d1eb81210586331d68aceae6a118e94`:
+turn-loss falla ANTES de cortar TURN, con ambos extremos ACTIVE, al encontrar
+`Synthetic stop inventory changed after issued receipt`. El resto de esa matriz
+no se acepta; su captura pendiente no se transforma en cero paquetes ni PASS.
+Los tres controles focales anteriores sí tienen recibos finalizados, distintos:
+expired-auth, ipv6-tls y degraded-network.
+
+El inventario del fixture se tomaba inmediatamente tras stopVideo síncrono.
+NativeVoiceSession.stopVideoLocally puede tener en su worker un snapshot CONFIRMED
+ya leído, y emitir otro STOP después del commit foreground. CallService admite
+esos controles distintos. Reproducción determinista con executor real y snapshot
+retenido: RED por STOP que llega después del inventario; log SHA256
+`ac763099d19a9d8ee7a0e354279b5151ea79e2bc1c1304a8dca79f79c7203a7d`.
+Esto demuestra el defecto de coordinación; no conserva la traza exacta de threads
+del incidente Android histórico.
+
+Corrección solo del APK de test: observar que el thread conocido del executor
+nativo alcanzó su cola de scheduler inactiva después del STOP foreground, antes
+de publicar el inventario completo. No basta WAITING: se exige la secuencia
+DelayedWorkQueue.take → ThreadPoolExecutor.getTask/runWorker → Worker.run →
+Thread.run, admitiendo el bridge genérico. HTTP/latch/cola dentro de una tarea no
+califican. Identidad de thread distinta, muerto, stack desconocido o límite
+agotado fallan. No reflexión de campos privados, API productiva nueva ni keep
+global. La observación usa el reloj de solicitud ORIGINAL y su presupuesto de
+2s existente; no lo reinicia. En video-stop-race el latch se libera antes de
+observar, conservando las dos paradas y los350ms originales dentro del presupuesto.
+Toda emisión ya en curso termina antes del inventario; futuras tareas leen STOPPED.
+
+Cinco regresiones JVM controladas PASS; GREEN SHA256
+`005fac89fafd96326091052de78f37cb4c123e8b59f209023997188669611db9`.
+15focalizadas de stop/barrier PASS. BuildR8 media+test exit0,25s,12ejecutadas/
+68up-to-date. Primer build detectó variable local `original` duplicada en nuevo
+bloque diagnóstico; se renombró `videoEvidenceFailure`; rojo conservado.
+La forma real del stack ART y el flujo nativo quedan pendientes de CI propia.
+
+## 2026-10-03 — otros rojos preservados, sin atribución falsa
+
+- c78f910 debugvideo shard1 job111163137560, artifact11269232858 SHA256
+  `89850b5eeb52a8615a6bd6d46c0f3c3f1b03081101bddf5e3c45e7cf9919ef60`:
+  video-stop-race, IOException EOF antes de cabecera HTTPS. Servidor vivo; conexión4
+  registró respuesta, keepalive a+5,0008s y cierre55ms después con transportError.
+  Es compatible con carrera de cierre/reutilización; no existe correlación segura
+  conexión4↔clienteA ni categoría TLS para demostrarla. HISTORICAL_UNCONFIRMED.
+  No retry, keepalive ampliado, Connection:close artificial ni TLS relajado.
+- fb635c0 modulación debug job111165339370/run37109800796, artifact11269636651
+  SHA256 `b1cb709a12e4b4b6dcd0e2c27d0d2f9b115e8fac10fcb3ac73b1b898ff84bf39`:
+  caso device-revoked se detuvo ANTES de revocar, en video-off; A stage3,B stage6.
+  Ambos OFF sin fallo nativo. El artefacto no distingue peerStopApplied pendiente
+  de decodedAudioDelta<50. Se añade diagnóstico fijo de esos predicados antes del
+  error existente, sin cambiar condición, límites o resultado. No se declara
+  corregido por un pase posterior ni se llama fallo de revocación.
+- fb635c0 contraseña debug job111165339873/run37109800812, artifact11269736965
+  SHA256 `8989b7952fc4f71e92255e484cd26f79c53e85b8c16064817d31fd3397dbb9a1`:
+  offline DevicePairingPersistenceTest productQrAndCodeUseEncryptedVaultAndBoundedRealCodecs
+  rechazó decodeLuminance del QR512 recién renderizado.4/5PASS,1FAIL. Investigación
+  separada; no se atribuye a contraseña, cámara física ni interacción del usuario.
+
+Los verdes propios de fb635c0 (incluido inicio privado debug/R8) no cierran el
+encargo mientras estos fallos y la validación del candidato acumulativo sigan
+pendientes. Su checkout9db87ec2c2594b5a2a4233e62695090b896a0bac tiene exactamente
+su treee2dfaaa36c863fab141245137d83c6a7a76e49f2. Verifyc78 fue cancelado por ser
+candidato propio sustituido para liberar su grupo: conserva3jobsPASS/android
+CANCELLED, nunca se presenta como Verify completo aprobado.
+
+## 2026-10-03 — lectura de auditoría durante publicación de cancelación
+
+fb635c0 Focused37109800885/R8job111165496888, artifact11269033917 SHA256
+`75f20c31f78fd2229c9ccfa2b1c1a81139da8df5646ebc966fbd43ea8472bc8e`:
+credential-expiry-3 lanza CallService$Interrupted desde session mientras el
+fixture todavía observa ACTIVE. Las otras8filas son PENDING_CAPTURE_FINALIZATION,
+no recibos PASS finales. SqliteDeviceRecords propaga la denegación, no es evidencia
+de fallo SQLite ni EOF.
+
+Regresión con Engine/libsignal real: después de maintain y antes de la segunda
+lectura/lease, cancelPending publica cancelled y queda retenido en su callback.
+La lectura recibe Interrupted mientras el estado sintético del adaptador sigue
+ACTIVE. No demuestra la intercalación exacta del watchdog histórico, sí que esa
+ventana legítima existe y el fixture anterior la rechazaba. RED SHA256
+`d1d199730b65bc2116b874569efef8643a12488da2727020a6be8aa1ace94348`.
+
+checkSnapshot reconoce exclusivamente el error fijo Call interrupted cuando la
+prueba solicitó credential-expiry y el plazo ya venció. Se contabiliza como
+expiredSnapshotRejections en el recibo, nunca como lectura, entrega o media
+exitosa. Antes del plazo, sin solicitud o con otra causa se relanza el error
+original. La prueba todavía debe demostrar cierre/captura quieta dentro de sus
+límites, sin retry ni extensión del plazo. La aserción existente de escrituras
+rechazadas sigue exigiendo estado nativo terminal.1regresión Engine y2helpersPASS.
+No cambia CallService, autorización, estado nativo ni política de credenciales.
+
+## 2026-10-03 — regresión productiva demostrada del detector QR existente
+
+Investigación acotada128invitaciones válidas reales renderizadas512: el detector
+ZXing habitual rechazó3/128; cada imagen fallida volvió a fallar3/3, con
+NotFound/Format. TRY_HARDER también falla3/128; el lector estándar PURE_BARCODE
+lee128/128 símbolos idénticos. No se guardaron payloads vigentes ni claves; solo
+conteos, longitudes y clases fijas. No es evidencia de cámara o pairing físico.
+
+PairingQrDetectorRegressionTest conserva una receta pública sintética firmada,
+PERMANENTEMENTE CADUCADA, sin clave privada ni capacidad utilizable. Reproduce
+el fallo del detector de forma determinista: antes decodeLuminance devuelve
+INVALID_FORMAT, aunque decode(text) comprueba firma y devuelve EXPIRED. La
+corrección mínima ejecuta el lector estándar de símbolos puros sobre el MISMO
+BinaryBitmap acotado solamente si el detector general lanza ReaderException.
+Ambas rutas pasan después por la validación original de protocolo, firma y TTL.
+Un fallo de validación PairingException NO activa otra ruta. No algoritmo propio,
+truncado, nuevo QR, cámara, API, dependencia o permiso.
+
+RED3tests/2failures (determinista+corpusválido); GREEN3/3 (receta determinista,
+32invitaciones vigentes, firma/protocolo/oclusiones/ruido/tamaño inválidos). Los
+valores de QR no se imprimen en asserts. El caso Android original se conserva y
+ahora añade solo diagnóstico fijo de decoder si falla; nunca sustituye un fallo
+por éxito obtenido en otro intento.
+
+PAIRING_P0_CHANGED=YES, exclusivamente corrección del decoder QR ya existente,
+permitida por la excepción de regresión demostrada del encargo03B. Los transcripts,
+HKDF/AEAD, entropía, rendezvous, admisión, VERIFIED_ONLY y AccessGate no cambian.
+CONTRACT_CHANGE_REQUIRED=NO. Sin cambios visuales ni instalaciones físicas.
+Estos resultados JVM no sustituyen la instrumentación debug/R8/ambosflavors ni
+las11ejecuciones propias del próximo HEAD acumulativo.
+QR RED SHA256 `84890148bf211e73e216977424b5c32eb8dc07246703fef147788531f9271a7d`;
+GREEN `63b8e83880892aa41b48f5a263eec6271e7862800a8fdce91c3f6491ae791ba3`.
+Validación acumulativa local posterior a todas estas correcciones: JVMconnected
+448/448,offline388/388,0failures/errors/skips; Gradle8.14.4/JDK21.0.11,
+`--rerun-tasks :app:testConnectedDebugUnitTest :app:testOfflineDebugUnitTest`,
+exit0,3m36s,50tareas ejecutadas. Tooling343PASS15,066s; guard753archivos y
+source_policy13PASS. Son capas JVM/estáticas, no aceptación Android/hardware.
+Builds acumulativos: debug/release+instrumentación+lint ambosflavors exit0,36s
+(48ejecutadas/201up-to-date); mediaLabR8+test exit0,38s (15/65); vaultLabR8+test
+ambosflavors exit0,58s (36/121). APKpolicy debug/release4PASS. R8media no-debuggable
+con Engine/CallService/NativeVoiceSession ofuscados; APK
+`bc74758111e179aa0f8a67ca75257095ad332601de1e9cf72b06d1ef5fd78579`, mapping
+`010589031b950b441f4d1d42f33eef6486e2836e209ec417951fe3ca8a6226b6`.
+Este control estático no ejecuta media. No se cambian minificación, ofuscación ni
+reglas generales para hacerlo pasar. Las advertencias de dependencias se mantienen.

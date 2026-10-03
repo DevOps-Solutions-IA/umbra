@@ -29,8 +29,18 @@ public final class PairingQrCodec {
             throw new PairingException(PairingException.Code.PAYLOAD_TOO_LARGE);
         try {
             var source=new PlanarYUVLuminanceSource(plane,width,height,0,0,width,height,false);
-            return decode(new QRCodeReader().decode(new BinaryBitmap(new HybridBinarizer(source)),
-                    Map.of(DecodeHintType.POSSIBLE_FORMATS,java.util.List.of(BarcodeFormat.QR_CODE))).getText());
+            var bitmap=new BinaryBitmap(new HybridBinarizer(source));
+            String text;
+            try {
+                text=new QRCodeReader().decode(bitmap,
+                    Map.of(DecodeHintType.POSSIBLE_FORMATS,java.util.List.of(BarcodeFormat.QR_CODE))).getText();
+            } catch(ReaderException detectionFailed) {
+                // The general detector can misidentify finder patterns in an ideal
+                // rendered symbol. ZXing's pure-symbol reader uses the same pixels.
+                text=new QRCodeReader().decode(bitmap,Map.of(DecodeHintType.PURE_BARCODE,Boolean.TRUE)).getText();
+            }
+            // Validation failures never trigger another decoder or authorize a QR.
+            return decode(text);
         } catch(ReaderException e) { throw new PairingException(PairingException.Code.INVALID_FORMAT); }
     }
 }

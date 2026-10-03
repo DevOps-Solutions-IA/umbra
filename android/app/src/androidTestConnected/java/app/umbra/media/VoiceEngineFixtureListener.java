@@ -39,7 +39,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
         }
     }
     private long nextPoll;
-    private int expiredDeliveriesRejected;
+    private int expiredDeliveriesRejected, expiredSnapshotRejections;
     private VideoStopDeliveryGate videoStopGate;
     /** Deliberately bypass the client gate in this test to verify backend default denial from Android. */
     private static void unadmittedRelayDenied(String base) throws Exception {
@@ -405,7 +405,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         for(JSONObject row:new Engine(db,SystemClock::elapsedRealtime).calls().sessions())
                             if(!app.umbra.calls.CallPayload.TERMINAL.contains(row.getString("state"))) throw new AssertionError("SQLite rollback revived voice");
                     }
-                    JSONObject stopped=new JSONObject().put("failedClosed",true).put("nativeCaptureQuietAfterMillis",quietAfter).put("nativeCaptureObservedMillis",observedFor).put("lateCaptureCallbacks",lateCaptureCallbacks).put("expiredDeliveriesRejected",expiredDeliveriesRejected);
+                    JSONObject stopped=new JSONObject().put("failedClosed",true).put("nativeCaptureQuietAfterMillis",quietAfter).put("nativeCaptureObservedMillis",observedFor).put("lateCaptureCallbacks",lateCaptureCallbacks).put("expiredDeliveriesRejected",expiredDeliveriesRejected).put("expiredSnapshotRejections",expiredSnapshotRejections);
                     if(emergencyApplied) {
                         if(videoCaptured.get()!=videoAtClosure)throw new AssertionError("Camera callbacks survived emergency");
                         var closure=engine.emergency().status();
@@ -500,12 +500,21 @@ public final class VoiceEngineFixtureListener extends RunListener {
                                 videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();
                                 // Exercise multiple authorized same-change stop controls in the
                                 // native race fixture without resetting the first request clock.
-                                voice.stopVideo();videoStopIssued(engine);
+                                voice.stopVideo();
                             } finally {db.beforeTransaction=null;resume.countDown();}
                             Thread.sleep(350);
                             if(voice.state()!=NativeVoiceSession.State.ACTIVE)throw new AssertionError("Video-only cancellation terminated authorized audio: "+voice.failureStage());
-                        } else {videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();videoStopIssued(engine);}
-                        videoOffAt=SystemClock.elapsedRealtime();videoCaptureBaseline=videoCaptured.get();videoAudioBaseline=decoded.get();videoStage=6;
+                        } else {videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();}
+                        videoOffAt=SystemClock.elapsedRealtime();videoCaptureBaseline=videoCaptured.get();videoAudioBaseline=decoded.get();
+                        // A native worker may already hold a CONFIRMED snapshot and emit
+                        // another authorized STOP after the foreground transaction. Observe
+                        // its genuine scheduler-idle boundary before sealing the inventory.
+                        // Retain the original request clock and two-second closure budget.
+                        NativeVideoStopQuiescence.await(nativeWorker.get(),nativeWorker::get,
+                            videoOffRequestedNanos,SystemClock::elapsedRealtimeNanos,
+                            nanos->java.util.concurrent.TimeUnit.NANOSECONDS.sleep(nanos));
+                        videoStopIssued(engine);
+                        videoStage=6;
                     }
                     if(videoStage==6 && videoStopGate.peerStopApplied() && SystemClock.elapsedRealtime()-videoOffAt>=2000 && decoded.get()-videoAudioBaseline>=50) {
                         int atRest=videoCaptured.get();Thread.sleep(500);
@@ -595,7 +604,14 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         if(current.getJSONObject("descriptions").length()==2)
                             auditNativeDescriptions(current,credential.getJSONArray("urls").getString(0),credential.optString("relayAddress"));
                     } catch(SecurityException cancelled) {
-                        if(voice.state()==NativeVoiceSession.State.ACTIVE)throw cancelled;
+                        if(voice.state()==NativeVoiceSession.State.ACTIVE) {
+                            // A cancellation lease can reject before the adapter publishes
+                            // terminal state. This is a failed read, never accepted media:
+                            // the existing capture/closure deadline must still be proved.
+                            ExpiredDeliveryAssertion.checkSnapshot(cancelled,expiryExpected,
+                                Bytes.now()>=credential.getLong("expires"));
+                            expiredSnapshotRejections++;
+                        }
                         // A concurrent termination invalidated the snapshot. The next
                         // iteration still requires the scenario's native closure evidence.
                     }
@@ -605,7 +621,30 @@ public final class VoiceEngineFixtureListener extends RunListener {
                 }
                 Thread.sleep(100);
             }
-            if(withVideo && !expectedRejection && videoStage!=5)throw new AssertionError("Missing decoded bidirectional video/off/reactivation evidence; stage="+videoStage+", native="+voice.videoStatus()+", failure="+voice.failureStage()+", sourceFrames="+videoCaptured.get()+", sinkFrames="+voice.decodedVideoFrames()+", validPatterns="+videoDecoded.frames.get()+", phaseMask="+videoDecoded.phases.get()+", counters="+voice.videoStats());
+            if(withVideo && !expectedRejection && videoStage!=5) {
+                var videoEvidenceFailure=new AssertionError("Missing decoded bidirectional video/off/reactivation evidence; stage="+videoStage+", native="+voice.videoStatus()+", failure="+voice.failureStage()+", sourceFrames="+videoCaptured.get()+", sinkFrames="+voice.decodedVideoFrames()+", validPatterns="+videoDecoded.frames.get()+", phaseMask="+videoDecoded.phases.get()+", counters="+voice.videoStats());
+                try {
+                    // Fixed metadata only. Never export stop IDs, nonce, payload or signaling.
+                    Bundle diagnostic=new Bundle();
+                    diagnostic.putString("videoFixtureFailure","INCOMPLETE_VIDEO_PHASE");
+                    diagnostic.putInt("videoFixtureStage",videoStage);
+                    diagnostic.putBoolean("videoStopGatePresent",videoStopGate!=null);
+                    diagnostic.putBoolean("videoStopReleased",videoStopGate!=null && videoStopGate.released());
+                    diagnostic.putBoolean("videoPeerStopApplied",videoStopGate!=null && videoStopGate.peerStopApplied());
+                    diagnostic.putInt("videoOwnStopCount",videoStopGate==null?0:videoStopGate.ownStopCount());
+                    diagnostic.putInt("videoExpectedPeerStopCount",videoStopGate==null?0:videoStopGate.expectedPeerStopCount());
+                    diagnostic.putInt("videoAppliedPeerStopCount",videoStopGate==null?0:videoStopGate.appliedPeerStopCount());
+                    diagnostic.putInt("videoAudioBaseline",videoAudioBaseline);
+                    diagnostic.putInt("videoDecodedAudioDelta",decoded.get()-videoAudioBaseline);
+                    long observedAt=SystemClock.elapsedRealtime();
+                    diagnostic.putLong("videoFixtureElapsedMillis",observedAt-fixtureStarted);
+                    diagnostic.putBoolean("videoFixtureDeadlineReached",observedAt>=deadline);
+                    InstrumentationRegistry.getInstrumentation().sendStatus(0,diagnostic);
+                } catch(RuntimeException unavailable) {
+                    videoEvidenceFailure.addSuppressed(new IllegalStateException("Fixed video failure diagnostic unavailable"));
+                }
+                throw videoEvidenceFailure;
+            }
             if(modulation && processingStep!=10)throw new AssertionError("Incomplete remote modulation sequence");
             if(!evidence || (!expectedRejection && !resumedEvidence)) throw new AssertionError("Missing native audio or mute/unmute evidence");
             voice.close(); finishTransport(relay,engine,voice,localLockApplied,localTrustRemoved,peer,savedProfile);

@@ -23,6 +23,22 @@ public final class Check {
             subprocess.run(['javac', '-d', folder, str(SOURCE), str(test)], check=True, capture_output=True)
             return subprocess.run(['java', '-cp', folder, 'app.umbra.media.Check'], capture_output=True, text=True)
 
+    def test_diagnostic_counts_only_expected_peer_stop_intersection(self):
+        result=self.run_java('''
+ var gate=new VideoStopDeliveryGate("call",2,"nonce");
+ check(gate.ownStopCount()==0 && gate.expectedPeerStopCount()==0 && gate.appliedPeerStopCount()==0);
+ gate.issued(java.util.List.of("own-a","own-b"));
+ gate.received("unrelated");gate.received("peer-a");
+ check(gate.ownStopCount()==2 && gate.expectedPeerStopCount()==0 && gate.appliedPeerStopCount()==0);
+ gate.release(true,2,"nonce",java.util.List.of("peer-a","peer-b"));
+ check(gate.expectedPeerStopCount()==2 && gate.appliedPeerStopCount()==1 && !gate.peerStopApplied());
+ gate.received("unrelated");gate.received("peer-a");
+ check(gate.appliedPeerStopCount()==1);
+ gate.received("peer-b");
+ check(gate.appliedPeerStopCount()==2 && gate.peerStopApplied());
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
     def test_original_uncoordinated_measurement_reproduces_negative_interval_red(self):
         result = self.run_java('''
  // Exact first-CAS ordering: peer A stops; its message invalidates B at t=110.

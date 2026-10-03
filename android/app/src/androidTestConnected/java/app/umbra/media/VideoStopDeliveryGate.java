@@ -53,6 +53,11 @@ final class VideoStopDeliveryGate {
         }
     }
     boolean peerStopApplied() { return peerStopApplied; }
+    int ownStopCount() { return stopEnvelopeIds.size(); }
+    int expectedPeerStopCount() { return peerStopIds.size(); }
+    int appliedPeerStopCount() {
+        return (int)receivedBeforeRelease.stream().filter(peerStopIds::contains).count();
+    }
     java.util.Set<String> stopEnvelopeIds() { return stopEnvelopeIds; }
     boolean matchesStop(String type,String queuedCall,int queuedGeneration) {
         return type.equals("VIDEO_STOP") && call.equals(queuedCall) && generation==queuedGeneration;
