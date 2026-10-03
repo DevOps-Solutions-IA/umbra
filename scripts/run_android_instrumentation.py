@@ -14,6 +14,10 @@ from instrumentation_progress import run as run_with_progress
 
 ROOT = Path(__file__).resolve().parents[1]
 MIN_EVIDENCE = 30
+# 123-case suite: prior complete run299.233s; current test120 began296.444s
+# and the measured four-test tail needs13.536s. Budget310s plus20s bounded
+# host variability, without filtering/splitting tests or altering product leases.
+SUITE_TIMEOUT_SECONDS = 330
 
 
 def main() -> None:
@@ -39,7 +43,7 @@ def main() -> None:
     with args.log.open('w', encoding='utf-8') as stream:
         result = run_with_progress([*adb, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'syntheticNoHostAudio', 'true',
             package + '.test/androidx.test.runner.AndroidJUnitRunner'], stream=stream,
-            report=args.log.with_suffix('.timing.json'), timeout=300)
+            report=args.log.with_suffix('.timing.json'), timeout=SUITE_TIMEOUT_SECONDS)
     output = args.log.read_text(encoding='utf-8')
     # Inventory: 83 shared technical methods (including concurrent Vault ONCE open, encrypted DB/WAL
     # inspection, native clipboard, SQLite admission snapshots that preserve corruption, and

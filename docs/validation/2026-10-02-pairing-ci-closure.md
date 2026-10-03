@@ -1048,3 +1048,56 @@ debug instrumentation APK build PASS; optimized media/test APK build PASS15s.
 Independent review confirmed FIFO worker matching/fail-closed behavior and
 receive-only zero-capture semantics. Review is not native acceptance. No workflow
 is cancelled to publish this follow-up; the previous b55900e run must finish first.
+
+### b55900e native diagnostics confirm the STOP inventory expiry chain
+
+Focused run37142843489, debug job111260669787, camera-permission-revoked-1 failed
+BEFORE permission revocation, at STOP inventory. Artifact11281132722 SHA-256
+`67ec6267ff17b3e992bc566cf64cc232de90837789f4c4858fc53dd716b9f1e7`.
+B immediate raw inventory: count1, expired0, observed413,992,469,082 ns.
+After global-idle observation: elapsed29,743,179,381 ns/578 samples; raw inventory
+count1, expired1, observed443,455,604,917 ns. Engine.outbox then returned count0.
+A immediate/settled count1, expired0 after3,928,212,375 ns. This directly establishes
+that B's valid stored control expired while the fixture waited for global executor
+idle, and the unchanged production expiry filter correctly excluded it. The second
+was floor-based absolute expiry; a 30-second contract can have under30s remaining.
+No revocation, camera capture continuation or production TTL bug is inferred here.
+
+This actual Android evidence, together with the real-executor ordering RED/GREEN,
+supports replacing the overly broad idle precondition with the FIFO fence. It is
+not evidence that the new fence already executed on Android; its own CI remains
+required. The earlier HTTP400 in706 is still individually unclassified (the prior
+observer emitted OTHER), not retroactively declared INVALID_EXPIRY.
+
+### b55900e Verify timeout demonstrated a too-tight whole-suite lab watchdog
+
+Verify run37142843514 Android job111260837488 failed before media execution:
+123-case connected instrumentation exhausted300s. Artifact11280973264 SHA-256
+`bea95e90cf385caecbe5349862ae38f8c165432c16168b37ff2a08a2de69d2fc`.
+The actual timing receipt records119 completed methods with no failure/skip;
+test120 started296.444172262s into the suite and had3.556s remaining. No whole
+suite PASS is claimed. Heavy real-crypto test-class totals: pairing persistence
+65.166s, access readiness51.655s, vault password40.810s, emergency25.240s,
+restricted content25.098s. This is host timing, not device CPU or a product lease.
+
+The earlier706 actual timing receipt completed all123 at299.233399312s, only0.767s
+below the watchdog. Its final four methods took8.285+2.794+1.425+1.032=13.536s;
+the current test120 start plus that observed tail requires approximately310s.
+The selected whole-suite lab watchdog is330s (310s inferred workload estimate plus20s
+bounded host variability). It is fixed before evaluating the new execution.
+No per-test assertions, case count, selection, skip policy or product timeout
+changes. Splitting was considered but rejected in favor of keeping the exact
+full123/120 inventory and invocation unchanged. AccessGate remains240s; no old
+lease is renewed. Timed-out execution still fails and retains its timing receipt.
+
+A new orchestration regression simulated that estimated310s workload: RED original
+300s watchdog TimeoutExpired; GREEN configured330s passes11 orchestration tests,
+including zero-count, skip, missing completion and failed-adb rejection. This is
+not Android acceptance. Native full-suite execution on the new SHA remains required.
+Logs `/tmp/umbra-03b-suite-budget-{red,green}.log` preserved. No further watchdog
+increase is authorized by these observations; a new failure needs fresh diagnosis.
+
+Final local tooling check of the cumulative laboratory corrections:382 tests PASS
+in20.315s. Review confirms no inventory filtering, assertion relaxation or product
+lease change. The estimated310s tail is explicitly inferred across two runs, not
+a measured completion time of the failed suite.

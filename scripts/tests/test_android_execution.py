@@ -14,7 +14,7 @@ import run_bluetooth_emulation as nearby
 
 
 class AndroidExecutionTests(unittest.TestCase):
-    def run_single(self, report, returncode=0, flavor="offline", evidence=None):
+    def run_single(self, report, returncode=0, flavor="offline", evidence=None, required_runtime=0):
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder)
             for name in ('app.apk', 'test.apk'):
@@ -30,12 +30,20 @@ class AndroidExecutionTests(unittest.TestCase):
                         (Path(command[-1]) / f'{index:02d}.png').write_bytes(b'png')
                     return subprocess.CompletedProcess(command, 0)
                 if 'instrument' in command:
-                    self.assertEqual(300,kwargs['timeout'])
+                    if kwargs['timeout'] < required_runtime:
+                        raise subprocess.TimeoutExpired(command,kwargs['timeout'])
+                    self.assertEqual(330,kwargs['timeout'])
                     kwargs['stream'].write(report)
                     return subprocess.CompletedProcess(command, returncode)
                 return subprocess.CompletedProcess(command, 0)
             with patch.object(sys, 'argv', args), patch.object(single.subprocess, 'run', side_effect=execute), patch.object(single,'run_with_progress',side_effect=execute), redirect_stdout(io.StringIO()):
                 single.main()
+
+    def test_measured_full_inventory_tail_has_bounded_execution_budget(self):
+        # Host-timing receipt: test120 started at296.444s. Remaining four tests
+        # took13.536s in the earlier complete123 run. This is orchestration only.
+        self.run_single('OK (123 tests)\nINSTRUMENTATION_CODE: -1\n',
+                        flavor='connected',required_runtime=310)
 
     def test_zero_tests_is_failure_even_with_successful_adb(self):
         with self.assertRaises(SystemExit):
