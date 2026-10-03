@@ -564,3 +564,28 @@ Validación local: `python -m unittest discover -s scripts/tests -p 'test_*.py'`
 Estos cambios posteriores a aa0ccfe son exclusivamente tooling/tests/documentación.
 AccessGate productivo, duración240s, UI, criptografía y políticas permanecen intactos.
 La CI nueva todavía es necesaria; no se reutiliza el verde previo.
+
+### 2026-10-03 — e32b6dd: cierre no observado, diagnóstico sin relajar aceptación
+
+Emergency media debug run37112963243/job111174282539 falló en video después de
+observar ambos extremos activos (28/34frames remotos,1425/1478bloques audio).
+`NativeVideoStopQuiescence.await` alcanzó el presupuesto2s sin confirmar worker
+idle. El artefacto NO distingue trabajo pendiente, presupuesto consumido antes
+de entrar, o stack ART no reconocido. Causa todavía NO CONFIRMADA.
+Artifact11270841454 SHA256 a1ab0d50892d0c08b9d4f041fa6b1f7f4f1a0522b08710395fcecf0c1992db63.
+Se añade únicamente diagnóstico al AssertionError existente: elapsedNanos,
+observaciones,Thread.State y hasta24frames de lista cerrada (resto OTHER_FRAME).
+No nombres de threads, rutas, payloads, mensajes arbitrarios ni aceptación nueva.
+Presupuesto2s, reloj inicial y clasificador idle no cambian.
+
+Pruebas del helper7PASS; tooling completo347PASS15.251s. Build debug2s(6/69)
+y mediaLabR8+test19s(9/80) exit0. El primer comando no activó
+`-PumbraMediaLab=true` y no encontró la tarea (exit1); corregir la invocación no
+requirió cambios de Gradle ni de producto. No se presenta diagnóstico como fix.
+
+Otros rojos aa0ccfe confirmados por recibos archivados: seis credential-expiry
+focused debug/R8 y modulation R8 lock coinciden con el esquema ya corregido.
+Resumen SHA256 66c6c0db186e6bc62c46d627b03578121d28d5214f32c85e9fd9af238e780139.
+Optimized turn-loss también: artifact11271195632 SHA256
+744a44a7c7b0fa27c6ac2f9f4391fc2581735e9ef3179ebe32e172d6ae98f0c3.
+La corrección acepta esos recibos válidos; no convierte sus ejecuciones rojas en PASS.

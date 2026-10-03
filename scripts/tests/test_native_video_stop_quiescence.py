@@ -93,6 +93,37 @@ class NativeVideoStopQuiescenceTest(unittest.TestCase):
 ''')
         self.assertEqual(0,result.returncode,result.stderr)
 
+    def test_timeout_reports_bounded_safe_metadata_and_remains_failure(self):
+        result=self.run_java(RACE+'''
+ try {
+  known.get().setName("synthetic-private-thread-name");
+  try {
+   NativeVideoStopQuiescence.await(known.get(),known::get,1L,()->2_000_000_001L,
+    nanos->{throw new AssertionError("Budget must not extend");});
+   throw new AssertionError("Timeout accepted");
+  } catch(AssertionError failure) {
+   String message=failure.getMessage();
+   check(message.startsWith("Native stop worker did not become idle within closure budget"));
+   check(message.contains("elapsedNanos=2000000000") && message.contains("observations=0"));
+   check(message.contains("threadState=") && message.contains("frames="));
+   check(!message.contains("synthetic-private-thread-name") && !message.contains(".java:") && !message.contains("/"));
+  }
+ } finally {release.countDown();executor.shutdownNow();executor.awaitTermination(2,TimeUnit.SECONDS);}
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
+    def test_safe_stack_allowlist_never_exports_arbitrary_class_method_or_file(self):
+        result=self.run_java('''
+ var stack=new StackTraceElement[40];
+ java.util.Arrays.fill(stack,new StackTraceElement("private.payload.Class","privateMethod","/private/path",1337));
+ stack[0]=f("java.util.concurrent.ThreadPoolExecutor","getTask");
+ var safe=NativeVideoStopQuiescence.safeFrames(stack);
+ check(safe.size()==24 && safe.get(0).equals("java.util.concurrent.ThreadPoolExecutor.getTask"));
+ for(int i=1;i<safe.size();i++)check(safe.get(i).equals("OTHER_FRAME"));
+ check(!safe.toString().contains("private") && !safe.toString().contains("1337"));
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
     def test_only_actual_executor_queue_stack_qualifies_not_http_or_nested_queue(self):
         result=self.run_java('''
  var idle=new StackTraceElement[]{f("java.util.concurrent.locks.LockSupport","parkNanos"),
