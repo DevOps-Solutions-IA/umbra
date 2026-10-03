@@ -73,8 +73,26 @@ public final class VoiceEngineFixtureListener extends RunListener {
             // to repost the same immutable envelope on every 100 ms fixture tick.
             if(q.optLong("nextRelay",0)>Bytes.now()) continue;
             var envelope=q.getJSONObject("envelope");
+            long deliveryStartedNanos=SystemClock.elapsedRealtimeNanos();
+            long remainingAtStart=envelope.getLong("expires")-Bytes.now();
             try { relay.sendAuthorized(engine,engine.contact(q.getString("peer")).getJSONObject("card"),envelope); }
             catch(SecurityException rejected) {
+                if("Delivery expired".equals(rejected.getMessage())) {
+                  try {
+                    String type=q.optString("callType");
+                    boolean known=app.umbra.calls.CallPayload.TYPES.contains(type) || app.umbra.calls.VideoPayload.CONTROLS.contains(type);
+                    write("synthetic-delivery-expiry.json",new JSONObject()
+                        .put("type",known?type:"OTHER").put("generation",q.optInt("callGeneration",-1))
+                        .put("remainingSecondsAtStart",remainingAtStart)
+                        .put("remainingSecondsAtRejection",envelope.getLong("expires")-Bytes.now())
+                        .put("authorizationElapsedNanos",SystemClock.elapsedRealtimeNanos()-deliveryStartedNanos)
+                        .put("stopGatePresent",videoStopGate!=null)
+                        .put("stopGateReleased",videoStopGate!=null && videoStopGate.released())
+                        .put("isStopControl",videoStopGate!=null && videoStopGate.matchesStop(type,q.optString("callSession"),q.optInt("callGeneration"))));
+                  } catch(Exception diagnosticUnavailable) {
+                    rejected.addSuppressed(new IllegalStateException("Synthetic delivery expiry diagnostic unavailable"));
+                  }
+                }
                 // Cancellation can occur after outbox enumeration and before the transport guard.
                 // Assert this exact expected expiry rejection; never mark it sent, retry it, or
                 // accept identity/storage/other-session errors as successful cancellation evidence.
@@ -211,10 +229,11 @@ public final class VoiceEngineFixtureListener extends RunListener {
                             waitFor("synthetic-http-closed.json",SystemClock.elapsedRealtime()+8_000);
                         }
                     });
-                write("synthetic-http-reproduced.json",new JSONObject().put("androidEof",true).put("networkRevoked",true));
                 // A new explicit synthetic owner action AFTER the negative transport probe.
                 // No old lease is reused and production never reconnects automatically.
                 engine.connectivity().connect(configuration.getString("base"),true);
+                app.umbra.transport.RelayIdleReuseProbe.verifyFreshTransport(engine,configuration.getString("base"));
+                write("synthetic-http-reproduced.json",new JSONObject().put("androidEof",true).put("networkRevoked",true).put("freshSocketVerified",true));
             }
             try(var relay=new RelayClient(configuration.getString("base"),() -> true,engine.admission())) {
             relay.register(engine.profile(),configuration.getString("invitation")); engine.updateRelay(configuration.getString("base"),true);
@@ -536,6 +555,8 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         NativeVideoStopQuiescence.await(nativeWorker.get(),nativeWorker::get,
                             videoOffRequestedNanos,java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(deadline),SystemClock::elapsedRealtimeNanos,
                             nanos->java.util.concurrent.TimeUnit.NANOSECONDS.sleep(nanos));
+                        write("synthetic-stop-inventory-timing.json",new JSONObject()
+                            .put("elapsedFromLocalStopNanos",SystemClock.elapsedRealtimeNanos()-videoOffRequestedNanos));
                         videoStopIssued(engine);
                         videoStage=6;
                     }

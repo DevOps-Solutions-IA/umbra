@@ -751,3 +751,43 @@ El intento inicial de build desde directorio incorrecto no encontró task;
 se conserva /tmp/umbra-03b-expiry-budget-build.log y no se cuenta comoPASS.
 Repository/source guards y diff --check exit0. CI del siguiente SHA pendiente.
 No instalación física, UI ni cambio de AccessGate productivo.
+
+### 2026-10-03 — corrección mínima del transporte HTTP tras reproducción
+
+La reproducción Android controlada del mecanismo pooled/idle-close permite una
+corrección mínima: RelayClient establece Connection: close en cada solicitud,
+incluyendo GET, para impedir que una escritura posterior tome ese socket idle.
+No hay retry automático del envelope/proof ni relajación TLS, admisión o lease.
+El coste es un handshake adicional por solicitud; se validará con los mismos
+límites existentes en la matriz nativa. No se atribuyen todos los EOF históricos
+a esta causa. El riesgo separado de callback de timeout antiguo sigue fuera de
+esta corrección y no se presenta como un fallo histórico demostrado.
+
+El control negativo conserva el blob productivo a286fe6ac9be27019cdb6ff1b66472ce6713ac8a9d7d
+con solo rename/documentación en androidTestConnected/LegacyPooledRelayClient.
+La misma prueba exige EOF+revocación del control negativo; únicamente después
+de una acción sintética explícita crea autorización nueva y exige que el cliente
+productivo corregido complete GET+POST con dos sockets TLS diferentes y sesión
+vigente. El host exige freshSocketVerified=true; si falta, falla. La aceptación
+nativa del código corregido queda pendiente hasta CI del nuevo SHA.
+
+Se añade rechazo explícito de ambas clases de sonda/control negativo en DEX y
+orígenes de mapping R8 productivos. RED4fallos por permitir esos orígenes;
+GREEN7tests. No regla keep global: solo inclusión estrecha para TraceReferences
+del APK de instrumentación. Tooling completo369PASS17.223s; JVM448connected y
+388offline,0fail,0skips; debugbuild y JVM3m34s, R8build45s exit0.
+
+Delivery expired del escenario device-revoked cruzó caducidad durante la
+revalidación del challenge, después de autorización inicial; no demuestra un
+fallo TURN. Se añade diagnóstico seguro del tipo fijo de control, generación,
+TTL restante de entrada/rechazo y duración monotónica, sin identificadores ni
+payloads. El error sigue fallando: no se marca transportado ni se descarta STOP.
+Si escribir diagnóstico falla, se conserva el rechazo original y un fallo
+suprimido de texto fijo. También se mide duración hasta sellar inventario STOP.
+La falta de este diagnóstico impide atribuir todavía el tipo concreto vencido.
+Validación adicional del wiring final: debuginstrumentación8s y R8instrumentación
+24s exit0; HTTPS real contra SQLite/libsignalJNI y certificado verificado exit0.
+El primer intento HTTPS usó un classpath diagnóstico con directorios y fue
+rechazado antes de compilar; repetición con el classpath exacto resuelto del
+proyecto pasó, conservando ambos logs. Comparación del control negativo con su
+blob de origen: iguales tras retirar únicamente rename y comentario de procedencia.
