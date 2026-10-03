@@ -2,7 +2,7 @@
 import argparse
 import json
 from pathlib import Path
-from voice_http_diagnostics import ConnectionDiagnostics
+from voice_http_diagnostics import ConnectionDiagnostics, DenialDiagnostics
 
 
 def main():
@@ -15,8 +15,10 @@ def main():
     import uvicorn
     from uvicorn.protocols.http.h11_impl import H11Protocol
     diagnostic=ConnectionDiagnostics()
+    denials=DenialDiagnostics()
     def snapshot():
-        args.diagnostics.write_text(json.dumps(diagnostic.snapshot(),indent=2)+'\n')
+        value=diagnostic.snapshot();value['httpDenials']=denials.snapshot()
+        args.diagnostics.write_text(json.dumps(value,indent=2)+'\n')
     class ObservedServer(uvicorn.Server):
         async def shutdown(self,sockets=None):
             try:await super().shutdown(sockets=sockets)
@@ -40,7 +42,10 @@ def main():
             super().connection_lost(exc)
     try:
         # No keepalive/HTTP/TLS deadline change. Locked dependencies use h11 already.
-        config=uvicorn.Config('umbra_relay.app:create_app',factory=True,fd=args.fd,workers=1,
+        def observed_app():
+            from umbra_relay.app import create_app
+            return denials.wrap(create_app())
+        config=uvicorn.Config(observed_app,factory=True,fd=args.fd,workers=1,
                     ssl_certfile=str(args.cert),ssl_keyfile=str(args.key),
                     http=ObservedH11,access_log=False,proxy_headers=False,log_level='warning')
         ObservedServer(config).run()

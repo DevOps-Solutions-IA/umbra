@@ -190,7 +190,10 @@ public final class VoiceEngineFixtureListener extends RunListener {
         var managers=TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()); managers.init(trust);
         var tls=SSLContext.getInstance("TLS"); tls.init(null,managers.getTrustManagers(),null);
         HttpsURLConnection.setDefaultSSLSocketFactory(tls.getSocketFactory()); // TEST APK only. Hostname verification unchanged.
+        AtomicInteger decoded=new AtomicInteger(),captured=new AtomicInteger(),modified=new AtomicInteger(),loud=new AtomicInteger(),playbackSamples=new AtomicInteger(),playbackRate=new AtomicInteger();
         NativeVoiceSession voice=null;
+        TurnExpiryObservation turnExpiryObservation=null;
+        Throwable turnFixtureFailure=null;
         try(var db=new SqliteDeviceRecords("voice-restart",false)) {
             Engine engine=new Engine(db,SystemClock::elapsedRealtime); engine.initialize("Synthetic voice "+(caller?"A":"B"));
             unadmittedRelayDenied(configuration.getString("base"));
@@ -244,7 +247,6 @@ public final class VoiceEngineFixtureListener extends RunListener {
             Files.delete(files.resolve("synthetic-voice-turn.json"));
             lease.snapshot();
             NativeVoiceSession.initialize(context);
-            AtomicInteger decoded=new AtomicInteger(),captured=new AtomicInteger(),modified=new AtomicInteger(),loud=new AtomicInteger(),playbackSamples=new AtomicInteger(),playbackRate=new AtomicInteger();
             var processingObservation=new java.util.concurrent.atomic.AtomicReference<DecodedAudioWindow>();
             var muteObservation=new java.util.concurrent.atomic.AtomicReference<DecodedAudioWindow>();
             AtomicInteger videoCaptured=new AtomicInteger();
@@ -281,8 +283,9 @@ public final class VoiceEngineFixtureListener extends RunListener {
                 }).createAudioDeviceModule();
             adm.setAudioRecordEnabled(false);
             long remaining=Math.min(180000,(credential.getLong("expires")-Bytes.now())*1000);
+            turnExpiryObservation=new TurnExpiryObservation(SystemClock::elapsedRealtime,remaining);
             var turn=new TurnConfiguration(List.of(credential.getJSONArray("urls").getString(0)),REVISION,
-                credential.getString("username"),credential.getString("password"),remaining,SystemClock::elapsedRealtime,credential.optString("hostname",""));
+                credential.getString("username"),credential.getString("password"),remaining,turnExpiryObservation,credential.optString("hostname",""));
             org.webrtc.SSLCertificateVerifier verifier=null;
             if(credential.has("certificate")) {
                 var ca=(java.security.cert.X509Certificate)java.security.cert.CertificateFactory.getInstance("X.509")
@@ -637,6 +640,11 @@ public final class VoiceEngineFixtureListener extends RunListener {
                     diagnostic.putInt("videoAppliedPeerStopCount",videoStopGate==null?0:videoStopGate.appliedPeerStopCount());
                     diagnostic.putInt("videoAudioBaseline",videoAudioBaseline);
                     diagnostic.putInt("videoDecodedAudioDelta",decoded.get()-videoAudioBaseline);
+                    diagnostic.putInt("videoCapturedAudioTotal",captured.get());
+                    diagnostic.putInt("videoDecodedAudioTotal",decoded.get());
+                    diagnostic.putInt("videoLoudAudioTotal",loud.get());
+                    diagnostic.putInt("videoModifiedAudioTotal",modified.get());
+                    diagnostic.putLong("videoReceivedAudioPackets",voice==null?0:voice.receivedAudioPackets());
                     long observedAt=SystemClock.elapsedRealtime();
                     diagnostic.putLong("videoFixtureElapsedMillis",observedAt-fixtureStarted);
                     diagnostic.putBoolean("videoFixtureDeadlineReached",observedAt>=deadline);
@@ -680,8 +688,34 @@ public final class VoiceEngineFixtureListener extends RunListener {
             if(localLockApplied) status.putString("privateStartupLock","PASS old relay rejected; no reconnect");
             InstrumentationRegistry.getInstrumentation().sendStatus(0,status);
             }
+        } catch(Exception | AssertionError failure) {
+            turnFixtureFailure=failure;throw failure;
         } finally {
-            if(voice!=null) voice.close(); HttpsURLConnection.setDefaultSSLSocketFactory(original);
+            AssertionError turnDiagnosticFailure=null;
+            // Fixed metadata only; diagnostics never authorize expiry or replace the original failure.
+            try {
+                if(turnExpiryObservation!=null) {
+                    long[] expiry=turnExpiryObservation.snapshot(SystemClock.elapsedRealtime());
+                    Bundle diagnostic=new Bundle();
+                    diagnostic.putLong("turnRemainingAtConfigMillis",expiry[0]);
+                    diagnostic.putLong("turnObservedElapsedMillis",expiry[1]);
+                    diagnostic.putLong("turnFirstExpiryReadMillis",expiry[2]);
+                    diagnostic.putLong("turnClockReadCount",expiry[3]);
+                    diagnostic.putString("turnObservedFailureStage",voice==null?"NOT_STARTED":voice.failureStage());
+                    diagnostic.putInt("videoCapturedAudioTotal",captured.get());
+                    diagnostic.putInt("videoDecodedAudioTotal",decoded.get());
+                    diagnostic.putInt("videoLoudAudioTotal",loud.get());
+                    diagnostic.putInt("videoModifiedAudioTotal",modified.get());
+                    diagnostic.putLong("videoReceivedAudioPackets",voice==null?0:voice.receivedAudioPackets());
+                    InstrumentationRegistry.getInstrumentation().sendStatus(0,diagnostic);
+                }
+            } catch(RuntimeException diagnosticUnavailable) {
+                turnDiagnosticFailure=new AssertionError("TURN expiry diagnostic unavailable");
+                if(turnFixtureFailure!=null)turnFixtureFailure.addSuppressed(turnDiagnosticFailure);
+            }
+            try { if(voice!=null) voice.close(); }
+            finally { HttpsURLConnection.setDefaultSSLSocketFactory(original); }
+            if(turnFixtureFailure==null && turnDiagnosticFailure!=null)throw turnDiagnosticFailure;
         }
     }
 }

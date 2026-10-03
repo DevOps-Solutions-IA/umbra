@@ -623,3 +623,46 @@ video-stop-race-1(A):2.000186691s/26observaciones;credential-expiry-3(B):
 2.000454785s/36observaciones. Ambos RUNNABLE en transacción SQLite; el segundo
 no llegó a provocar expiry. Artifact11270444418 SHA256
 e7e1e8a120dedf75726ae49114a0ea66cd7e5cd31c2ff5a965c6db2efdb7274a.
+
+### 2026-10-03 — 04bf936: nuevos fallos localizados, causas aún abiertas
+
+Focused debug job111179764960/artifact11271935211 SHA256
+e6673c960d926606a31e55654b6001e7c09907d73386a8ed045fc606c1c914e7:
+credential-expiry-1 completó video activo y parada en ambos extremos (cierre
+48.194/18.521ms,cero callbacks posteriores), pero falló en reactivación ANTES de
+la acción de caducidad. A:local-watchdog/NEGOTIATING;B:CallService.Interrupted
+al autorizar entrega. Expiración de TURN60s durante preparación es una hipótesis,
+no causa demostrada. El rechazo sigue fatal porque no había fase de expiry aceptada.
+credential-expiry-2 falló en ACK HTTP403, también antes de expiry. La credencial
+de admisión dura3600s; no se confunde con TURN60s. Faltaban motivo de rechazo y
+observaciones temporales. No se cambia admisión, ACK, TTL ni política de retries.
+
+Video R8 shard0 job111179689042/artifact11271457068 SHA256
+92c72636d365846ec6b8f93528421fed7b6d3bb3b38ab3955669a1c5b60cb956:
+device-revoked falló ANTES de revocar. B llegó a stage4 con video ACTIVE y
+1263frames decodificados, pero audioDelta0 al deadline120s. Parada previa válida,
+STOP aplicado1/1. Causa de la ausencia de audio reconocido NO CONFIRMADA. A
+finalizó tras la limpieza del host; no equivale a completar el escenario conjunto.
+
+Se agrega únicamente observabilidad de laboratorio: reloj TURN que devuelve
+exactamente cada valor delegado y registra primer cruce de expiry/readCount;
+el informe no fabrica un cruce al leerse. Ese cruce no se presenta por sí solo
+como causa primaria. Contadores PCM agregados (nunca muestras) y paquetes de audio
+se adjuntan a diagnósticos existentes, en ambos extremos. Un fallo de diagnóstico
+se adjunta al fallo primario o hace fallar un resultado que iba a ser exitoso,
+siempre después de limpieza. No se ignora para aprobar.
+
+El servidor HTTPS sintético registra como máximo128 rechazos, categorías cerradas
+de ruta/motivo/status, tiempos monotónicos y booleano del header exacto de desafío
+fresco. Sin rutas, headers, IDs, cuerpos o credenciales persistidos. El wrapper
+ASGI reenvía mensajes intactos; ninguna modificación del relay productivo.
+
+Validación local: tooling354PASS16.570s; debug+test1s(6/69),R8+test15s(9/80),exit0.
+Un build anterior detectó cinco líneas diagnósticas insertadas accidentalmente en
+callback sin variable Bundle; RED preservado y corregido antes de commit. La
+regresión impide repetir esa inserción; no cambió el callback productivo.
+Smoke HTTPS real con TLS verificado conserva403 ADMISSION_UNAVAILABLE, sin
+fresh-challenge; cierre explícitoSIGTERM,exit-15 del servidor. Primera aserción
+del smoke esperaba erróneamente0; se conserva su fallo y se distingue del cierre
+PCAP, donde sí se exige0. No se amplía ninguna aceptación multimedia.
+Estas mejoras de diagnóstico NO son correcciones de los tres fallos anteriores.
