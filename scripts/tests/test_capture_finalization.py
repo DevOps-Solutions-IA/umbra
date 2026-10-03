@@ -31,13 +31,16 @@ class CaptureFinalizationTest(unittest.TestCase):
                     block.append(following)
                 blocks.append('\n'.join(block))
             for script in blocks:
+                # Verify invokes the voice scenarios through this owning-shell helper.
+                if 'source scripts/ci_bluetooth.sh' in script:
+                    script += '\n' + (workflows.parents[1] / 'scripts/ci_bluetooth.sh').read_text()
                 if any('python scripts/' + name in script for name in (
                         'run_voice_integration.py', 'run_video_matrix.py', 'run_media_regressions.py')):
                     consumers += 1
                     self.assertIn('export UMBRA_FINALIZED_CAPTURE=1', script, path.name)
                     self.assertIn('umbra_finalize_capture', script, path.name)
                     self.assertIn('python scripts/finalize_media_capture.py', script, path.name)
-        self.assertEqual(5, consumers)
+        self.assertEqual(6, consumers)
 
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

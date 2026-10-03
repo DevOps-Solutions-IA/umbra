@@ -131,3 +131,32 @@ Facts SHA256 `6b82e6b6581c1c0819a30f78263fd1c5baebb6666d1d1e008c954acff16230a6`;
 diagnóstico SHA256 `68582f78e9976b29aee791c3be8d1aa855e22b415ee4d4e08b1093ba986dd39f`.
 Nuevas pruebas exigen INFO, módulo, línea y mensaje exactos; variantes y errores
 reales siguen siendo bloqueantes. Esto no acredita Wi-Fi/AVD/multimedia.
+
+## Validación Android72d3d21 y consumidores indirectos
+
+Verify37098623671 artifact11265339008, SHA256
+`71de26ef6e57a651972fd77e572c36ac682727595b08fdb38e96475a5d47a405`:
+connected `OK (123 tests)` en248.236s, offline `OK (120 tests)` en239.027s,
+ambos instrumentation code-1. La autoridad sintética ya supera el plazo global
+sin modificar AccessGate. Verify falló DESPUÉS, al invocar la voz desde
+`ci_bluetooth.sh`: faltaba opt-in al propietario de captura. Se añade al workflow
+Verify y se finaliza después de todos sus escenarios de voz y RFCOMM. La regresión
+inspecciona también este consumidor indirecto; no se elimina ni mueve ningún caso.
+
+## Privacidad debug72d3d21 — diagnóstico pendiente, no reparación atribuida
+
+Run37098623693, artifact11265328342 SHA256
+`3193e07ee1373d8565ba29d55293bfb1e5dcd672b425def39bb95637fcfe4b29`:
+el listener alcanzó SYNTHETIC_MUX_DONE, pero no la barrera positiva de consumo.
+El runner falló aproximadamente45s después de instalar/iniciar. El log final
+`Process crashed` se obtiene después de un finally que fuerza cierre del paquete;
+NO prueba por sí solo un crash espontáneo. No existe diagnóstico previo al cierre
+en ese artefacto; causa interna NO CONFIRMADA. R8 del mismo workflow pasó.
+
+Se agrega diagnóstico test-only ANTES de cleanup: DEADLINE vs PROCESS_EXIT,
+existencia del proceso, memoria, causas de salida históricas identificadas como
+históricas, y ubicaciones nativas de una lista fija. Recolección acotada5s/64KiB
+por comando, solo en memoria; no dumps crudos, mensajes, rutas ni secretos en
+artefactos. Marcas elapsedRealtime del listener identifican cada fase. Se mantiene
+45s, no hay reintento automático y un diagnóstico nunca convierte un fallo en PASS.
+Esto es una mejora de observabilidad; no se presenta como corrección del codec.
