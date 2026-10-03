@@ -90,3 +90,44 @@ de Emergency Lock al cierre explícito. Una regresión inspecciona los cinco
 workflows consumidores para exigir ownership y finalización; los logs de AVD
 usan identificador de tanda para no sobrescribir el diagnóstico focalizado.
 Suite final tooling local:301tests,6.590s,exit0.
+
+## Candidato6ee636e — rojos nuevos preservados (2026-10-03)
+
+HEAD `6ee636e50db5a925cd317089532d925c0fbaa916`, árbol
+`2733c364d778bd71797270989f1e7ac7b2a60721`, checkout Actions
+`9900a362302a0486fe91d91287869351fdf925a5`.
+Verify37097880810:301tooling tests/1error `ModuleNotFoundError: yaml`.
+La dependencia accidental de la nueva inspección de workflows existía solo en
+el host, no en repository-guard. Se reemplaza por inspección stdlib de bloques
+shell literales; no se agrega dependencia ni se elimina aserción.
+`python -S -m unittest discover -s scripts/tests -p 'test_*.py'`:301PASS,exit0.
+
+Video37097880827 shardR8-1 completó las fases nativas expired-auth e ipv6-tls,
+pero NO aceptación de red: cierre daemon exit0/captureErrorCount4/FAILED.
+Artifact11265730196, SHA256
+`45b9216f68194b72fa9309a6b8b32ffbb4ebb85bacdbc46b1867a31093e7071c`.
+Emergency media debug111131430236 yR8111131430252 también fallaron el recibo
+de cierre, no se convierten en pases. Artifact debug11264673344 SHA256
+`7dc0f3316f039b9ef36154c4f53d39ece4175c3b0934e7971bc5f4403cf14321`.
+
+El recibo antiguo contiene contador, no categorías; no permite identificar
+retrospectivamente sus cuatro líneas. Una reproducción local independiente con
+el mismo binario reveló un falso positivo del clasificador: INFO de root-canal
+sobre capacidad WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING, sin escritura de PCAP.
+La corrección distingue exclusivamente la línea informativa exacta demostrada,
+conserva su contador diagnóstico y sigue bloqueando errores de captura, flush,
+transporte y errores desconocidos. Los nuevos recibos incluyen categorías fijas
+y ubicación de fuente permitida; nunca líneas, direcciones ni payloads crudos.
+
+Comprobación local adicional: backend244PASS. El primer `test_local.sh` falló
+al combinar java25/javac21 del PATH; repetido con JAVA_HOME y PATH explícitos JDK21,
+terminó exit0, incluidos sintaxisJava y13políticas. No se cambió toolchain del repo.
+Un millón de registros PCAP sintéticos/78MB: framing0.193s, tcpdump0.663s,
+conteo exacto1,000,000; sin aumentar el timeout existente.
+
+Reproducción exacta de dos clientes HCI: salida0, dos PCAP finales67bytes,
+ambos tcpdump0; contador anterior4, diagnóstico nuevo no-capture4/error0.
+Facts SHA256 `6b82e6b6581c1c0819a30f78263fd1c5baebb6666d1d1e008c954acff16230a6`;
+diagnóstico SHA256 `68582f78e9976b29aee791c3be8d1aa855e22b415ee4d4e08b1093ba986dd39f`.
+Nuevas pruebas exigen INFO, módulo, línea y mensaje exactos; variantes y errores
+reales siguen siendo bloqueantes. Esto no acredita Wi-Fi/AVD/multimedia.

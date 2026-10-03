@@ -102,6 +102,39 @@ class NetsimOwnerTest(unittest.TestCase):
         with self.assertRaises(RuntimeError): owner.closed(self.state, self.receipt, 0, self.log)
         self.assertEqual('FAILED', json.loads(self.receipt.read_text())['state'])
 
+    def test_exact_native_info_capability_marker_is_retained_as_non_capture(self):
+        line = ('root-canal I 10-03 00:01:08.509 controller_properties.cc:1662 '
+                'WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING command validation failed (c135,excluded)')
+        self.log.write_text(line + '\n' + line.replace('WRITE_', '\x1b[38;2;100;100;100mWRITE_') + '\x1b[0m\n')
+        result = owner.capture_diagnostics(self.log)
+        self.assertEqual(0, result['captureErrorCount'])
+        self.assertEqual([{'category': 'NON_CAPTURE_CONTROLLER_CAPABILITY',
+                          'sourceModule': 'ROOT_CANAL_CONTROLLER_PROPERTIES', 'sourceLine': 1662,
+                          'blocking': False, 'count': 2}], result['captureDiagnostics'])
+        for altered in (line.replace('root-canal I', 'root-canal E'),
+                        line.replace(':1662', ':1663'), line.replace('c135', 'c136'),
+                        line + ' Failed to flush writer for chip 3',
+                        line.replace('root-canal', 'netsim')):
+            with self.subTest(altered=altered):
+                self.log.write_text(altered + '\n')
+                self.assertEqual(1, owner.capture_errors(self.log))
+
+    def test_capture_transport_and_unknown_errors_remain_blocking_and_redacted(self):
+        self.log.write_text(
+            'netsim E 10-03 00:01:08.509 lifecycle.rs:47 Packet capture write failed for chip 2: private-token\n'
+            'netsim W 10-03 00:01:08.509 service.rs:150 Failed to flush writer for chip 2: private-token\n'
+            'netsim E 10-03 00:01:08.509 dual_fd.rs:304 failed to write frame to transport private-token\n'
+            'netsim E 10-03 00:01:08.509 private_filename.rs:7 Write failed: private-token 192.0.2.1\n')
+        result = owner.capture_diagnostics(self.log)
+        self.assertEqual(4, result['captureErrorCount'])
+        self.assertEqual({'CAPTURE_WRITE_FAILURE', 'CAPTURE_FLUSH_FAILURE', 'TRANSPORT_WRITE_FAILURE',
+                          'UNKNOWN_WRITE_OR_CAPTURE_FAILURE'},
+                         {item['category'] for item in result['captureDiagnostics']})
+        text = json.dumps(result)
+        for secret in ('private-token', 'private_filename', '192.0.2.1'):
+            self.assertNotIn(secret, text)
+        self.assertTrue(all(item['blocking'] for item in result['captureDiagnostics']))
+
     def test_shell_failed_readiness_cleans_owned_child_without_state(self):
         sdk = self.root / 'sdk'; (sdk / 'emulator').mkdir(parents=True)
         fake = sdk / 'emulator' / 'netsimd'

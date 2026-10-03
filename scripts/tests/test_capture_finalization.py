@@ -13,20 +13,30 @@ from test_pcap_integrity import header, record, udp4
 
 class CaptureFinalizationTest(unittest.TestCase):
     def test_all_media_workflow_consumers_finalize_owned_capture(self):
-        import yaml
         workflows = Path(__file__).resolve().parents[2] / '.github/workflows'
         consumers = 0
+        # Inspect literal shell run blocks; no third-party YAML dependency is
+        # installed in the repository-guard job. This is not a YAML validator.
         for path in workflows.glob('*.yml'):
-            document = yaml.safe_load(path.read_text())
-            for job in document.get('jobs', {}).values():
-                for step in job.get('steps', []):
-                    script = step.get('run', '')
-                    if any('python scripts/' + name in script for name in (
-                            'run_voice_integration.py', 'run_video_matrix.py', 'run_media_regressions.py')):
-                        consumers += 1
-                        self.assertIn('export UMBRA_FINALIZED_CAPTURE=1', script, path.name)
-                        self.assertIn('umbra_finalize_capture', script, path.name)
-                        self.assertIn('python scripts/finalize_media_capture.py', script, path.name)
+            lines = path.read_text().splitlines()
+            blocks = []
+            for index, line in enumerate(lines):
+                if line.strip() != 'run: |':
+                    continue
+                indentation = len(line) - len(line.lstrip())
+                block = []
+                for following in lines[index + 1:]:
+                    if following.strip() and len(following) - len(following.lstrip()) <= indentation:
+                        break
+                    block.append(following)
+                blocks.append('\n'.join(block))
+            for script in blocks:
+                if any('python scripts/' + name in script for name in (
+                        'run_voice_integration.py', 'run_video_matrix.py', 'run_media_regressions.py')):
+                    consumers += 1
+                    self.assertIn('export UMBRA_FINALIZED_CAPTURE=1', script, path.name)
+                    self.assertIn('umbra_finalize_capture', script, path.name)
+                    self.assertIn('python scripts/finalize_media_capture.py', script, path.name)
         self.assertEqual(5, consumers)
 
     def setUp(self):

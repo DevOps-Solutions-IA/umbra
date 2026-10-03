@@ -112,20 +112,67 @@ def wait_exit(state_path, *, timeout=30):
     raise RuntimeError('Owned netsim did not exit by shutdown deadline')
 
 
-def capture_errors(log_path):
-    """Only a fixed counter escapes the private daemon log; no raw text or packet metadata."""
+# This exact INFO marker was reproduced with the CI 1.0.23 binary. It checks
+# Bluetooth controller capabilities; it does not write a capture or transport.
+_CONTROLLER_CAPABILITY = re.compile(
+    r'^root-canal I \d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} '
+    r'controller_properties\.cc:1662\s+'
+    r'WRITE_DEFAULT_ERRONEOUS_DATA_REPORTING command validation failed \(c135,excluded\)$')
+_SOURCE_NAMES = {
+    'controller_properties.cc': 'ROOT_CANAL_CONTROLLER_PROPERTIES',
+    'lifecycle.rs': 'LIFECYCLE', 'service.rs': 'SERVICE', 'writer.rs': 'WRITER',
+    'wifi_pcap.rs': 'WIFI_PCAP', 'dual_fd.rs': 'DUAL_FD',
+}
+
+
+def capture_diagnostics(log_path):
+    """Fixed categories and allowlisted source locations only; never raw log text."""
     path = Path(log_path)
     if not path.is_file() or path.is_symlink() or not 0 < path.stat().st_size <= 16 * 1024 * 1024:
         raise RuntimeError('Missing or invalid private capture diagnostics')
     count = 0
+    groups = {}
     with path.open(encoding='utf-8', errors='strict') as stream:
         for line in stream:
+            line = re.sub(r'\x1b\[[0-9;]*m', '', line.rstrip('\r\n'))
             lower = line.lower()
             relevant = any(word in lower for word in ('pcap', 'capture', 'writer', 'flush', 'write'))
             error = any(word in lower for word in ('error', 'failed', 'failure', 'could not', "couldn't")) or bool(re.search(r'\bE\s+\d\d[-:]|\bERROR\b', line))
-            if relevant and error:
-                count += 1
-    return count
+            if not (relevant and error):
+                continue
+            blocking = not bool(_CONTROLLER_CAPABILITY.fullmatch(line))
+            if not blocking:
+                category = 'NON_CAPTURE_CONTROLLER_CAPABILITY'
+            elif 'packet capture write failed for chip ' in lower:
+                category = 'CAPTURE_WRITE_FAILURE'
+            elif 'failed to flush writer for chip ' in lower:
+                category = 'CAPTURE_FLUSH_FAILURE'
+            elif 'wifipcapwriter: failed to' in lower:
+                category = 'CAPTURE_FORMAT_FAILURE'
+            elif 'failed to write frame to transport' in lower:
+                category = 'TRANSPORT_WRITE_FAILURE'
+            else:
+                category = 'UNKNOWN_WRITE_OR_CAPTURE_FAILURE'
+            # Match only a log prefix's source position, never text embedded in
+            # its message. Unknown source names are replaced by a fixed enum.
+            source = re.match(r'^[a-z-]+ [VDIWE] \d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} ([a-z_]+\.(?:rs|cc)):(\d{1,6})\s', line)
+            module = _SOURCE_NAMES.get(source[1], 'UNKNOWN') if source else 'UNKNOWN'
+            number = int(source[2]) if source and module != 'UNKNOWN' else 0
+            key = (category, module, number, blocking)
+            # Limit cardinality even for malformed private diagnostics.
+            if len(groups) >= 64 and key not in groups:
+                key = ('UNKNOWN_WRITE_OR_CAPTURE_FAILURE', 'UNKNOWN', 0, True)
+                blocking = True
+            groups[key] = groups.get(key, 0) + 1
+            count += int(blocking)
+    return {'captureErrorCount': count, 'captureDiagnostics': [
+        {'category': key[0], 'sourceModule': key[1], 'sourceLine': key[2],
+         'blocking': key[3], 'count': value}
+        for key, value in sorted(groups.items())]}
+
+
+def capture_errors(log_path):
+    return capture_diagnostics(log_path)['captureErrorCount']
 
 
 def closed(state_path, receipt_path, exit_code, log_path, *, avds_clean=True):
@@ -137,7 +184,8 @@ def closed(state_path, receipt_path, exit_code, log_path, *, avds_clean=True):
     else:
         raise RuntimeError('Owned PID must be reaped before closure receipt')
     closed_at = time.monotonic_ns()
-    errors = capture_errors(log_path)
+    diagnostics = capture_diagnostics(log_path)
+    errors = diagnostics['captureErrorCount']
     clean = (type(exit_code) is int and exit_code == 0 and avds_clean
              and errors == 0
              and state.get('readyMonotonicNs', 0) > 0
@@ -145,7 +193,7 @@ def closed(state_path, receipt_path, exit_code, log_path, *, avds_clean=True):
     receipt = {'state': 'CLOSED' if clean else 'FAILED', 'pid': state['pid'], 'exitCode': exit_code,
                'captureRoot': state['captureRoot'], 'stopRequestedMonotonicNs': state.get('stopRequestedMonotonicNs'),
                'closedMonotonicNs': closed_at, 'stoppedWallTime': time.time(), 'exeSha256': state['exeSha256'],
-               'startTicks': state['startTicks'], 'graceful': clean, 'captureErrorCount': errors}
+               'startTicks': state['startTicks'], 'graceful': clean, **diagnostics}
     atomic_json(receipt_path, receipt)
     if not clean:
         raise RuntimeError('Capture owner or dependent AVD did not close cleanly')
