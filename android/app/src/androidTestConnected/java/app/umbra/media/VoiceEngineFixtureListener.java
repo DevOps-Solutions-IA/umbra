@@ -555,7 +555,10 @@ public final class VoiceEngineFixtureListener extends RunListener {
                             videoCaptured.get()-videoCaptureBaseline>=20 && videoDecoded.frames.get()==0:
                             videoDecoded.frames.get()-videoFrameBaseline>=20 && videoDecoded.phases.get()==3;
                         if(oneWay && !caller && videoCaptured.get()!=0)throw new AssertionError("Receive-only consent captured a local frame");
-                        if(framesReady && voice.videoStatus().equals("ACTIVE") && decoded.get()-videoAudioBaseline>=50) {
+                        // The receipt validator already requires 20 local source frames
+                        // when sending; remote decoded readiness alone cannot prove that.
+                        boolean localCaptureReady=oneWay && !caller || videoCaptured.get()-videoCaptureBaseline>=20;
+                        if(framesReady && localCaptureReady && voice.videoStatus().equals("ACTIVE") && decoded.get()-videoAudioBaseline>=50) {
                             auditNativeDescriptions(engine.calls().session(id),credential.getJSONArray("urls").getString(0),credential.optString("relayAddress"));
                             if(videoStage==1)videoStopGate=new VideoStopDeliveryGate(id,engine.calls().session(id).getInt("generation"),UUID.randomUUID().toString());
                             write("synthetic-voice-video-"+(videoStage==1?"active":"resumed")+".json",new JSONObject()
@@ -592,17 +595,16 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         } else {videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();}
                         videoOffAt=SystemClock.elapsedRealtime();videoCaptureBaseline=videoCaptured.get();videoAudioBaseline=decoded.get();
                         stopInventoryDiagnostic(db,engine,"syntheticStopImmediate");
-                        // A native worker may already hold a CONFIRMED snapshot and emit
-                        // another authorized STOP after the foreground transaction. Observe
-                        // its genuine scheduler-idle boundary before sealing the inventory.
-                        // Inventory settling uses the existing scenario deadline; stage6 still
-                        // verifies capture closure against the original request and two seconds.
-                        var idleObservation=NativeVideoStopQuiescence.await(nativeWorker.get(),nativeWorker::get,
-                            videoOffRequestedNanos,java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(deadline),SystemClock::elapsedRealtimeNanos,
-                            nanos->java.util.concurrent.TimeUnit.NANOSECONDS.sleep(nanos));
+                        // A worker may already hold a CONFIRMED snapshot and emit another
+                        // STOP after the foreground transaction. A FIFO marker completes all
+                        // earlier worker tasks before inventory; later tasks see STOPPED.
+                        // Do not wait for unrelated future ticks/stats to become globally idle.
+                        // The original scenario deadline and stage6 capture bounds still apply.
+                        long fenceElapsed=NativeVideoStopFence.await(voice,NativeVoiceSession.class,nativeWorker.get(),nativeWorker::get,
+                            videoOffRequestedNanos,java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(deadline),SystemClock::elapsedRealtimeNanos);
                         Bundle inventoryTiming=new Bundle();inventoryTiming.putLong("syntheticStopInventoryElapsedNanos",SystemClock.elapsedRealtimeNanos()-videoOffRequestedNanos);
-                        inventoryTiming.putInt("syntheticStopIdleSamples",idleObservation.samples());
-                        inventoryTiming.putString("syntheticStopLastBusyFrames",idleObservation.lastBusyFrames().toString());
+                        inventoryTiming.putLong("syntheticStopFenceElapsedNanos",fenceElapsed);
+                        inventoryTiming.putBoolean("syntheticStopFifoFenceConfirmed",true);
                         InstrumentationRegistry.getInstrumentation().sendStatus(0,inventoryTiming);
                         stopInventoryDiagnostic(db,engine,"syntheticStopSettled");
                         videoStopIssued(engine);

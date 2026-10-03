@@ -976,3 +976,75 @@ Repository guard 765 source files PASS; 13 source policies PASS; diff --check PA
 A first read/patch command used the android directory with a root-relative path
 and failed FileNotFoundError before writing; corrected with absolute path. It did
 not alter a different worktree or suppress a failed validation.
+
+## 2026-10-03 — FIFO STOP inventory fence candidate (after b55900e)
+
+A controlled real ScheduledExecutor experiment reproduced the incorrect global-idle
+precondition: an earlier STOP producer completed, but unrelated later work kept the
+worker busy and the old helper exhausted its scenario deadline. The direct RED
+command exited 1 with the original helper's deadline assertion; source and log are
+preserved under `/tmp/umbra-stop-global-idle-proof/`.
+
+The proposed correction is test-APK-only: submit a FIFO marker to the actual native
+worker after synchronous STOP. Markers on the independent watchdog cannot satisfy
+it. The marker proves earlier tasks finished; it does not assert capture/resources
+are closed. Existing strict late-STOP inventory, real decoded media, monotonic
+capture bounds, peer delivery, TTL and final assertions remain authoritative.
+No later task may reactivate video before inventory: the current asynchronous STOP
+producer reads the persistent CONFIRMED/STOPPED state inside its worker task.
+
+The fixture locates the two app-owned ExecutorService instance fields by runtime
+interface type, not field name, and accepts only the previously observed worker
+thread. It verifies exact session runtime class, identity, alive thread and the
+original scenario deadline. It cancels only its own marker futures without
+interrupting or shutting down either executor. Reflection/discovery failure is a
+failure, never success. No new product API or R8 keep/deoptimization rule is added.
+The explicit TraceReferences fixture inventory includes only the new test helper.
+Actual optimized local mapping retains worker/watchdog as two ScheduledExecutorService
+fields, obfuscated to x/y; this is not Android runtime proof of reflection.
+
+Five real-executor tests PASS: FIFO ordering with busy later work; watchdog cannot
+satisfy blocked worker; wrong owner/thread; stale worker and exact deadline;
+missing executor inventory. A first deadline test incorrectly offered only 50ns
+of real latch waiting and failed; its controlled-clock domain now provides a real
+bounded wait and returns exactly the virtual deadline on confirmation, which still
+must be rejected. No product deadline changed. The earlier failed log is retained.
+
+Full local tooling 380 PASS in 19.476s; connected test APK build 3s PASS; R8 media
+and test APK build 16s PASS. Independent relevant JVM execution with --rerun-tasks
+on published b55900e: connected449/offline388, zero failures/errors/skips, 3m30s.
+The new fence alters no JVM/product source. Backend/local command with explicit
+JDK21 PASS (244 relay tests plus core/85 security scenarios, syntax/source policy).
+The unpinned invocation mixed Java25 with javac21 and failed JavaSyntaxCheck with
+`release version 21 not supported`; that failure is preserved, not counted PASS.
+Production AccessGate, admission, Pairing, TLS/TURN, UI and offline policy unchanged.
+Native debug/R8 execution of this fence still required on its own published SHA.
+
+### b55900e native R8 receipt exposed a second proven fixture mismatch
+
+Video run 37142843558, R8 shard0 job111260670415 failed in the existing focused
+receipt validator after successful PCAP finalization, not in tcpdump/media transport.
+Artifact11281461446 SHA-256
+`3f37e78c7e9afee146d490f026769abbd3b51accfd84c8b63797154f38f1aeff`.
+Re-evaluating each exact artifact receipt against the unchanged validator:
+expired-auth=True, degraded-network=True, ipv6-tls=False. IPv6/TLS decoded remote
+patterns20/24 and audio702/748, but A reported capturedFrames19. The validator
+requires capturedFrames>=20; the fixture's publish predicate previously required
+remote readiness/audio but omitted the local source threshold for bidirectional video.
+This explains this particular finalized-receipt rejection conclusively.
+
+The new regression compiles/executes the actual fixture predicate and first failed:
+it could publish a sending phase below20 source frames. The minimum fixture fix
+waits for the same existing local20-frame threshold as the unchanged validator.
+Receive-only consent still requires zero local frames (the existing explicit
+zero-capture assertion remains). No decoder/source threshold or deadline is reduced
+or increased. Both native phase reactivation and active phases use this predicate.
+The predicate test then passed across direction roles and 0/19/20/21 boundaries.
+Logs `/tmp/umbra-03b-video-phase-{red,green}.log` retained. This unit test proves
+predicate alignment, not hardware/native decoding. Own new-head native CI required.
+
+Combined FIFO/readiness candidate local result: 381 tooling tests PASS20.270s;
+debug instrumentation APK build PASS; optimized media/test APK build PASS15s.
+Independent review confirmed FIFO worker matching/fail-closed behavior and
+receive-only zero-capture semantics. Review is not native acceptance. No workflow
+is cancelled to publish this follow-up; the previous b55900e run must finish first.
