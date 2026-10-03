@@ -88,3 +88,27 @@ class StartupRestoreTest(unittest.TestCase):
                 self.assertEqual(['initialize','route'],events)
                 init.assert_called_once_with('adb','emulator-5554',root/'initial-wifi-initialization.json')
                 wait.assert_called_once_with('adb','emulator-5554',root/'initial-wifi-route.json',associate=changed)
+
+    def test_failure_observation_attempts_both_and_never_exports_exception(self):
+        import json
+        from run_private_startup import observe_startup_failure
+        with tempfile.TemporaryDirectory() as d,patch('run_private_startup.observe_owned_network',side_effect=RuntimeError('synthetic-secret')) as network,patch('run_private_startup.observe_startup_wifi') as wifi:
+            root=Path(d);observe_startup_failure('adb','emulator-5554',root)
+            network.assert_called_once_with('adb','emulator-5554',root/'network-at-failure.json')
+            wifi.assert_called_once_with('adb','emulator-5554',root/'wifi-at-failure.json')
+            text=(root/'failure-observation.json').read_text()
+            self.assertNotIn('synthetic-secret',text)
+            self.assertEqual({'network':'DIAGNOSTIC_FAILED','wifi':'RECORDED'},json.loads(text))
+
+    def test_failure_is_reraised_before_cleanup_without_retry(self):
+        import ast
+        tree=ast.parse((Path(__file__).resolve().parents[1]/'run_private_startup.py').read_text())
+        observed=[]
+        for node in ast.walk(tree):
+            if isinstance(node,ast.Try) and node.finalbody:
+                for handler in node.handlers:
+                    if any(isinstance(call,ast.Call) and isinstance(call.func,ast.Name) and call.func.id=='observe_startup_failure' for call in ast.walk(handler)):
+                        observed.append(handler)
+                        self.assertIsInstance(handler.body[-1],ast.Raise)
+                        self.assertIsNone(handler.body[-1].exc)
+        self.assertEqual(1,len(observed))

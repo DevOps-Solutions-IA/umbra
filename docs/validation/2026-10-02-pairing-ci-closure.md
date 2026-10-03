@@ -340,3 +340,50 @@ Host RED ante conjunto válido no admitido por formato anterior: log SHA256
 Host GREEN5tests: `9a53d38596c712e401c2563f2d03fcd250f090a1b468b88d93af9ace5fc5ec8e`.
 Helper Java4tests PASS. Falta ejecutar aceptación nativa y CI completa del commit
 que incorpora esta corrección; los resultados anteriores no la sustituyen.
+
+## 2026-10-03 — red de inicio privado R8: precondición del fixture
+
+Candidato c78f9105b146c40dc4488db715d38d19c1cc5a8e, run37108831679,
+job111162580752, artifact11268484244 SHA256
+`6b45fe720d83bf11a35e160938c73fc880712830ff9819a26a4a1c4901f164e3`.
+El primer `AndroidConnectivity.connect` falla con `No default network available`.
+Las cinco ventanas previas (incluido unlock) registraron cero egreso UID/DNS y
+cero adquisiciones de sensores. Los tres DeviceSignalTest pasaron; el listener
+falló antes del recibo online. No se atribuye a producción una conexión exitosa.
+
+La preparación inicial había probado ruta Wi-Fi, pero después el caso cold
+Activity deshabilita/restaura radios. El fixture intentaba su PRIMER connect sin
+observar de nuevo la red predeterminada de Android; solo la recuperación posterior
+tenía esa espera. La guarda productiva rechazó correctamente. El artefacto no
+conservó el estado de asociación/netd posterior a esa restauración: la causa OS
+exacta de que faltara la red sigue sin observarse, no se inventa.
+
+Corrección exclusiva de androidTest: ambos puntos usan la misma observación
+acotada de15s/50ms ya existente en recuperación. En cada observación se comprueba
+que relay/DNS continúen denegados; una red disponible NO otorga consentimiento.
+Solo después hay una llamada explícita connect. No se reintenta connect, solicita
+red ni amplía timeout. Se registra INITIAL/RECOVERY, tiempo monotónico, presencia
+de default network y READY/TIMEOUT/FAILED antes de continuar o fallar.
+El host guarda diagnóstico read-only de rutas/Wi-Fi del AVD propio ANTES de
+limpieza; fallo diagnóstico jamás convierte el resultado en PASS. No exporta el
+texto de excepciones del diagnóstico. R8 incluye únicamente este helper de test
+en la enumeración TraceReferences existente, no una regla keep global.
+
+Regresión RED de wiring sin espera inicial: SHA256
+`e28cd1b6a1a9b0cc5bc7bd346c4c167feab36e0a6265b0f58b5991b4a489500e`.
+Seis harnesses Java controlados + una comprobación de wiring PASS; log SHA256
+`f12eb9d11d519db1afd169bd95fce197261984ee09cbd36f1f671ac67d7c4b44`.
+Cubren disponibilidad inmediata/tardía, ausencia hasta límite exacto, denegación,
+interrupción, fallo de consulta/diagnóstico sin aceptación. No son pruebas AVD.
+Tooling completo335tests PASS12,512s (Python3.13.12,JDK21.0.11); focal17PASS;
+repository_guard748archivos y source_policy13controles PASS; diffcheck PASS.
+Comandos: `python -m unittest discover -s scripts/tests -p 'test_*.py' -v`,
+`python scripts/repository_guard.py`, `python scripts/check_source_policy.py`.
+Producción/AccessGate/Pairing/Claude UI permanecen intactos. El nuevo SHA necesita
+su propia instrumentación y las11ejecuciones completas; no hereda verdes anteriores.
+Build local `gradle -p android --no-daemon -PumbraVaultLab=true
+:app:assembleConnectedVaultLab :app:assembleOfflineVaultLab
+:app:assembleConnectedVaultLabAndroidTest :app:assembleOfflineVaultLabAndroidTest`:
+exit0,1m16s,46tareas ejecutadas/111up-to-date. Esto comprueba compilación/R8,
+no ejecución Android. SDK36,Gradle8.14.4,JDK21.0.11. KVM local no autorizado:
+la aceptación Android corresponde a Actions, no a este build.
