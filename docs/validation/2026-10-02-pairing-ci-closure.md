@@ -232,3 +232,70 @@ y variación del runner. No cambia timeout de una prueba, duración productiva,
 aserción, inventario ni número de jobs. Mover hashes antes no elimina el exceso
 acumulativo; dividir el job alteraría el inventario solicitado. La cancelación
 histórica permanece sin aprobar. Un nuevo HEAD requiere CI propia completa.
+
+## 2026-10-03 — checkpoint ddd6dca y coordinación causal de stopVideo
+
+HEAD `ddd6dcaacc2d922a3e93507eb241278acccab3c3`, tree
+`27bd68aaf66bfcd4abbd261dcf4d58b78989cb54`, checkout
+`94b6492cdfd2571afbe354863ca78ec4a20d7fce` con el mismo árbol:
+10/11 workflows SUCCESS, 28/29 jobs SUCCESS, cero pendientes. Verify37102944687
+SUCCESS completo; artifact11268073595 SHA256
+`c4625eccee70fe1a6381e791fa44b2447af1cd196060fbb55560e1dc9338e936`.
+No constituye cierre03B: Video37102944679/R8shard1/job111148582661 falla en
+`degraded-network`, después de audio/video positivos en ambos extremos.
+Artifact11267811562 SHA256
+`acb17b24dc9318dce8317994c4a369a65d41e8f62b8e45e0d146a5b706115211`.
+A observa22imágenes remotas/2patrones/1156buffers audio; B58/2/1487.
+B registra `videoBeforeStop=ACTIVE:none:OFF` y falla el límite monotónico de
+cancelación. El recibo anterior no imprimía qué desigualdad falló: esa causa
+numérica retrospectiva NO está demostrada.
+
+Defecto de coordinación reproducido determinísticamente: el host ordenaba OFF
+A y B secuencialmente. A podía emitir VIDEO_STOP, invalidando la captura de B
+antes de que B registrara su propia solicitud local. NativeVideoCapture conserva
+correctamente la primera invalidación; compararla con la solicitud POSTERIOR
+produce intervalo negativo. La regresión modela ese orden first-CAS y demuestra
+RED; no se presenta como reproducción nativa de la desigualdad histórica exacta.
+
+Corrección exclusivamente en el APK/test driver de laboratorio: después de que
+cada `stopVideo()` LOCAL termina, se conserva inmutable su VIDEO_STOP pendiente
+hasta que el host observa ambas solicitudes. La liberación está ligada a nonce,
+generación e IDs exactos de envelopes. Antes de permitir reactivación, cada
+fixture exige que `Engine.receive` haya aplicado el STOP exacto del otro extremo.
+Se cubre también recepción previa al archivo de liberación local. IDs/nonce solo
+en archivos temporales del UID sintético; el artifact de barrera contiene únicamente
+booleano/generación/conteo. La detención local nunca espera la barrera ni al relay.
+No se retienen controles automáticos anteriores a la acción local, ni otras
+sesiones/generaciones. No cambia ciphertext, ratchet, producto o autorización.
+
+Permanecen los mismos límites500ms invalidación,2s cierre,1,5s último callback,
+medidos desde la solicitud local real (no desde la liberación remota). La ventana
+positiva posterior sigue comprobada. Se añaden deltas numéricos seguros ANTES de
+fallar para identificar cualquier repetición. Sin sleeps nuevos ni timeouts mayores.
+La lista R8 de referencias añade solo la clase del gate de test, sin reglas amplias.
+
+Validación local:324tests de tooling PASS (8,014s), incluyendo7nuevos tests de
+barrera/helper y una regresión de recibo degraded; repository_guard745archivos,
+source_policy13controles, diff --check. Un comando inicial de build mezcló
+variant mediaLab con una tarea AndroidTest debug que no existe bajo esa propiedad:
+falló ANTES de compilar; se separan ambos builds, sin cambio de versiones.
+Un intento inicial `scripts/source_policy.py` falló porque la ruta correcta es
+`scripts/check_source_policy.py`; esta última ejecutó13controles PASS.
+
+R8 focalizado añade degraded-network a expired-auth e ipv6-tls antes de la matriz
+completa: exige codec/audio/video, impairment80ms/2%/128kbit/cola20 con paquetes
+procesados y descartados, barrera local y captura finalizada. No sustituye ningún
+escenario de los shards originales ni altera los29jobs. La aceptación nativa de
+esta corrección y toda CI de su nuevo SHA permanecen pendientes hasta ejecutarse.
+
+Build local posterior: mediaLab+AndroidTest R8 SUCCESS48s,79tareas ejecutadas/1up-to-date;
+log `/tmp/umbra-03b-stop-r8-build.log`. Debug AndroidTest compiló; comando con ambas
+suites JVM SUCCESS2s,3ejecutadas/59up-to-date: NO se cuenta como nueva ejecución JVM
+completa (la CI del nuevo HEAD debe ejecutarla). `check_optimized_media.py` exit0:
+medialab no-debuggable, Engine/CallService/NativeVoiceSession ofuscados; APK
+`bc74758111e179aa0f8a67ca75257095ad332601de1e9cf72b06d1ef5fd78579`, mapping
+`010589031b950b441f4d1d42f33eef6486e2836e209ec417951fe3ca8a6226b6`.
+No acredita ejecución multimedia. El primer nombre intentado
+`check_optimized_voice_apk.py` no existe; el verificador real es
+`check_optimized_media.py`. Todos los fallos de comandos anteriores se conservan.
+Verifyddd6dca Android:123connected(296,644s),120offline(287,057s),0fallos.

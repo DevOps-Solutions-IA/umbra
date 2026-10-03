@@ -40,6 +40,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
     }
     private long nextPoll;
     private int expiredDeliveriesRejected;
+    private VideoStopDeliveryGate videoStopGate;
     /** Deliberately bypass the client gate in this test to verify backend default denial from Android. */
     private static void unadmittedRelayDenied(String base) throws Exception {
         for(String path:new String[]{"/v1/boxes","/v1/turn/credentials"}) {
@@ -57,7 +58,14 @@ public final class VoiceEngineFixtureListener extends RunListener {
     }
     private void pump(RelayClient relay,Engine engine) throws Exception { pump(relay,engine,null,null,false,Long.MAX_VALUE); }
     private void pump(RelayClient relay,Engine engine,String callId,NativeVoiceSession voice,boolean expiryExpected,long credentialExpiry) throws Exception {
+        if(videoStopGate!=null && !videoStopGate.released() && Files.exists(files.resolve("synthetic-voice-video-stop-release.json"))) {
+            JSONObject release=read("synthetic-voice-video-stop-release.json");
+            videoStopGate.release(release.getBoolean("release"),release.getInt("generation"),release.getString("stopNonce"),release.getString("peerStopId"));
+        }
         for(JSONObject q:engine.outbox()) {
+            // Keep the same queued ciphertext untransported until both synthetic
+            // owners have made their independently measured local stop request.
+            if(videoStopGate!=null && videoStopGate.defer(q.optString("callType"),q.optString("callSession"),q.optInt("callGeneration")))continue;
             // Match production scheduling. A successful upload is not a request
             // to repost the same immutable envelope on every 100 ms fixture tick.
             if(q.optLong("nextRelay",0)>Bytes.now()) continue;
@@ -81,8 +89,21 @@ public final class VoiceEngineFixtureListener extends RunListener {
         JSONArray rows=relay.poll(engine.profile(),0).getJSONArray("messages");
         for(int i=0;i<rows.length();i++) {
             JSONObject envelope=rows.getJSONObject(i); engine.receive(envelope);
+            if(videoStopGate!=null)videoStopGate.received(envelope.getString("id"));
             relay.acknowledge(engine.profile(),envelope.getString("id"));
         }
+    }
+    private void videoStopIssued(Engine engine) throws Exception {
+        String stopEnvelopeId=null;
+        for(JSONObject queued:engine.outbox()) {
+            if(!videoStopGate.matchesStop(queued.optString("callType"),queued.optString("callSession"),queued.optInt("callGeneration")))continue;
+            if(stopEnvelopeId!=null)throw new AssertionError("Ambiguous synthetic local stop envelope");
+            stopEnvelopeId=queued.getJSONObject("envelope").getString("id");
+        }
+        videoStopGate.issued(stopEnvelopeId);
+        write("synthetic-voice-video-stop-issued.json",new JSONObject().put("issued",true)
+            .put("generation",videoStopGate.generation()).put("stopNonce",videoStopGate.nonce())
+            .put("stopEnvelopeId",videoStopGate.stopEnvelopeId()));
     }
     private void assertBlockedPeer(Engine engine,String peer) throws Exception {
         if(!engine.contact(peer).optBoolean("blocked"))throw new AssertionError("Trust-loss action did not persist");
@@ -443,6 +464,7 @@ public final class VoiceEngineFixtureListener extends RunListener {
                         if(oneWay && !caller && videoCaptured.get()!=0)throw new AssertionError("Receive-only consent captured a local frame");
                         if(framesReady && voice.videoStatus().equals("ACTIVE") && decoded.get()-videoAudioBaseline>=50) {
                             auditNativeDescriptions(engine.calls().session(id),credential.getJSONArray("urls").getString(0),credential.optString("relayAddress"));
+                            if(videoStage==1)videoStopGate=new VideoStopDeliveryGate(id,engine.calls().session(id).getInt("generation"),UUID.randomUUID().toString());
                             write("synthetic-voice-video-"+(videoStage==1?"active":"resumed")+".json",new JSONObject()
                                 .put("decodedRemotePatterns",videoDecoded.frames.get()-videoFrameBaseline).put("distinctPatternPhases",oneWay&&caller?0:2)
                                 .put("sendPermitted",!oneWay||caller).put("receivePermitted",!oneWay||!caller)
@@ -467,21 +489,30 @@ public final class VoiceEngineFixtureListener extends RunListener {
                             };
                             try {
                                 if(!entered.await(2,java.util.concurrent.TimeUnit.SECONDS))throw new AssertionError("Native activation rendezvous not reached");
-                                videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();
+                                videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();videoStopIssued(engine);
                             } finally {db.beforeTransaction=null;resume.countDown();}
                             Thread.sleep(350);
                             if(voice.state()!=NativeVoiceSession.State.ACTIVE)throw new AssertionError("Video-only cancellation terminated authorized audio: "+voice.failureStage());
-                        } else {videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();}
+                        } else {videoOffRequestedNanos=SystemClock.elapsedRealtimeNanos();voice.stopVideo();videoStopIssued(engine);}
                         videoOffAt=SystemClock.elapsedRealtime();videoCaptureBaseline=videoCaptured.get();videoAudioBaseline=decoded.get();videoStage=6;
                     }
-                    if(videoStage==6 && SystemClock.elapsedRealtime()-videoOffAt>=2000 && decoded.get()-videoAudioBaseline>=50) {
+                    if(videoStage==6 && videoStopGate.peerStopApplied() && SystemClock.elapsedRealtime()-videoOffAt>=2000 && decoded.get()-videoAudioBaseline>=50) {
                         int atRest=videoCaptured.get();Thread.sleep(500);
                         if(videoCaptured.get()!=atRest)throw new AssertionError("Video source continued after off");
                         long invalidation=voice.videoStopRequestedNanos()-videoOffRequestedNanos;
                         long lastCallback=Math.max(0,voice.videoCaptureLastNanos()-videoOffRequestedNanos);
                         long closure=voice.videoClosedNanos()-videoOffRequestedNanos;
-                        if(!(oneWay&&!caller) && (invalidation<0 || invalidation>500_000_000L || closure<0 || closure>2_000_000_000L || lastCallback>1_500_000_000L))
+                        if(!(oneWay&&!caller) && !VideoStopDeliveryGate.withinBounds(videoOffRequestedNanos,
+                                voice.videoStopRequestedNanos(),voice.videoCaptureLastNanos(),voice.videoClosedNanos())) {
+                            Bundle timing=new Bundle();
+                            timing.putString("videoStopFailure","LOCAL_REQUEST_BOUNDS");
+                            timing.putLong("videoStopInvalidationDeltaNanos",invalidation);
+                            timing.putLong("videoStopLastCaptureDeltaNanos",lastCallback);
+                            timing.putLong("videoStopClosureDeltaNanos",closure);
+                            timing.putBoolean("videoStopReleaseReceived",videoStopGate.released());
+                            InstrumentationRegistry.getInstrumentation().sendStatus(0,timing);
                             throw new AssertionError("Video cancellation missed monotonic request bounds");
+                        }
                         if(oneWay&&!caller) {
                             if(atRest!=0 || voice.videoClosedNanos()!=0)throw new AssertionError("Receive-only endpoint instantiated a camera source");
                             invalidation=0;lastCallback=0;closure=0;

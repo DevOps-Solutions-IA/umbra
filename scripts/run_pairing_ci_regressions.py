@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Two focused R8/two-AVD media regressions before the full matrix; no retries or fallback."""
+"""Focused R8/two-AVD media regressions before the full matrix; no retries or fallback."""
 import argparse
 import hashlib
 import json
@@ -16,7 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 APK_NAMES = ('connected/mediaLab/app-connected-mediaLab.apk',
              'androidTest/connected/mediaLab/app-connected-mediaLab-androidTest.apk')
 CASES = (('expired-auth', ('--scenario', 'expired-auth')),
-         ('ipv6-tls', ('--turn-ipv6', '--turn-tls', 'valid')))
+         ('ipv6-tls', ('--turn-ipv6', '--turn-tls', 'valid')),
+         ('degraded-network', ('--scenario', 'degraded-network')))
 VOICE_FIELDS = {'apkSha256', 'synthetic', 'endpoints', 'observedSeconds', 'transport', 'turnTlsCase',
                 'scenario', 'directIpv4Reachability', 'directBlockedDuringMedia', 'muteUnmute',
                 'muteBarrier', 'network', 'audio', 'allocationExpiry', 'nativeCaptureClosure', 'networkImpairment'}
@@ -68,7 +69,8 @@ def valid_receipts(case, voice, video=None, *, expected_hashes=None):
                 or type(voice['observedSeconds']) not in (int, float) or not math.isfinite(voice['observedSeconds'])
                 or voice['observedSeconds'] <= 0 or voice['directIpv4Reachability'] is not True
                 or voice['directBlockedDuringMedia'] is not False or not pair(voice['network']) or not pair(voice['audio'])
-                or voice['allocationExpiry'] is not None or voice['nativeCaptureClosure'] != [] or voice['networkImpairment'] != []):
+                or voice['allocationExpiry'] is not None or voice['nativeCaptureClosure'] != []
+                or case != 'degraded-network' and voice['networkImpairment'] != []):
             return False
         if case == 'expired-auth':
             if (voice['scenario'] != 'expired-auth' or voice['transport'] != 'native WebRTC through coturn UDP'
@@ -87,19 +89,37 @@ def valid_receipts(case, voice, video=None, *, expected_hashes=None):
                             'NOT_EXECUTED: no remote description after initiator rejection')):
                     return False
             return True
-        if (voice['scenario'] != 'audio' or voice['transport'] != 'native WebRTC through coturn TLS'
-                or voice['turnTlsCase'] != 'valid' or voice['muteUnmute'] is not True):
+        degraded = case == 'degraded-network'
+        if (voice['scenario'] != ('degraded-network' if degraded else 'audio')
+                or voice['transport'] != ('native WebRTC through coturn UDP' if degraded else 'native WebRTC through coturn TLS')
+                or voice['turnTlsCase'] != (None if degraded else 'valid') or voice['muteUnmute'] is not True):
             return False
         for row in voice['audio']:
-            if (not valid_audio(row) or row.get('nativeRelayProtocol') != 'tls'
+            if (not valid_audio(row) or row.get('nativeRelayProtocol') != ('udp' if degraded else 'tls')
                     or not all(integer(row.get(key), 1) for key in ('decodedBuffers', 'capturedBuffers', 'receivedAudioPackets'))):
                 return False
         for row in voice['network']:
-            if (row.get('scope') != 'owned Wi-Fi IPv4+IPv6 TCP/UDP; IPv6 client-to-TURN, IPv4 relay allocation'
+            if degraded:
+                if (row.get('scope') != 'owned AVD outbound IPv4 UDP' or row.get('ipv6') != 'NOT_EXECUTED'
+                        or not integer(row.get('turnPackets'), 1) or not integer(row.get('turnStunPackets'), 1)
+                        or row['turnStunPackets'] > row['turnPackets']
+                        or any(type(row.get(key)) is not int or row[key] != 0
+                               for key in ('nonTurnStunPackets', 'otherNonSystemUdpPackets'))):
+                    return False
+            elif (row.get('scope') != 'owned Wi-Fi IPv4+IPv6 TCP/UDP; IPv6 client-to-TURN, IPv4 relay allocation'
                     or row.get('transport') != 'TLS' or not integer(row.get('turnIpv6Packets'), 1)
                     or type(row.get('nonAuthorizedTcpUdpPackets')) is not int or row['nonAuthorizedTcpUdpPackets'] != 0
                     or row.get('allIpv6Allocation') != 'NOT_EXECUTED: pinned allocator uses default IPv4 allocation'):
                 return False
+        if degraded:
+            if not pair(voice['networkImpairment']):
+                return False
+            for row in voice['networkImpairment']:
+                if (set(row) != {'delayMillis', 'lossPercent', 'rateKbit', 'queuePacketLimit', 'processedPackets', 'droppedPackets'}
+                        or any(type(row.get(key)) is not int or row[key] != value for key,value in
+                            (('delayMillis',80),('lossPercent',2),('rateKbit',128),('queuePacketLimit',20)))
+                        or not integer(row['processedPackets'],1) or not integer(row['droppedPackets'],1)):
+                    return False
         mute = voice['muteBarrier']
         if not isinstance(mute, dict) or set(mute) != {'applied', 'observed'} or not all(pair(rows) for rows in mute.values()):
             return False
@@ -160,7 +180,7 @@ def execute(a, b, reports, apk_hashes):
         (reports / 'regressions.json').write_text(json.dumps({'optimized': True, 'video': True, 'endpoints': 2,
             'apkSha256': apk_hashes, 'cases': results}, indent=2) + '\n')
         print(name + ': ' + results[-1]['status'], flush=True)
-    return 0 if len(results) == 2 and all(row['status'] in ('PASS', 'PENDING_CAPTURE_FINALIZATION') for row in results) else 1
+    return 0 if len(results) == len(CASES) and all(row['status'] in ('PASS', 'PENDING_CAPTURE_FINALIZATION') for row in results) else 1
 
 
 def verify_finalized(reports, apk_hashes):
@@ -174,12 +194,15 @@ def verify_finalized(reports, apk_hashes):
         video = load_receipt(video_path) if video_path.is_file() else None
         if row['exitCode'] != 0 or not valid_receipts(row['case'], voice, video, expected_hashes=apk_hashes):
             raise RuntimeError('Focused finalized receipt rejected')
+        if row['case'] == 'degraded-network' and load_receipt(case / 'video-stop-barrier.json') != {
+                'bothLocalStopsIssued': True, 'generation': 2, 'endpoints': 2}:
+            raise RuntimeError('Focused local stop barrier missing')
         if voice.get('captureFinalization', {}).get('exitCode') != 0:
             raise RuntimeError('Focused capture not finalized')
         row['receiptAccepted'] = True
         row['status'] = 'PASS'
     (reports / 'regressions.json').write_text(json.dumps(receipt, indent=2) + '\n')
-    print('PASS two focused R8 cases including finalized network evidence')
+    print(f'PASS {len(CASES)} focused R8 cases including finalized network evidence')
     return 0
 
 

@@ -45,6 +45,13 @@ def receipts(case):
             'videoCodec': 'video/VP8', 'sdpAddressAudit': True} for _ in range(2)]
     video['phases']['stopped'] = [{'captureStopped': True, 'captureWasAuthorized': True,
         'captureCallbacksAfterRequest': 0, 'observedAfterRequestMillis': 2000, 'decodedAudioAfterVideoOff': 70} for _ in range(2)]
+    if case == 'degraded-network':
+        voice.update(transport='native WebRTC through coturn UDP',turnTlsCase=None,scenario=case)
+        for row in voice['audio']: row['nativeRelayProtocol']='udp'
+        voice['network']=[{'scope':'owned AVD outbound IPv4 UDP','ipv6':'NOT_EXECUTED',
+            'turnPackets':3000,'turnStunPackets':30,'nonTurnStunPackets':0,'otherNonSystemUdpPackets':0} for _ in range(2)]
+        voice['networkImpairment']=[{'delayMillis':80,'lossPercent':2,'rateKbit':128,'queuePacketLimit':20,
+            'processedPackets':3000,'droppedPackets':20} for _ in range(2)]
     return voice, video
 
 
@@ -121,6 +128,18 @@ class PairingCiReceiptTest(unittest.TestCase):
         voice['muteBarrier']['observed'][1]['decodedTones'] = 4
         self.assertFalse(runner.valid_receipts('ipv6-tls', voice, video))
 
+    def test_degraded_requires_actual_impairment_and_unchanged_transport(self):
+        voice,video=receipts('degraded-network')
+        for field,value in [('networkImpairment',[]),('scenario','audio'),('turnTlsCase','valid')]:
+            bad=copy.deepcopy(voice);bad[field]=value
+            self.assertFalse(runner.valid_receipts('degraded-network',bad,video))
+        for field,value in [('delayMillis',0),('lossPercent',0),('rateKbit',999),('queuePacketLimit',21),
+                            ('processedPackets',0),('droppedPackets',0)]:
+            bad=copy.deepcopy(voice);bad['networkImpairment'][0][field]=value
+            self.assertFalse(runner.valid_receipts('degraded-network',bad,video))
+        bad=copy.deepcopy(voice);bad['network'][1]['otherNonSystemUdpPackets']=1
+        self.assertFalse(runner.valid_receipts('degraded-network',bad,video))
+
     def test_bounded_json_and_duplicate_fields_are_rejected(self):
         with tempfile.TemporaryDirectory() as root:
             path = Path(root) / 'receipt.json'
@@ -128,7 +147,7 @@ class PairingCiReceiptTest(unittest.TestCase):
                 path.write_text(data)
                 with self.assertRaises(ValueError): runner.load_receipt(path)
 
-    def test_runner_uses_two_r8_video_commands_once_and_preserves_process_failure(self):
+    def test_runner_uses_all_r8_video_commands_once_and_preserves_process_failure(self):
         with tempfile.TemporaryDirectory() as root:
             output = Path(root) / 'focused'
             commands = []
@@ -142,12 +161,12 @@ class PairingCiReceiptTest(unittest.TestCase):
                 return SimpleNamespace(returncode=7 if folder.name == 'expired-auth' else 0)
             with patch.object(runner.subprocess, 'run', side_effect=synthetic_process), redirect_stdout(io.StringIO()):
                 self.assertEqual(1, runner.execute('emulator-5554', 'emulator-5556', output, HASHES))
-            self.assertEqual(2, len(commands))
+            self.assertEqual(3, len(commands))
             for command in commands:
                 self.assertIn('--video', command); self.assertIn('--optimized', command)
             self.assertIn('expired-auth', commands[0]); self.assertIn('--turn-ipv6', commands[1])
             summary = json.loads((output / 'regressions.json').read_text())
-            self.assertEqual(['FAIL', 'PASS'], [row['status'] for row in summary['cases']])
+            self.assertEqual(['FAIL', 'PASS', 'PASS'], [row['status'] for row in summary['cases']])
 
     def test_finalized_receipts_require_closure_and_preserve_failure(self):
         with tempfile.TemporaryDirectory() as root:
@@ -159,6 +178,8 @@ class PairingCiReceiptTest(unittest.TestCase):
                 voice['captureFinalization'] = {'exitCode': 0}
                 (folder / 'voice-evidence.json').write_text(json.dumps(voice))
                 if video is not None: (folder / 'video-evidence.json').write_text(json.dumps(video))
+                if case == 'degraded-network':
+                    (folder / 'video-stop-barrier.json').write_text(json.dumps({'bothLocalStopsIssued':True,'generation':2,'endpoints':2}))
                 rows.append({'case': case, 'exitCode': 0, 'status': 'PENDING_CAPTURE_FINALIZATION'})
             (output / 'regressions.json').write_text(json.dumps({'cases': rows}))
             with redirect_stdout(io.StringIO()):
@@ -174,9 +195,9 @@ class PairingCiReceiptTest(unittest.TestCase):
             output = Path(root) / 'focused'
             with patch.object(runner.subprocess, 'run', return_value=SimpleNamespace(returncode=0)) as process, redirect_stdout(io.StringIO()):
                 self.assertEqual(1, runner.execute('emulator-5554', 'emulator-5556', output, HASHES))
-                self.assertEqual(2, process.call_count)
+                self.assertEqual(3, process.call_count)
                 with self.assertRaises(FileExistsError): runner.execute('emulator-5554', 'emulator-5556', output, HASHES)
-                self.assertEqual(2, process.call_count)
+                self.assertEqual(3, process.call_count)
             self.assertTrue(all(row['status'] == 'FAIL' for row in json.loads((output / 'regressions.json').read_text())['cases']))
 
 

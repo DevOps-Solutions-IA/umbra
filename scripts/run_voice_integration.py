@@ -88,6 +88,35 @@ def coordinate_mute(serials, processes, deadline, write, read):
     return {"applied":applied,"observed":observed}
 
 
+
+def coordinate_video_stop(serials, processes, deadline, write, read):
+    """Release immutable VIDEO_STOP only after both local stop calls returned.
+
+    This is fixture coordination, not a production transport exception. A local
+    capture stop never waits for the other endpoint or for this host barrier.
+    """
+    if len(serials)!=2 or len(set(serials))!=2:
+        raise RuntimeError("Video stop requires two independent fixture endpoints")
+    issued=[]
+    for serial in serials:
+        value=read(serial,"synthetic-voice-video-stop-issued.json",processes[serial],deadline)
+        if (not isinstance(value,dict) or set(value)!={"issued","generation","stopNonce","stopEnvelopeId"}
+                or value["issued"] is not True or type(value["generation"]) is not int
+                or value["generation"]!=2 or not isinstance(value["stopNonce"],str)
+                or not isinstance(value["stopEnvelopeId"],str)
+                or re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",value["stopEnvelopeId"]) is None
+                or re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",value["stopNonce"]) is None):
+            raise RuntimeError("Missing or stale local video stop confirmation")
+        issued.append(value)
+    if issued[0]["stopNonce"]==issued[1]["stopNonce"] or issued[0]["stopEnvelopeId"]==issued[1]["stopEnvelopeId"]:
+        raise RuntimeError("Video stop confirmations reused an endpoint nonce")
+    for index,(serial,value) in enumerate(zip(serials,issued)):
+        write(serial,"synthetic-voice-video-stop-release.json",{
+            "release":True,"generation":value["generation"],"stopNonce":value["stopNonce"],
+            "peerStopId":issued[1-index]["stopEnvelopeId"]})
+    return {"bothLocalStopsIssued":True,"generation":2,"endpoints":2}
+
+
 def valid_stop(report, *, expected_expiry=False):
     return (set(report)=={"failedClosed","nativeCaptureQuietAfterMillis","nativeCaptureObservedMillis","lateCaptureCallbacks","expiredDeliveriesRejected"}
             and report["failedClosed"] is True
@@ -227,7 +256,7 @@ def main():
         if args.scenario=="camera-denied":run(serial,"shell","pm","revoke",PACKAGE,"android.permission.CAMERA")
         # Explicit names only, confined to this disposable debug UID.
         run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-","processing-applied-","processing-observe-")])
-        for suffix in ("admission-ready","admission-change","admission-result","public","peer","ready","start","turn-ready","turn","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
+        for suffix in ("admission-ready","admission-change","admission-result","public","peer","ready","start","turn-ready","turn","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stop-issued","video-stop-release","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
             run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
     args.reports.mkdir(parents=True,exist_ok=True)
     if optimized_evidence:
@@ -366,6 +395,9 @@ def main():
                 video_evidence={}
                 for command,result in (("start","active"),("off","stopped"),("resume","resumed")):
                     for serial in (args.a,args.b): write(serial,"synthetic-voice-video-"+command+".json",{"consentedSyntheticOwnerAction":True})
+                    if result=="stopped":
+                        barrier=coordinate_video_stop((args.a,args.b),processes,deadline,write,read)
+                        (args.reports/"video-stop-barrier.json").write_text(json.dumps(barrier,indent=2)+"\n")
                     values=[]
                     for serial in (args.a,args.b):
                         value=read(serial,"synthetic-voice-video-"+result+".json",processes[serial],deadline)
@@ -532,7 +564,7 @@ def main():
                 except Exception as failure: errors.append(failure)
                 try: run(serial,"shell","run-as",PACKAGE,"rm","-f",*[f"files/synthetic-voice-{prefix}{index}.json" for index in range(10) for prefix in ("processing-","processing-result-","processing-applied-","processing-observe-")])
                 except Exception as failure: errors.append(failure)
-                for suffix in ("engine","admission-ready","admission-change","admission-result","public","peer","ready","start","turn-ready","turn","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
+                for suffix in ("engine","admission-ready","admission-change","admission-result","public","peer","ready","start","turn-ready","turn","audio","mute","mute-applied","mute-observe","muted","resume","resumed","loss","lost","stop","video-start","video-active","video-off","video-stop-issued","video-stop-release","video-stopped","video-resume","video-resumed","camera-denied","initial-processing","initial-natural","processing-diagnostic"):
                     try: run(serial,"shell","run-as",PACKAGE,"rm","-f",f"files/synthetic-voice-{suffix}.json")
                     except Exception as failure: errors.append(failure)
                 # These exact files belong solely to this named synthetic fixture, including failed runs.
