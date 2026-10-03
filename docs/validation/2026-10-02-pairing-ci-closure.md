@@ -160,3 +160,56 @@ por comando, solo en memoria; no dumps crudos, mensajes, rutas ni secretos en
 artefactos. Marcas elapsedRealtime del listener identifican cada fase. Se mantiene
 45s, no hay reintento automático y un diagnóstico nunca convierte un fallo en PASS.
 Esto es una mejora de observabilidad; no se presenta como corrección del codec.
+
+## 2026-10-03 — observación acotada de privacidad en bd10e64
+
+HEAD `bd10e642810fdaafa6783acd2ab5297c134ff488`, tree
+`950df1694c1b9c3391fe76d1d0ad45dec62c0835`.
+Suite JVM repetida: connected443/offline385, cero fallos/errores/skips,
+50 tareas ejecutadas, JDK21/Gradle8.14.4, exit0 en3m34s.
+
+Privacidad primaria37100252900: debug/R8 SUCCESS. Una sola ejecución adicional
+acotada37100779953, con diagnóstico nuevo y mismo SHA: debug/R8 SUCCESS.
+No se programaron reintentos hasta conseguir verde. El recorrido sintético desde
+PREPARE_ENTER hasta VIDEO_OBSERVE_DONE duró en la primaria11,466/11,267ms
+(debug connected/offline),7,726/7,330ms(R8); en la adicional12,377/11,826ms y
+7,536/7,491ms. El límite45s no se alteró. Son mediciones AVD, no físicas.
+
+Artefactos adicionales11265976720 SHA256
+`0b846e73ee391251eb4be98b9a42632dda662809132bd68af9f002d801fd0b79`
+y11265926949 SHA256
+`04cb9d32e17d5bc07ac8f47abfe94fec3ac0b39ec900b1d36d7e5d2e04d80668`.
+La causa interna del incidente72d3d21 sigue HISTORICAL_UNCONFIRMED:
+estos pases no demuestran una corrección del codec ni descartan intermitencia.
+
+## 2026-10-03 — colisión UDP demostrada en el checkpoint72d3d21
+
+Video37098623723 terminó con debugshard1 FAILURE en tls-unreachable antes
+de iniciar media; los otros tres shards terminaron SUCCESS. Artifact11265861968
+SHA256 `fab30c7428303834e075b03268043dfdc1c76fa742e39aa9e16895d1febb8f8a`.
+`direct-route-2.json` registra listenerExit1, receivedBytes0 y
+`nc: bind: Address already in use`. La tabla UDP ANTES y DESPUÉS ya contiene
+el puerto40918, inode6943, UID1020. El arnés eligió aleatoriamente ese puerto
+ocupado y confundió la presencia del socket ajeno con su propia escucha.
+No fue fallo TLS/TURN ni decodificación: era una colisión de preparación del
+laboratorio. No se identifica un servicio concreto solo a partir del UID.
+La ejecución roja se conserva; una corrección requiere propiedad verificable
+del socket, sin reintentos ciegos, timeout mayor ni sustitución por TCP.
+
+Corrección del arnés UDP: se elimina la elección aleatoria de un puerto fijo;
+`toybox nc -l` sin `-p` pide al kernel un puerto y conserva el socket reservado.
+Antes de enviar se comprueban PID, cmdline exacto e inode del socket a través
+de sus FD. La presencia de un puerto ajeno nunca constituye readiness. Se
+conservan los presupuestos2s/5s, el desafío exacto y el fallo ante errores;
+no hay retry ni TCP alternativo. El runtime debe anunciar explícitamente soporte
+para puerto asignado. La API se contrastó con Android15
+[netcat.c](https://android.googlesource.com/platform/external/toybox/+/refs/heads/android15-release/toys/net/netcat.c)
+y el texto help de la imagen local API35rev2(AE3A.240806.019/12368160).
+No se declara ejecución del binario Android local: queda para AVD/CI.
+
+Regresión RED:19tests/1failure, SHA256 del log
+`144926a8717877cc882d5039e0e91d4042305b52138a4c8dc3f748fe7d80f0fb`.
+GREEN:23tests, SHA256
+`757be69c09e1978552f53b9bc92e79526218d7eff039c626c7dbcd7f32b5bf34`.
+Los pipes reales prueban lectura acotada y preservación de datagrama; los dobles
+prueban rechazo de socket/PID ajeno y ausencia de envío. No son aceptación de red.

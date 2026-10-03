@@ -4,6 +4,9 @@ Run outside the multimedia packet observation window. A random challenge must
 arrive at a confirmed listening socket; ICMP availability is not assumed.
 """
 import ipaddress
+import os
+import select
+import shlex
 import re
 import secrets
 import subprocess
@@ -233,26 +236,76 @@ def wait_wifi_ipv4(adb: str, serial: str, reports, timeout=20, associate=False):
         reports.write_text(json.dumps({'serial':serial,'attempts':attempts,'failureState':failure_state},indent=2)+'\n')
 
 
+
+def _listener_header(listener, deadline):
+    """Read exactly two bounded lines; leave datagram bytes in the pipe."""
+    lines=[]
+    for limit in (32, 8):
+        value=bytearray()
+        while True:
+            remaining=deadline-time.monotonic()
+            if remaining<=0 or not select.select([listener.stdout],[],[],remaining)[0]:
+                raise RuntimeError('Owned UDP listener header deadline exceeded')
+            byte=os.read(listener.stdout.fileno(),1)
+            if not byte:raise RuntimeError('Owned UDP listener exited before reservation')
+            if byte==b'\n':break
+            value.extend(byte)
+            if len(value)>limit:raise RuntimeError('Malformed owned UDP listener header')
+        lines.append(bytes(value))
+    if not re.fullmatch(rb'UMBRA_PID=[1-9][0-9]{0,9}',lines[0]) or not re.fullmatch(rb'[1-9][0-9]{0,4}',lines[1]):
+        raise RuntimeError('Malformed owned UDP listener reservation')
+    pid=int(lines[0].split(b'=')[1]);port=int(lines[1])
+    if pid<=1 or not 1024<=port<=65535:
+        raise RuntimeError('Invalid owned UDP listener reservation')
+    return pid,port
+
+
+def _owned_listener_inode(table, ownership, port):
+    """The reserved IPv4 socket must belong to the exact foreground nc PID."""
+    command,separator,links=ownership.partition('\n')
+    if not separator or command.split('\0') != ['toybox','nc','-4','-u','-l','-W','1','']:
+        raise RuntimeError('Owned UDP listener process identity mismatch')
+    inodes=set(re.findall(r'^socket:\[([1-9][0-9]*)\]$',links,re.MULTILINE))
+    matches=[]
+    for row in table.splitlines()[1:]:
+        fields=row.split()
+        if len(fields)>=10 and fields[1]==f'00000000:{port:04X}' and fields[2]=='00000000:0000' and fields[3]=='07':
+            matches.append(fields[9])
+    if len(matches)!=1 or matches[0] not in inodes:
+        raise RuntimeError('Owned UDP listener socket identity mismatch')
+    return int(matches[0])
+
+
 def probe_udp(adb: str, sender: str, receiver: str, address: str, evidence: dict | None = None) -> bool:
     if not all(value.startswith('emulator-') and value[9:].isdigit() for value in (sender,receiver)) or sender==receiver:
         raise ValueError('Two owned emulator serials required')
     peer=ipaddress.ip_address(address)
     if peer.version!=4 or peer not in ipaddress.ip_network('10.0.2.0/24'):
         raise ValueError('Expected owned AVD Wi-Fi address')
-    port=40000+secrets.randbelow(5000)
+    help_result=subprocess.run([adb,'-s',receiver,'shell','toybox','nc','--help'],
+                               capture_output=True,text=True,timeout=3)
+    help_text=help_result.stdout+help_result.stderr
+    if help_result.returncode or not re.search(r'If no -p specified, -l prints the port it bound to',help_text):
+        raise RuntimeError('Installed toybox lacks kernel-assigned listener port support')
     challenge=('umbra-owned-route-'+secrets.token_hex(16)).encode()
-    command=[adb,'-s',receiver,'shell','timeout','5','toybox','nc','-4','-u','-l','-p',str(port),'-W','1']
+    # No positional COMMAND: Android toybox prints its atomically reserved port
+    # and remains foreground. -p 0 is invalid; omitting -p selects kernel port 0.
+    script='printf "UMBRA_PID=%s\\n" "$$"; exec toybox nc -4 -u -l -W 1'
+    command=[adb,'-s',receiver,'shell','timeout','5','sh','-c',shlex.quote(script)]
     if evidence is not None: evidence['listenerCommand']=command
     listener=subprocess.Popen(command,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     try:
         ready=time.monotonic()+2
-        while True:
-            if listener.poll() is not None: raise RuntimeError('Owned UDP listener exited before probe')
-            table=subprocess.run([adb,'-s',receiver,'shell','cat','/proc/net/udp'],capture_output=True,text=True,check=True,timeout=3).stdout
-            if any(row.split()[1].endswith(f':{port:04X}') for row in table.splitlines()[1:] if row.strip()): break
-            if time.monotonic()>=ready: raise RuntimeError('Owned UDP listener did not bind')
-            time.sleep(0.05)
-        if evidence is not None: evidence['boundPort']=port
+        pid,port=_listener_header(listener,ready)
+        if listener.poll() is not None:raise RuntimeError('Owned UDP listener exited before probe')
+        table=subprocess.run([adb,'-s',receiver,'shell','cat','/proc/net/udp'],capture_output=True,text=True,check=True,timeout=3).stdout
+        script=f'cat /proc/{pid}/cmdline && printf "\\n" && readlink /proc/{pid}/fd/*'
+        ownership=subprocess.run([adb,'-s',receiver,'shell','sh','-c',shlex.quote(script)],
+                                 capture_output=True,text=True,check=True,timeout=3).stdout
+        inode=_owned_listener_inode(table,ownership,port)
+        if time.monotonic()>ready or listener.poll() is not None:
+            raise RuntimeError('Owned UDP listener reservation expired before probe')
+        if evidence is not None:evidence.update(boundPort=port,listenerPid=pid,listenerInode=inode,portAllocation='kernel-reserved')
         sent=subprocess.run([adb,'-s',sender,'shell','timeout','3','toybox','nc','-4','-u','-q','1','-w','2',str(peer),str(port)],
                             input=challenge,capture_output=True,timeout=5)
         if evidence is not None:
@@ -277,3 +330,6 @@ def probe_udp(adb: str, sender: str, receiver: str, address: str, evidence: dict
             listener.terminate()
             try: listener.wait(timeout=2)
             except subprocess.TimeoutExpired: listener.kill();listener.wait(timeout=2)
+        if evidence is not None and 'listenerExit' not in evidence:
+            received,diagnostic=listener.communicate(timeout=2)
+            evidence.update(listenerExit=listener.returncode,listenerStderr=repr(diagnostic[:256]),receivedBytes=len(received))
