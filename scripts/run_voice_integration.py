@@ -186,8 +186,11 @@ def main():
     parser.add_argument("--modulation",action="store_true",help="Prove remote local-voice modulation with real native capture/Opus, never a preview")
     parser.add_argument("--video",action="store_true",help="Require decoded remote synthetic images, video off with audio, and freshly consented reactivation")
     parser.add_argument("--optimized",action="store_true",help="Run the isolated non-debuggable R8 mediaLab APK on rooted AOSP AVDs")
+    parser.add_argument("--http-idle-probe",action="store_true",help="Require a controlled Android pooled TLS EOF before media setup")
     parser.add_argument("--scenario",choices=("audio","expired-auth","allocation-expiry","invalid-auth","unreachable","turn-loss","trust-loss","lock","emergency-lock","credential-expiry","direct-blocked","force-stop","permission-revoked","device-revoked","storage-failure","unauthorized-redirect","wrong-fingerprint","receive-only","degraded-network","camera-denied","camera-permission-revoked","video-stop-race"),default="audio")
     args=parser.parse_args()
+    if args.http_idle_probe and (not args.optimized or args.scenario!='expired-auth'):
+        parser.error('The bounded HTTP probe belongs only to the initial R8 focused expired-auth setup')
     capture_owner_pid = int(os.environ.get("UMBRA_CAPTURE_OWNER_PID", "0"))
     if capture_owner_pid <= 1 or os.environ.get("UMBRA_FINALIZED_CAPTURE") != "1":
         raise RuntimeError("Media acceptance requires the explicit CI capture owner")
@@ -295,7 +298,7 @@ def main():
             try: evidence['after']=topology()
             finally: (args.reports/f'direct-route-{probe_number}.json').write_text(json.dumps(evidence,indent=2)+'\n')
     processes={}; streams=[]
-    with voice_relay(args.reports/"https-lifecycle.json") as relay, TurnLab(alternate_port=3479 if args.scenario=="unauthorized-redirect" else None, allocation_lifetime=180,tls_mode=args.turn_tls,ipv6=args.turn_ipv6) as turn:
+    with voice_relay(args.reports/"https-lifecycle.json",live_diagnostics=args.http_idle_probe) as relay, TurnLab(alternate_port=3479 if args.scenario=="unauthorized-redirect" else None, allocation_lifetime=180,tls_mode=args.turn_tls,ipv6=args.turn_ipv6) as turn:
         capture_paths=[]; blocked_routes=[]; shaped=[]; shape_evidence=[]; allocation_evidence=None
         try:
             addresses=[];addresses6=[]
@@ -341,7 +344,7 @@ def main():
                 return credentials
             for index,serial in enumerate((args.a,args.b)):
                 write(serial,"synthetic-voice-engine.json",{"stopVideoRace":args.scenario=="video-stop-race","initialModulation":args.modulated_start,"modulation":args.modulation,"video":args.video and args.scenario!="camera-denied","cameraDenied":args.scenario=="camera-denied","receiveOnlyCallee":args.scenario=="receive-only","incorrectFingerprint":args.scenario=="wrong-fingerprint","expectedRejection":rejection,"role":"A" if index==0 else "B","base":relay["base"],
-                    "admissionRevocationCheck":admission_revocation_check,"admissionRealm":relay["admission"].realm.encode(),"certificate":relay["certificate"],"invitation":relay["invitations"][index]})
+                    "httpIdleProbe":args.http_idle_probe and index==0,"admissionRevocationCheck":admission_revocation_check,"admissionRealm":relay["admission"].realm.encode(),"certificate":relay["certificate"],"invitation":relay["invitations"][index]})
                 stream=(args.reports/("engine-voice-a.log" if index==0 else "engine-voice-b.log")).open("w")
                 streams.append(stream)
                 processes[serial]=subprocess.Popen([adb,"-s",serial,"shell","am","instrument","-w","-r",
@@ -349,10 +352,20 @@ def main():
                     PACKAGE+".test/androidx.test.runner.AndroidJUnitRunner"],stdout=stream,stderr=subprocess.STDOUT)
             deadline=time.monotonic()+(160 if args.modulation else 140 if args.video else 90)
             approvals={}
+            # Both endpoints have finished their unadmitted probes before isolating A's
+            # one new TLS socket. B remains at the explicit admission approval barrier.
+            requests={serial:read(serial,"synthetic-admission-request.json",processes[serial],deadline)
+                      for serial in (args.a,args.b)} if args.http_idle_probe else {}
+            previous_ids={row['id'] for row in json.loads(relay['lifecycle'].read_text())['connections']} if args.http_idle_probe else set()
             for serial in (args.a,args.b):
-                request=read(serial,"synthetic-admission-request.json",processes[serial],deadline)
+                request=requests[serial] if args.http_idle_probe else read(serial,"synthetic-admission-request.json",processes[serial],deadline)
                 approvals[serial]=relay["admission"].approve(request["request"])
                 write(serial,"synthetic-admission-credential.json",approvals[serial])
+                if args.http_idle_probe and serial==args.a:
+                    from relay_idle_probe import coordinate
+                    coordinate(relay['lifecycle'],previous_ids,
+                               lambda name:read(serial,name,processes[serial],deadline),
+                               lambda name,value:write(serial,name,value),args.reports/'http-idle-probe.json')
             a=read(args.a,"synthetic-voice-public.json",processes[args.a],deadline)
             b=read(args.b,"synthetic-voice-public.json",processes[args.b],deadline)
             write(args.a,"synthetic-voice-peer.json",b); write(args.b,"synthetic-voice-peer.json",a)

@@ -30,10 +30,11 @@ class AndroidExecutionTests(unittest.TestCase):
                         (Path(command[-1]) / f'{index:02d}.png').write_bytes(b'png')
                     return subprocess.CompletedProcess(command, 0)
                 if 'instrument' in command:
-                    kwargs['stdout'].write(report)
+                    self.assertEqual(300,kwargs['timeout'])
+                    kwargs['stream'].write(report)
                     return subprocess.CompletedProcess(command, returncode)
                 return subprocess.CompletedProcess(command, 0)
-            with patch.object(sys, 'argv', args), patch.object(single.subprocess, 'run', side_effect=execute), redirect_stdout(io.StringIO()):
+            with patch.object(sys, 'argv', args), patch.object(single.subprocess, 'run', side_effect=execute), patch.object(single,'run_with_progress',side_effect=execute), redirect_stdout(io.StringIO()):
                 single.main()
 
     def test_zero_tests_is_failure_even_with_successful_adb(self):

@@ -1,0 +1,64 @@
+import json
+from pathlib import Path
+import sys
+import tempfile
+import unittest
+
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from relay_idle_probe import associate, idle_closed, coordinate
+
+
+class RelayIdleProbeTest(unittest.TestCase):
+    def warm(self):return {'id':3,'responses':1,'receivedEvents':1,'responseNanos':100}
+
+    def test_exact_new_warm_connection_required(self):
+        self.assertEqual(self.warm(),associate({'connections':[{'id':1},self.warm()]},{1}))
+        for rows in ([],[self.warm(),dict(self.warm(),id=4)], [dict(self.warm(),responses=2)],
+                     [dict(self.warm(),keepaliveNanos=200)]):
+            with self.assertRaises(RuntimeError):associate({'connections':rows},{1})
+
+    def test_idle_event_is_required_and_ordered(self):
+        self.assertIsNone(idle_closed({'connections':[self.warm()]},self.warm()))
+        row=dict(self.warm(),keepaliveNanos=200)
+        self.assertEqual(200,idle_closed({'connections':[row]},self.warm())['keepaliveNanos'])
+        for row in (dict(row,receivedEvents=2),dict(row,responses=2),dict(row,keepaliveNanos=99)):
+            with self.assertRaises(RuntimeError):idle_closed({'connections':[row]},self.warm())
+
+    def test_missing_owned_connection_fails(self):
+        with self.assertRaises(RuntimeError):idle_closed({'connections':[]},self.warm())
+
+    def test_complete_controlled_receipt_only(self):
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'live.json';report=Path(d)/'result.json';writes=[]
+            path.write_text(json.dumps({'connections':[self.warm()]}))
+            def read(name):
+                if name.endswith('warmed.json'):return {'warmed':True}
+                if name.endswith('blocked.json'):
+                    path.write_text(json.dumps({'connections':[dict(self.warm(),keepaliveNanos=200)]}))
+                    return {'blocked':True}
+                return {'androidEof':True,'networkRevoked':True}
+            coordinate(path,set(),read,lambda n,v:writes.append(n),report)
+            self.assertEqual('REPRODUCED',json.loads(report.read_text())['result'])
+            self.assertEqual(['synthetic-http-associated.json','synthetic-http-closed.json'],writes)
+
+    def test_no_idle_event_never_counts_as_reproduction(self):
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/'live.json';report=Path(d)/'result.json';times=iter([0,9])
+            path.write_text(json.dumps({'connections':[self.warm()]}))
+            with self.assertRaisesRegex(RuntimeError,'not observed'):
+                coordinate(path,set(),lambda n:{'warmed':True} if 'warmed' in n else {'blocked':True},
+                           lambda *args:None,report,clock=lambda:next(times))
+            self.assertFalse(report.exists())
+
+    def test_test_only_source_requires_real_eof_and_cleanup(self):
+        root=Path(__file__).resolve().parents[2]
+        source=(root/'android/app/src/androidTestConnected/java/app/umbra/transport/RelayIdleReuseProbe.java').read_text()
+        for fragment in ('gate.created.get()!=1','gate.intercepted.get()!=1','failure instanceof IOException',
+                         'unexpected end of stream','isNetworkSessionAllowed()', 'relay.close()',
+                         'HttpsURLConnection.setDefaultSSLSocketFactory(original)'):
+            self.assertIn(fragment,source)
+        self.assertNotIn('setHostnameVerifier',source)
+        self.assertNotIn('TrustAll',source)
+
+
+if __name__=='__main__':unittest.main()

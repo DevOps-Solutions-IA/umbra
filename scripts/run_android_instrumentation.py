@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from instrumentation_progress import run as run_with_progress
 
 ROOT = Path(__file__).resolve().parents[1]
 MIN_EVIDENCE = 30
@@ -36,9 +37,9 @@ def main() -> None:
         subprocess.run([*adb, 'install', '-r', str(apk)], check=True, timeout=180)
     args.log.parent.mkdir(parents=True, exist_ok=True)
     with args.log.open('w', encoding='utf-8') as stream:
-        result = subprocess.run([*adb, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'syntheticNoHostAudio', 'true',
-            package + '.test/androidx.test.runner.AndroidJUnitRunner'], stdout=stream,
-            stderr=subprocess.STDOUT, timeout=300)
+        result = run_with_progress([*adb, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'syntheticNoHostAudio', 'true',
+            package + '.test/androidx.test.runner.AndroidJUnitRunner'], stream=stream,
+            report=args.log.with_suffix('.timing.json'), timeout=300)
     output = args.log.read_text(encoding='utf-8')
     # Inventory: 83 shared technical methods (including concurrent Vault ONCE open, encrypted DB/WAL
     # inspection, native clipboard, SQLite admission snapshots that preserve corruption, and

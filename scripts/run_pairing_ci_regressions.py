@@ -158,6 +158,7 @@ def execute(a, b, reports, apk_hashes):
         case_dir = reports / name
         command = [sys.executable, str(ROOT / 'scripts/run_voice_integration.py'), '--a', a, '--b', b,
                    '--video', '--optimized', *options, '--reports', str(case_dir)]
+        if name=='expired-auth':command.append('--http-idle-probe')
         start = time.monotonic()
         with (reports / (name + '-driver.log')).open('w') as log:
             completed = subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)

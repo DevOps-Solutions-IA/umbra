@@ -666,3 +666,49 @@ fresh-challenge; cierre explícitoSIGTERM,exit-15 del servidor. Primera aserció
 del smoke esperaba erróneamente0; se conserva su fallo y se distingue del cierre
 PCAP, donde sí se exige0. No se amplía ninguna aceptación multimedia.
 Estas mejoras de diagnóstico NO son correcciones de los tres fallos anteriores.
+
+### 2026-10-03 — cc9f744: EOF Android y límite global de instrumentación
+
+Video R8 shard0 job111185912061 falla en degraded-network ANTES de aplicar
+la degradación: ambos extremos ACTIVE y STOP confirmado (12.418/22.571ms,
+cero callbacks posteriores); B recibe EOF esperando cabeceras HTTPS, A observa
+desconexión después. TURN no expiró (41.225/46.335s de180s, ningún cruce observado).
+No hubo rechazo HTTP contemporáneo. Servidor vivo, conexión5 con respuesta
+524.513s, cierre idle529.514s y callback cerrado529.748s, sin respuesta incompleta.
+Artifact11271888619 SHA256
+40fe6f3ac3b126f0dbfd712e13a455ef914e2d5893cf759f0bc8b510ee13ec98.
+La correlación endpoint/socket histórica todavía no está demostrada.
+
+Una reproducción local TLS verificada contra uvicorn0.38.0 demuestra EOF al
+reutilizar el mismo socket después de su cierre idle por defecto; NO demuestra
+por sí sola el pool Android. Se añade una sonda exclusivamente androidTest/R8:
+GET real del realm, única conexión TLS propia, bloqueo de la siguiente escritura
+POST después de selección del socket y observación host de su cierre idle real.
+Exige EOF Android, misma conexión y revocación de conectividad; si no reproduce,
+falla. Después solo una acción sintética explícita puede crear consentimiento
+nuevo antes de ejecutar el escenario multimedia sin cambios. No se modifica
+RelayClient, TLS, keepalive, admisión ni políticas de retry. El wrapper de socket
+delega trust/hostname/session/ciphers; oculta el tipo concreto Conscrypt para las
+extensiones opcionales, por lo que esta diferencia del arnés se hace explícita.
+La sonda nativa queda PENDIENTE hasta ejecutar el siguiente SHA.
+
+Verify job111187317731 agotó300s:120tests completados y test121
+UiSecurityFlowTest.lockDuringOrAfterUnlockInvalidatesOldEnginesAndSnapshots
+iniciado, sin aserción fallida registrada. Artifact11272187631 SHA256
+c0901876b5d470a5c6172ea20ba4962faa81a885aad5fbc120fa6bff646b0405.
+04bf936 sí terminó123connected en293.238s y120offline en279.014s; margen
+insuficiente es plausible, no causa confirmada. Se añaden tiempos monotónicos
+host por status de prueba, acotados a256 entradas, sin campos arbitrarios.
+Se conserva timeout300s, conteos123/120 y fallo obligatorio por timeout.
+Un status auxiliar Keystore no termina una prueba. La mejora no demuestra fix.
+
+Compilación local de la sonda: mediaLabR8+instrumentación46s(16/80),
+debug+instrumentación9s(6/69),exit0. Pruebas de coordinación6PASS y temporización
+3PASS; warning de pipe no cerrado detectado y corregido sin suprimirlo.
+No instalación física, cambio productivo ni afirmación de cierre de CI.
+Tooling acumulativo363PASS16.618s. La primera ejecución tras sustituir
+subprocess.run por el lector temporal falló34 casos del mock de orquestación
+porque aún interceptaba la API anterior (intentaba ejecutar synthetic-adb).
+Se actualiza únicamente ese doble al punto de llamada real, manteniendo todas
+las aserciones y añadiendo comprobación explícita de timeout300s. El test del
+lector sí ejecuta subprocesos reales, preserva exit no-cero y timeout como fallo.

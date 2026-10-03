@@ -11,6 +11,7 @@ def main():
     parser.add_argument('--cert',type=Path,required=True)
     parser.add_argument('--key',type=Path,required=True)
     parser.add_argument('--diagnostics',type=Path,required=True)
+    parser.add_argument('--live-diagnostics',action='store_true')
     args=parser.parse_args()
     import uvicorn
     from uvicorn.protocols.http.h11_impl import H11Protocol
@@ -18,7 +19,9 @@ def main():
     denials=DenialDiagnostics()
     def snapshot():
         value=diagnostic.snapshot();value['httpDenials']=denials.snapshot()
-        args.diagnostics.write_text(json.dumps(value,indent=2)+'\n')
+        temporary=args.diagnostics.with_suffix('.tmp')
+        temporary.write_text(json.dumps(value,indent=2)+'\n')
+        temporary.replace(args.diagnostics)
     class ObservedServer(uvicorn.Server):
         async def shutdown(self,sockets=None):
             try:await super().shutdown(sockets=sockets)
@@ -33,9 +36,11 @@ def main():
         def on_response_complete(self):
             diagnostic.event(self.diagnostic_id,'response')
             super().on_response_complete()
+            if args.live_diagnostics:snapshot()
         def timeout_keep_alive_handler(self):
             diagnostic.event(self.diagnostic_id,'keepalive')
             super().timeout_keep_alive_handler()
+            if args.live_diagnostics:snapshot()
         def connection_lost(self,exc):
             diagnostic.event(self.diagnostic_id,'closed',
                              incomplete=bool(self.cycle and not self.cycle.response_complete),error=exc is not None)

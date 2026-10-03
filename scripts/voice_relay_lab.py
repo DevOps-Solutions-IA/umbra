@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @contextmanager
-def voice_relay(diagnostics=None):
+def voice_relay(diagnostics=None, *, live_diagnostics=False):
     with tempfile.TemporaryDirectory(prefix="umbra-voice-https-") as folder:
         root=Path(folder)
         cert,key=root/"ca.pem",root/"server.key"
@@ -40,11 +40,11 @@ def voice_relay(diagnostics=None):
             lifecycle=root/"http-lifecycle.json"
             server=subprocess.Popen([sys.executable,str(ROOT/"scripts/voice_relay_server.py"),
                 "--fd",str(listener.fileno()),"--cert",str(cert),"--key",str(key),
-                "--diagnostics",str(lifecycle)],env=environment,
+                "--diagnostics",str(lifecycle),*(["--live-diagnostics"] if live_diagnostics else [])],env=environment,
                 pass_fds=(listener.fileno(),),stdout=log,stderr=log)
             try:
                 wait_healthy(server,f"https://127.0.0.1:{port}",ssl.create_default_context(cafile=str(cert)))
-                yield {"base":f"https://10.0.2.2:{port}","certificate":cert.read_text(),"invitations":invitations,"admission":admission}
+                yield {"base":f"https://10.0.2.2:{port}","certificate":cert.read_text(),"invitations":invitations,"admission":admission,"lifecycle":lifecycle}
                 if server.poll() is not None:
                     raise RuntimeError("Isolated voice HTTPS relay died during acceptance")
             finally:

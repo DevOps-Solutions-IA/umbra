@@ -199,6 +199,23 @@ public final class VoiceEngineFixtureListener extends RunListener {
             unadmittedRelayDenied(configuration.getString("base"));
             app.umbra.AdmissionLab.provision(engine,files,"synthetic-admission",configuration.getString("admissionRealm"));
             engine.connectivity().vaultUnlocked(); engine.connectivity().connect(configuration.getString("base"),true);
+            if(configuration.optBoolean("httpIdleProbe")) {
+                app.umbra.transport.RelayIdleReuseProbe.reproduce(engine,configuration.getString("base"),
+                    new app.umbra.transport.RelayIdleReuseProbe.Control() {
+                        public void warmed() throws Exception {
+                            write("synthetic-http-warmed.json",new JSONObject().put("warmed",true));
+                            waitFor("synthetic-http-associated.json",SystemClock.elapsedRealtime()+3_000);
+                        }
+                        public void awaitOwnedIdleClose() throws Exception {
+                            write("synthetic-http-blocked.json",new JSONObject().put("blocked",true));
+                            waitFor("synthetic-http-closed.json",SystemClock.elapsedRealtime()+8_000);
+                        }
+                    });
+                write("synthetic-http-reproduced.json",new JSONObject().put("androidEof",true).put("networkRevoked",true));
+                // A new explicit synthetic owner action AFTER the negative transport probe.
+                // No old lease is reused and production never reconnects automatically.
+                engine.connectivity().connect(configuration.getString("base"),true);
+            }
             try(var relay=new RelayClient(configuration.getString("base"),() -> true,engine.admission())) {
             relay.register(engine.profile(),configuration.getString("invitation")); engine.updateRelay(configuration.getString("base"),true);
             DeviceService devices=new DeviceService(db); devices.migrate();
