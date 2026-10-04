@@ -62,6 +62,22 @@ public class UiDesignTokensTest {
         assertTrue(xml.contains(hex("umbra_text_primary", TEXT_PRIMARY)));
         assertTrue(xml.contains(hex("umbra_text_secondary", TEXT_SECONDARY)));
     }
+    /** Spacing/radius/height and motion tokens: Java and resources stay identical; touch targets stay >= 48dp. */
+    @Test public void dimensionAndMotionResourcesMirrorJavaTokens() throws Exception {
+        String dimens = UiTestFiles.read(Path.of("src/main/res/values/dimens.xml"));
+        int[][] pairs = {{4, app.umbra.ui.design.UmbraTokens.SPACE_4}, {8, app.umbra.ui.design.UmbraTokens.SPACE_8}, {12, app.umbra.ui.design.UmbraTokens.SPACE_12},
+            {16, app.umbra.ui.design.UmbraTokens.SPACE_16}, {24, app.umbra.ui.design.UmbraTokens.SPACE_24}, {32, app.umbra.ui.design.UmbraTokens.SPACE_32},
+            {40, app.umbra.ui.design.UmbraTokens.SPACE_40}, {48, app.umbra.ui.design.UmbraTokens.SPACE_48}};
+        for (int[] p : pairs) assertTrue("space " + p[0], dimens.contains("<dimen name=\"umbra_space_" + p[0] + "\">" + p[1] + "dp</dimen>"));
+        assertTrue(dimens.contains("<dimen name=\"umbra_radius_control\">" + app.umbra.ui.design.UmbraTokens.RADIUS_CONTROL + "dp</dimen>"));
+        assertTrue(dimens.contains("<dimen name=\"umbra_radius_card\">" + app.umbra.ui.design.UmbraTokens.RADIUS_CARD + "dp</dimen>"));
+        assertTrue(dimens.contains("<dimen name=\"umbra_touch_min\">" + app.umbra.ui.design.UmbraTokens.TOUCH_MIN + "dp</dimen>"));
+        assertTrue(dimens.contains("<dimen name=\"umbra_button_height\">" + app.umbra.ui.design.UmbraTokens.BUTTON_HEIGHT + "dp</dimen>"));
+        assertTrue(app.umbra.ui.design.UmbraTokens.TOUCH_MIN >= 48 && app.umbra.ui.design.UmbraTokens.BUTTON_HEIGHT >= 48);
+        String integers = UiTestFiles.read(Path.of("src/main/res/values/integers.xml"));
+        assertTrue(integers.contains("<integer name=\"umbra_motion_standard\">" + app.umbra.ui.design.UmbraTokens.MOTION_STANDARD + "</integer>"));
+        assertTrue("motion stays short", app.umbra.ui.design.UmbraTokens.MOTION_EMPHASIS <= 300);
+    }
     private static String hex(String name, int color) { return String.format(Locale.ROOT, "<color name=\"%s\">#%08X</color>", name, color); }
     private static void assertEquals(double expected, double actual, double delta) { assertTrue(expected + " vs " + actual, Math.abs(expected - actual) <= delta); }
 }

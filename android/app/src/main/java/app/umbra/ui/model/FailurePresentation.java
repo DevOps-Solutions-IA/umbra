@@ -35,7 +35,7 @@ public final class FailurePresentation {
             case ADMISSION_REVOKED -> "Admisión revocada.";
             case WRONG_DEVICE -> "Es de otro dispositivo.";
             case NOT_AUTHORITY -> "Solo la autoridad puede hacerlo.";
-            case NOT_ADMITTED -> "Requiere admisión vigente.";
+            case NOT_ADMITTED -> "Requiere acceso privado activo.";
             case EDITION_UNAVAILABLE -> "No incluido en esta edición.";
             case CONNECTIVITY_STATE -> "Estado de red no permite esto.";
             case CLEANUP_FAILED -> "Cierre no confirmado.";

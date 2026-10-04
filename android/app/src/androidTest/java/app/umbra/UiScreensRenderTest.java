@@ -232,12 +232,18 @@ public class UiScreensRenderTest {
         View first = render("02a-onboarding-intro", ui -> EntryScreens.onboarding(ui, 0, !BuildConfig.ALLOW_RELAY, a));
         assertTrue(hasText(first, "Sin teléfono ni correo"));
         assertTrue(hasText(first, "Paso 1 de 3"));
-        View last = render("02c-onboarding-identity", ui -> EntryScreens.onboarding(ui, 2, !BuildConfig.ALLOW_RELAY, a));
-        assertTrue(hasText(last, "Después: admisión"));
-        assertFalse("identity creation never claims admission", hasText(last, "Dispositivo admitido"));
-        assertAccessible(last);
-        assertConcise(first); assertConcise(last);
-        render("02b-onboarding-verification", ui -> EntryScreens.onboarding(ui, 1, !BuildConfig.ALLOW_RELAY, a));
+        View identity = render("02b-onboarding-identity", ui -> EntryScreens.onboarding(ui, 1, !BuildConfig.ALLOW_RELAY, a));
+        assertTrue(hasText(identity, BuildConfig.ALLOW_RELAY ? "Después: conexión privada" : "Después: contactos"));
+        assertFalse("identity creation never claims admission", hasText(identity, "Acceso activo"));
+        assertNotNull(button(identity, "Crear identidad"));
+        View last = render("02c-onboarding-ready", ui -> EntryScreens.onboarding(ui, 2, !BuildConfig.ALLOW_RELAY, a));
+        assertTrue(hasText(last, "Listo"));
+        assertTrue("contacts start unverified", hasText(last, "sin verificar"));
+        assertEquals(BuildConfig.ALLOW_RELAY, button(last, "Configurar conexión") != null);
+        assertNotNull(button(last, "Agregar contacto"));
+        for (String banned : new String[]{"realm", "prekey", "credencial", "autoridad"}) assertFalse(banned, visibleText(last).toLowerCase(Locale.ROOT).contains(banned));
+        assertAccessible(identity); assertAccessible(last);
+        assertConcise(first); assertConcise(identity); assertConcise(last);
     }
 
     @Test public void homeListsPeopleWithTrustAndNoContentPreview() {
@@ -669,7 +675,10 @@ public class UiScreensRenderTest {
         assertSecretInputs(unlock, 1);
         assertAccessible(unlock);
         View busy = render("24d-password-unlock-busy", ui -> AccessScreens.unlock(ui, new AccessScreens.UnlockState(true, null, 2, !BuildConfig.ALLOW_RELAY), ua));
-        assertFalse("double submission prevented while the domain works", button(busy, "Abrir").isEnabled());
+        Button opening = button(busy, "Abriendo…");
+        assertNotNull("the submit button shows the real phase while the domain works", opening);
+        assertFalse("double submission prevented while the domain works", opening.isEnabled());
+        assertNull(button(busy, "Abrir"));
         AccessScreens.ChangeActions cha = new AccessScreens.ChangeActions() { public void back() {} public void submit(EditText a, EditText b, EditText c) {} };
         View change = render("24e-password-change", ui -> AccessScreens.change(ui, new AccessScreens.ChangeState(false, null), cha));
         assertNotNull(button(change, "Cambiar"));
@@ -789,10 +798,10 @@ public class UiScreensRenderTest {
             !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, true, "", "24 horas", 1, BuildConfig.VERSION_NAME, true, "2 min", AdmissionPresentation.of("REQUEST_PENDING", true, false)), sa));
         assertTrue(hasText(security, "Contraseña activa"));
         assertNotNull(button(security, "Cambiar contraseña"));
-        assertTrue(hasExact(security, "Autobloqueo")); assertTrue(hasExact(security, "2 min"));
+        assertTrue(hasExact(security, "Bloqueo automático")); assertTrue(hasExact(security, "2 min"));
         assertTrue(Help.AUTO_LOCK.lines.contains("No es el bloqueo de emergencia."));
-        assertTrue(hasExact(security, "Pendiente"));
-        assertNotNull(help(security, Help.ACCESS));
+        assertTrue(hasExact(security, "Solicitando acceso"));
+        assertNotNull("security explains the auto-lock ceiling", help(security, Help.AUTO_LOCK));
         assertAccessible(security);
         assertConcise(security);
         View legacy = render("27f-settings-security-legacy", ui -> SettingsScreens.section(ui, new SettingsScreens.SettingsState(SettingsSection.SECURITY, "Ana", ME, FEATURES,

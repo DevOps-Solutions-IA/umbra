@@ -44,7 +44,7 @@ public final class AdmissionScreens {
     public static Screen status(Ui ui, AdmissionState s, AdmissionActions a) {
         AdmissionPresentation p = s.presentation();
         LinearLayout top = ui.column();
-        top.addView(ui.topBar(a::back, ui.titleBlock("Admisión", ui.chip(p.tone(), p.glyph(), p.title())), ui.helpButton(Help.ADMISSION)));
+        top.addView(ui.topBar(a::back, ui.titleBlock("Acceso privado", ui.chip(p.tone(), p.glyph(), p.title())), ui.helpButton(Help.ADMISSION)));
         LinearLayout body = ui.column();
         LinearLayout card = ui.elevatedCard();
         if (!p.body().isEmpty()) {
@@ -53,24 +53,24 @@ public final class AdmissionScreens {
             card.addView(line, ui.margins(Ui.match(), 0, 4));
         }
         RequestInfo r = s.request();
-        if (r != null) {
-            fingerprint(ui, card, "Huella", r.deviceFingerprint());
-            fingerprint(ui, card, "Identidad", r.identityFingerprint());
-            fact(ui, card, r.expired() ? "Venció" : "Vence", r.expires());
-        } else fingerprint(ui, card, "Identidad", s.identity());
-        if (s.realm() != null) { fingerprint(ui, card, "Entorno", s.realm()); fingerprint(ui, card, "Autoridad", s.authority()); }
+        if (r != null) fact(ui, card, r.expired() ? "Venció" : "Vence", r.expires());
         if (s.credentialExpires() != null) fact(ui, card, "Vigente hasta", s.credentialExpires());
         body.addView(card);
+        // Fingerprints, environment and authority are compared with the administrator: technical, behind "Detalles".
+        LinearLayout details = ui.card(); details.setVisibility(android.view.View.GONE);
+        if (r != null) { fingerprint(ui, details, "Huella", r.deviceFingerprint()); fingerprint(ui, details, "Identidad", r.identityFingerprint()); }
+        else fingerprint(ui, details, "Identidad", s.identity());
+        if (s.realm() != null) { fingerprint(ui, details, "Entorno", s.realm()); fingerprint(ui, details, "Autoridad", s.authority()); }
 
         if (r != null && p.canExportRequest() && !r.expired()) body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Exportar solicitud", Glyph.FILE, a::exportRequest));
         if (p.canCreateRequest()) {
-            String label = s.renewalAvailable() ? "Solicitar renovación" : "Generar solicitud";
+            String label = s.renewalAvailable() ? "Solicitar renovación" : "Solicitar acceso";
             Button create = ui.button(r == null ? Ui.ButtonKind.PRIMARY : Ui.ButtonKind.SECONDARY, label, Glyph.DEVICE_PENDING, a::createRequest);
-            if (s.busy()) ui.disabled(create, "operación en curso");
+            if (s.busy()) ui.busy(create, "Preparando…");
             body.addView(create);
         }
         if (p.canImportRealm() || p.canImportDecision() || p.canImportRevocation()) {
-            String label = p.canImportRealm() ? "Importar entorno" : p.canImportDecision() ? "Importar respuesta" : "Importar revocación";
+            String label = p.canImportRealm() ? "Importar configuración" : p.canImportDecision() ? "Importar respuesta" : "Importar revocación";
             Button importer = ui.button(p.canImportRealm() || p.canImportDecision() ? Ui.ButtonKind.PRIMARY : Ui.ButtonKind.SECONDARY, label, Glyph.FILE, a::importFile);
             if (s.busy()) ui.disabled(importer, "operación en curso");
             body.addView(importer);
@@ -81,7 +81,11 @@ public final class AdmissionScreens {
             if (s.busy()) ui.disabled(cancel, "operación en curso");
             body.addView(cancel);
         }
-        body.addView(ui.sectionHeader("Administración"));
+        Button toggle = ui.button(Ui.ButtonKind.GHOST, "Detalles", Glyph.INFO, null); toggle.setStateDescription("Ocultos");
+        toggle.setOnClickListener(v -> { boolean show = details.getVisibility() != android.view.View.VISIBLE;
+            details.setVisibility(show ? android.view.View.VISIBLE : android.view.View.GONE); toggle.setStateDescription(show ? "Visibles" : "Ocultos"); });
+        body.addView(toggle); body.addView(details);
+        body.addView(ui.sectionHeader("Configuración avanzada"));
         body.addView(ui.listRow(ui.iconTile(Glyph.SHIELD, Tone.NEUTRAL), "Administración", "Solo autoridad", ui.chevron(), a::admin));
         return Screen.of(top, body, null);
     }

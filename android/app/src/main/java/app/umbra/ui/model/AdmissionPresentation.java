@@ -31,24 +31,25 @@ public record AdmissionPresentation(Status status, String title, String body, To
     public static AdmissionPresentation of(String state, boolean requestPresent, boolean requestExpired) {
         Status s = Status.fromEngine(state);
         return switch (s) {
-            case UNCONFIGURED -> new AdmissionPresentation(s, "Sin entorno", "Configurar el entorno no admite el dispositivo.",
+            // Normal-user wording: "conexión privada". Technical terms (entorno, autoridad, huellas) live in Administración.
+            case UNCONFIGURED -> new AdmissionPresentation(s, "Configuración pendiente", "Importa la configuración. Configurar no da acceso.",
                 Tone.NEUTRAL, Glyph.SHIELD, true, false, false, false, false);
-            case NOT_ADMITTED -> new AdmissionPresentation(s, "Sin admisión", "Entorno configurado.",
+            case NOT_ADMITTED -> new AdmissionPresentation(s, "Acceso pendiente", "Configurada. Solicita acceso para conectarte.",
                 Tone.NEUTRAL, Glyph.DEVICE_PENDING, false, true, false, false, true);
-            case REQUEST_PENDING -> new AdmissionPresentation(s, "Pendiente", "Generada · no recibida.",
+            case REQUEST_PENDING -> new AdmissionPresentation(s, "Solicitando acceso", "Generada · no recibida.",
                 Tone.WARNING, Glyph.DEVICE_PENDING, false, false, true, true, true);
-            case REJECTED -> new AdmissionPresentation(s, "Rechazada", "Puedes generar otra solicitud.",
+            case REJECTED -> new AdmissionPresentation(s, "Acceso no aprobado", "Puedes solicitarlo de nuevo.",
                 Tone.DANGER, Glyph.BLOCK, false, true, false, false, true);
-            case ADMITTED -> new AdmissionPresentation(s, "Admitido", "No verifica contactos ni conecta.",
+            case ADMITTED -> new AdmissionPresentation(s, "Acceso activo", "No verifica contactos ni conecta.",
                 Tone.SUCCESS, Glyph.DEVICE_AUTHORIZED, false, !requestPresent, requestPresent, requestPresent, true);
             case EXPIRED -> requestPresent && requestExpired
                 ? new AdmissionPresentation(s, "Solicitud vencida", "Genera otra.",
                     Tone.WARNING, Glyph.TIMER, false, true, false, false, true)
-                : new AdmissionPresentation(s, "Admisión vencida", "Requiere renovación autorizada; no se renueva sola.",
+                : new AdmissionPresentation(s, "Acceso vencido", "Requiere renovación autorizada; no se renueva sola.",
                     Tone.WARNING, Glyph.TIMER, false, !requestPresent, requestPresent, requestPresent, true);
-            case REVOKED -> new AdmissionPresentation(s, "Revocado", "Sin nuevas sesiones; no se borraron tus datos.",
+            case REVOKED -> new AdmissionPresentation(s, "Acceso revocado", "Sin nuevas sesiones; no se borraron tus datos.",
                 Tone.BLOCKED, Glyph.DEVICE_REVOKED, false, false, false, false, false);
-            case INVALID -> new AdmissionPresentation(s, "No válida", "UMBRA no los repara ni los reemplaza.",
+            case INVALID -> new AdmissionPresentation(s, "Configuración incompatible", "UMBRA no los repara ni los reemplaza.",
                 Tone.DANGER, Glyph.WARNING, false, false, false, false, false);
         };
     }

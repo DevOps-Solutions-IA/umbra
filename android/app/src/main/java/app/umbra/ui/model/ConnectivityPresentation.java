@@ -42,7 +42,7 @@ public record ConnectivityPresentation(State state, String chip, Tone tone, Glyp
             case LOCKED_PRIVATE -> new ConnectivityPresentation(s, "Bloqueada · sin conexión", Tone.NEUTRAL, Glyph.NETWORK_OFF,
                 "Bloqueada · sin conexión", "", false, false, nearby, null);
             case UNLOCKED_OFFLINE -> new ConnectivityPresentation(s, nearbyActive ? "Sin red · cercanía activa" : "Sin conexión", Tone.NEUTRAL, Glyph.NETWORK_OFF,
-                "Sin conexión", canConnect ? "" : relayKnown ? "Requiere admisión vigente." : "Configura servidor y admisión.",
+                "Sin conexión", canConnect ? "" : relayKnown ? "Requiere acceso privado activo." : "Configura la conexión privada.",
                 canConnect && relayKnown, false, nearby, null);
             case CONNECTING -> new ConnectivityPresentation(s, "Conectando…", Tone.WARNING, Glyph.CLOUD,
                 "Conectando…", "", false, true, nearby, null);

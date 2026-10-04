@@ -96,6 +96,11 @@ public final class ContentScreens {
         TextView state = ui.text(UmbraType.LABEL, s.status(), Ui.toneColor(s.tone()));
         state.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         if (handles != null) handles.status = state;
+        // A real phase in progress ("Abriendo…") gets an inline spinner; it is the domain's state, not progress.
+        if (s.status() != null && s.status().endsWith("…")) {
+            android.widget.ImageView spin = ui.spinner(UmbraColors.ACCENT_MUTED, 16);
+            LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(ui.dp(16), ui.dp(16)); sp.setMarginEnd(ui.dp(8)); facts.addView(spin, sp);
+        }
         facts.addView(state, Ui.weight());
         facts.addView(ui.chip(Tone.NEUTRAL, Glyph.TIMER, s.session()));
         body.addView(facts, ui.margins(Ui.match(), 4, 4));

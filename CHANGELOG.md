@@ -1,3 +1,14 @@
+# Sin publicar — convergencia de producto (rama `claude/product-convergence-premium`)
+
+- Base `11539d4` (Pairing P0). Dominio, criptografía, protocolo, manifiestos y permisos sin cambios.
+- ACCESS_READINESS_V1 integrado en MainActivity: `vault.access()` canónico, autenticación Android y
+  selectores/ajustes/permisos como acciones externas, causas reales de bloqueo, «4 min máx.».
+- PAIRING_PRODUCT_V1 integrado: Agregar contacto (escanear QR en connected, código, mostrar QR/código,
+  archivo), progresión solo en primer plano, fallos tipados, contacto agregado sin verificar.
+- Arquitectura chat-first, ajustes agrupados, sistema de tokens, cargadores y estados ocupados reales,
+  sin botones muertos. Diseño: `docs/design/UMBRA_PRODUCT_DESIGN_V1.md`.
+- Recibo: `docs/validation/2026-10-03-product-convergence-premium.md` (CI y prueba física pendientes).
+
 # Sin publicar — integración final UI (rama `claude/final-ui-integration`)
 
 - Presentación de Claude (`ca2a706`) integrada sobre la base técnica aceptada `e0024f0`

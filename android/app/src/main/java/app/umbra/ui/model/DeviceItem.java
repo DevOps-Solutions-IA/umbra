@@ -8,7 +8,7 @@ public record DeviceItem(String id, String title, String detail, boolean current
     public static DeviceItem of(String id, boolean current, boolean active, boolean administrator) {
         String shortId = Fingerprints.shortId(id);
         String title = current ? "Este dispositivo" : "Dispositivo " + shortId;
-        String detail = (current ? "ID " + shortId + " · " : "") + (active ? "Autorizado" : "Revocado");
+        String detail = (current ? "ID " + shortId + " · " : "") + (active ? "Aprobado" : "Revocado");
         return new DeviceItem(id, title, detail, current, active, administrator && active && !current);
     }
 }

@@ -35,13 +35,14 @@ public class UiAdmissionPresentationTest {
     @Test public void realmConfigurationDoesNotImplyAdmission() {
         AdmissionPresentation configured = of(Status.NOT_ADMITTED);
         assertFalse(configured.admitted());
-        assertEquals("Sin admisión", configured.title());
-        assertEquals("Entorno configurado.", configured.body());
-        assertEquals("Configurar el entorno no admite el dispositivo.", of(Status.UNCONFIGURED).body());
+        assertEquals("Acceso pendiente", configured.title());
+        assertEquals("Configurada. Solicita acceso para conectarte.", configured.body());
+        assertTrue("configuring never admits", of(Status.UNCONFIGURED).body().contains("Configurar no da acceso"));
+        assertEquals("Configuración pendiente", of(Status.UNCONFIGURED).title());
     }
     @Test public void pendingRequestIsGeneratedNotReceived() {
         AdmissionPresentation pending = of(Status.REQUEST_PENDING);
-        assertEquals("Pendiente", pending.title());
+        assertEquals("Solicitando acceso", pending.title());
         assertEquals("Generada · no recibida.", pending.body());
         assertTrue(Help.ADMISSION.lines.contains("Nada se envía solo: se comparten archivos."));
         assertTrue(pending.canImportDecision());

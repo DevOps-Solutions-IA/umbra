@@ -86,7 +86,7 @@ public final class SettingsScreens {
         body.addView(ui.sectionHeader("Contactos"));
         // createInvitation opens "Agregar contacto" (QR, code, file); the file import stays under it as well.
         body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Agregar contacto", Glyph.PERSON_ADD, a::createInvitation));
-        body.addView(ui.button(Ui.ButtonKind.GHOST, "Cancelar invitaciones sin usar", Glyph.BLOCK, a::revokeInvitations));
+        body.addView(ui.button(Ui.ButtonKind.GHOST, "Cancelar invitaciones", Glyph.BLOCK, a::revokeInvitations));
         body.addView(ui.settingRow(Glyph.DEVICES, Tone.NEUTRAL, "Dispositivos", null, a::devices));
     }
 
@@ -153,7 +153,7 @@ public final class SettingsScreens {
         if (c.disconnectEnabled()) body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Desconectar", Glyph.CLOUD_OFF, a::disconnect));
         else {
             Button connect = ui.button(Ui.ButtonKind.PRIMARY, "Conectar", Glyph.CLOUD, a::connect);
-            if (!c.connectEnabled()) ui.disabled(connect, s.relayRegistered() ? "requiere admisión vigente" : "configura el servidor");
+            if (!c.connectEnabled()) ui.disabled(connect, s.relayRegistered() ? "requiere acceso privado activo" : "configura el servidor");
             body.addView(connect);
         }
         body.addView(ui.listRow(ui.iconTile(Glyph.BLUETOOTH, Tone.OFFLINE), "Cercanía", c.nearby(), ui.chevron(), a::nearby));
@@ -176,7 +176,7 @@ public final class SettingsScreens {
         Button register = ui.button(Ui.ButtonKind.SECONDARY, "Registrar buzón", Glyph.CLOUD, () -> {
             String inv = invite[0].getText().toString(); invite[0].setText(""); a.register(address.getText().toString().trim(), inv.trim());
         });
-        if (!s.admission().admitted()) ui.disabled(register, "requiere admisión vigente");
+        if (!s.admission().admitted()) ui.disabled(register, "requiere acceso privado activo");
         body.addView(register);
         Button sync = ui.button(Ui.ButtonKind.SECONDARY, "Sincronizar", Glyph.RETRY, a::syncNow);
         if (!c.networkEnabled()) ui.disabled(sync, "red deshabilitada");

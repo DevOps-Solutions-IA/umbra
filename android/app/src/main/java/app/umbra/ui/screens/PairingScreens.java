@@ -255,7 +255,7 @@ public final class PairingScreens {
         if (f.busyPhase() != null) { body.addView(ui.inlineLoader(f.busyPhase())); return; }
         switch (st) {
             case START -> {
-                body.addView(ui.text(UmbraType.BODY_SECONDARY, "Para teléfonos sin conexión privada. Se intercambian archivos hasta terminar."));
+                body.addView(ui.text(UmbraType.BODY_SECONDARY, "Sin conexión privada: intercambien archivos hasta terminar."));
                 bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Seleccionar archivo", Glyph.FILE, a::pickFile));
                 bottom.addView(ui.button(Ui.ButtonKind.SECONDARY, "Crear archivo", Glyph.ADD, a::createFile));
             }

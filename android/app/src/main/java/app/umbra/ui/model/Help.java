@@ -53,7 +53,7 @@ public enum Help {
         "Bluetooth con un teléfono cercano.",
         "No escucha ni busca hasta que la actives.",
         "Un enlace a la vez; ambos con UMBRA abierta.",
-        "Exige admisión vigente en ambos teléfonos.",
+        "Exige acceso privado activo en ambos teléfonos.",
         "No es red de malla ni conexión a distancia.")),
     VERIFY("Verificación", List.of(
         "Comparen el código completo en persona.",

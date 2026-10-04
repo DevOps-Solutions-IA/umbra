@@ -54,50 +54,57 @@ public final class EntryScreens {
         return Screen.of(null, body, bottom);
     }
 
-    public interface OnboardingActions { void step(int next); void create(String alias); }
+    public interface OnboardingActions {
+        void step(int next); void create(String alias);
+        /** After the identity exists: configure the private connection (connected builds), add a contact, or finish. */
+        default void privateConnection() {} default void addContact() {} default void finish() {}
+    }
 
     /** Three short steps: what UMBRA is, verification, local identity. */
+    /**
+     * Messaging setup, not PKI: 1) UMBRA protected (the password was just created), 2) local identity (alias),
+     * 3) ready: configure the private connection (connected) or add a contact. Identity creation never admits,
+     * connects or verifies anything.
+     */
     public static Screen onboarding(Ui ui, int step, boolean offlineEdition, OnboardingActions a) {
         LinearLayout body = ui.column(); body.setPadding(ui.dp(4), ui.dp(24), ui.dp(4), ui.dp(16));
-        body.addView(ui.text(UmbraType.SECURITY_LABEL, "Paso " + (step + 1) + " de 3"));
+        body.addView(ui.text(UmbraType.SECURITY_LABEL, "Paso " + (Math.min(step, 2) + 1) + " de 3"));
         LinearLayout bottom = ui.column();
         switch (step) {
             case 0 -> {
                 body.addView(ui.logo(48, UmbraColors.ACCENT_MUTED), ui.margins(new LinearLayout.LayoutParams(ui.dp(48), ui.dp(48)), 16, 0));
-                body.addView(ui.heading(UmbraType.DISPLAY, "UMBRA"), ui.margins(Ui.match(), 10, 8));
+                body.addView(ui.heading(UmbraType.DISPLAY, "UMBRA protegido"), ui.margins(Ui.match(), 10, 8));
                 body.addView(point(ui, Glyph.PERSON, "Sin teléfono ni correo", "Identidad creada en este dispositivo."));
                 body.addView(point(ui, Glyph.SHIELD_CHECK, "Cifrado en el teléfono", "El servidor solo transporta datos cifrados."));
-                body.addView(point(ui, offlineEdition ? Glyph.OFFLINE_BLUETOOTH : Glyph.CLOUD, offlineEdition ? "Sin internet" : "Servidor o cercanía",
+                body.addView(point(ui, offlineEdition ? Glyph.OFFLINE_BLUETOOTH : Glyph.CLOUD, offlineEdition ? "Sin internet" : "Conexión privada o cercana",
                     offlineEdition ? "Solo Bluetooth con teléfonos cercanos." : "Tu servidor privado o Bluetooth cercano."));
                 bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Continuar", Glyph.CHEVRON, () -> a.step(1)));
             }
             case 1 -> {
-                body.addView(ui.heading(UmbraType.DISPLAY, "Verifica a cada persona"), ui.margins(Ui.match(), 10, 8));
-                body.addView(ui.text(UmbraType.BODY_SECONDARY, "Comparen el código de seguridad en persona."));
-                LinearLayout states = ui.card();
-                for (TrustLevel level : TrustLevel.values()) {
-                    LinearLayout r = ui.row(); r.setPadding(0, ui.dp(6), 0, ui.dp(6));
-                    r.addView(ui.trustBadge(TrustPresentation.of(level)));
-                    states.addView(r);
-                }
-                body.addView(states);
-                bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Entendido", Glyph.CHEVRON, () -> a.step(2)));
-                bottom.addView(ui.button(Ui.ButtonKind.GHOST, "Atrás", Glyph.BACK, () -> a.step(0)));
-            }
-            default -> {
                 body.addView(ui.heading(UmbraType.DISPLAY, "Tu identidad"), ui.margins(Ui.match(), 10, 8));
                 EditText alias = ui.field("Alias privado");
                 alias.setSingleLine(true);
                 body.addView(ui.labeledField("Alias", alias));
                 body.addView(ui.banner(Tone.WARNING, Glyph.WARNING, "Sin recuperación", "Si pierdes el teléfono, pierdes los datos.", null, null));
-                body.addView(ui.chip(Tone.NEUTRAL, Glyph.DEVICE_PENDING, "Después: admisión"));
+                body.addView(ui.chip(Tone.NEUTRAL, offlineEdition ? Glyph.PERSON_ADD : Glyph.DEVICE_PENDING,
+                    offlineEdition ? "Después: contactos" : "Después: conexión privada"));
                 bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Crear identidad", Glyph.SHIELD_CHECK, () -> a.create(alias.getText().toString().trim())));
-                bottom.addView(ui.button(Ui.ButtonKind.GHOST, "Atrás", Glyph.BACK, () -> a.step(1)));
+                bottom.addView(ui.button(Ui.ButtonKind.GHOST, "Atrás", Glyph.BACK, () -> a.step(0)));
+            }
+            default -> {
+                LinearLayout tile = ui.iconTile(Glyph.CHECK, Tone.SUCCESS); tile.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(56), ui.dp(56)));
+                body.addView(tile, ui.margins(new LinearLayout.LayoutParams(ui.dp(56), ui.dp(56)), 16, 0));
+                body.addView(ui.heading(UmbraType.DISPLAY, "Listo"), ui.margins(Ui.match(), 10, 8));
+                body.addView(ui.text(UmbraType.BODY_SECONDARY, "Los contactos quedan sin verificar hasta comparar el código."));
+                if (!offlineEdition) {
+                    bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Configurar conexión", Glyph.CLOUD, a::privateConnection));
+                    bottom.addView(ui.button(Ui.ButtonKind.SECONDARY, "Agregar contacto", Glyph.PERSON_ADD, a::addContact));
+                } else bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Agregar contacto", Glyph.PERSON_ADD, a::addContact));
+                bottom.addView(ui.button(Ui.ButtonKind.GHOST, "Ir a chats", Glyph.CHAT, a::finish));
             }
         }
         return Screen.of(null, body, bottom);
     }
-
     private static LinearLayout point(Ui ui, Glyph glyph, String title, String body) {
         LinearLayout r = ui.row(); r.setGravity(Gravity.TOP); r.setPadding(0, ui.dp(16), 0, 0);
         r.addView(ui.iconTile(glyph, Tone.ACCENT));

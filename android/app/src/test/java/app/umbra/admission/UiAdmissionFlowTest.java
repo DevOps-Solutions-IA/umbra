@@ -59,7 +59,7 @@ public class UiAdmissionFlowTest {
         assertEquals(s.realm.realmId(), snap.request().realmId());
         assertFalse(snap.request().expired());
         AdmissionPresentation p = present(snap);
-        assertEquals("Pendiente", p.title());
+        assertEquals("Solicitando acceso", p.title());
         assertFalse(p.admitted());
         AdmissionImport.Parsed exported = parsed(snap.request().wire());
         assertEquals(AdmissionImport.Kind.REQUEST, exported.kind());
@@ -111,7 +111,7 @@ public class UiAdmissionFlowTest {
         AdmissionFlow.Snapshot credentialExpired = read(s.b);
         assertEquals("EXPIRED", credentialExpired.state());
         assertNull(credentialExpired.request());
-        assertEquals("Admisión vencida", present(credentialExpired).title());
+        assertEquals("Acceso vencido", present(credentialExpired).title());
         assertTrue("renewal needs a new request, never automatic", present(credentialExpired).canCreateRequest());
     }
     @Test public void revocationIsTerminalOffersNoBypassAndKeepsHistory() throws Exception {

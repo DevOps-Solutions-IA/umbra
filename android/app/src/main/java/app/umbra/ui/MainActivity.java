@@ -1002,9 +1002,14 @@ public final class MainActivity extends Activity {
         mount(EntryScreens.onboarding(ui, onboardingStep, !BuildConfig.ALLOW_RELAY, new EntryScreens.OnboardingActions() {
             @Override public void step(int next) { onboardingStep = next; renderOnboarding(); }
             @Override public void create(String alias) {
-                // Identity creation never admits or connects; continue to this device's admission.
-                action(() -> { engine.initialize(alias); initialised = true; return true; }, ok -> { nav.home(); nav.push(Route.of(Route.Kind.ADMISSION)); refresh(); });
+                if (!sending.add("onboarding")) return; // one identity creation per tap
+                // Identity creation never admits, connects or verifies; it only leads to the "Listo" step.
+                action(() -> { engine.initialize(alias); initialised = true; return true; }, ok -> { sending.remove("onboarding"); onboardingStep = 2; renderOnboarding(); },
+                    e -> { sending.remove("onboarding"); notice(safeError(e)); }, skipped -> sending.remove("onboarding"));
             }
+            @Override public void privateConnection() { nav.home(); nav.push(Route.of(Route.Kind.ADMISSION)); refresh(); }
+            @Override public void addContact() { nav.home(); refresh(); addContactSheet(); }
+            @Override public void finish() { nav.home(); refresh(); }
         }));
     }
 
@@ -1135,7 +1140,6 @@ public final class MainActivity extends Activity {
             @Override public void configure() { close.run(); go(Route.of(Route.Kind.SETTINGS_SECTION, SettingsSection.NETWORK.name())); }
         }));
     }
-    private void createInvitation() { startPairing(PairingScreens.Mode.FILE); createPairingFile(); }
 
     // ------------------------------------------------------------------ chat
     private JSONObject uiContact(String id) { for (JSONObject c : contacts) if (id.equals(c.optString("id"))) return c; return null; }
@@ -1603,13 +1607,16 @@ public final class MainActivity extends Activity {
     private void startCall(String peer, boolean video) {
         if (!features.available(Feature.VOICE_CALLS) || !unlocked) { notice(ErrorPresentation.of(ErrorKind.OFFLINE_EDITION).body()); return; }
         if (!trustOf(peer).allowsCalls()) { notice(trustOf(peer).blockedReason()); return; }
+        if (!sending.add("call:" + peer)) return; // "Preparando": one review per tap, never two invitations
         action(() -> {
             JSONObject index=engine.get("device-index",peer);
-            if(index==null) throw new FailurePresentation.UiRefusal("Aprueba primero sus dispositivos.");
+            // PRODUCT_GAP: the contact's approved device list has no UI ceremony yet; say what is missing, not a fix.
+            if(index==null) throw new FailurePresentation.UiRefusal("Llamada no disponible: falta su lista de dispositivos.");
             return engine.calls().reviewInvite(index.getString("root"),app.umbra.calls.CallPayload.NetworkPolicy.RELAY_ONLY);
-        }, consent -> confirm(video ? "Videollamada a " + aliasFor(peer) : "Llamar a " + aliasFor(peer),
+        }, consent -> { sending.remove("call:" + peer); confirm(video ? "Videollamada a " + aliasFor(peer) : "Llamar a " + aliasFor(peer),
             video ? "Micrófono y cámara se confirman después." : "El micrófono se confirma después.",
-            "Llamar", false, () -> action(() -> engine.calls().invite(consent,true), id -> { if (video) videoIntent.add(id); syncNow(); if (nav.push(Route.of(Route.Kind.CALL, id))) refresh(); })));
+            "Llamar", false, () -> action(() -> engine.calls().invite(consent,true), id -> { if (video) videoIntent.add(id); syncNow(); if (nav.push(Route.of(Route.Kind.CALL, id))) refresh(); })); },
+            e -> { sending.remove("call:" + peer); notice(safeError(e)); }, skipped -> sending.remove("call:" + peer));
     }
     private void renderIncoming(String id) {
         JSONObject s = session(id);
@@ -1741,7 +1748,9 @@ public final class MainActivity extends Activity {
                 String session=engine.locations().start(consent,true);
                 locationCapture=new app.umbra.location.AndroidLocationCapture(this,worker,() -> resumed && unlocked && !destroyed,engine.locations(),status -> main.post(() -> { if(unlocked) { locationStatus=app.umbra.ui.model.ShortStatus.location(status); refresh(); syncNow(); } }));
                 locationCapture.start(session,mode,live); return session;
-            },session -> { locationStatus = (live ? "En vivo · " : "Un punto · ") + draft.precision().label + " · hasta " + LocationShareDraft.durationLabel(duration); refresh(); syncNow(); }));
+            },session -> {
+                // The session exists; a first fix is not proven yet. The capture status replaces this once it measures.
+                locationStatus = "Midiendo… · " + draft.precision().label + " · hasta " + LocationShareDraft.durationLabel(duration); refresh(); syncNow(); }));
         });
     }
 
@@ -1880,8 +1889,15 @@ public final class MainActivity extends Activity {
             long token = pairingToken; app.umbra.pairing.PairingSnapshot snap = pairingSnap;
             if (!pairingCurrent(token) || snap == null || PairingPresentation.stage(snap) != PairingPresentation.Stage.WAITING) return;
             if (pairingRemaining() <= 0) {
+                // Ask the domain once; the countdown restarts only if it still reports time left.
                 String id = snap.id();
-                action(() -> pairing().pairingStatus(id), next -> pairingObserved(token, next), e -> pairingFailed(token, e));
+                action(() -> pairing().pairingStatus(id), next -> {
+                    if (next != null && next.expiresInSeconds() <= 0 && PairingPresentation.stage(next) == PairingPresentation.Stage.WAITING) {
+                        if (!pairingCurrent(token)) return;
+                        pairingSnap = next; pairingObservedAt = SystemClock.elapsedRealtime(); updatePairingValidity(); return;
+                    }
+                    pairingObserved(token, next);
+                }, e -> pairingFailed(token, e));
                 return;
             }
             updatePairingValidity(); main.postDelayed(this, 1000);
@@ -2023,7 +2039,10 @@ public final class MainActivity extends Activity {
         if (!beginExternalAction(requestCode == 0 ? app.umbra.access.AccessSnapshot.ExternalAction.ANDROID_SETTINGS
             : app.umbra.access.AccessSnapshot.ExternalAction.DOCUMENT_PICKER)) return;
         try { externalUi = true; startActivityForResult(intent, requestCode); }
-        catch (Exception e) { externalUi = false; endExternalAction(true); notice("Sin aplicación del sistema para esto."); }
+        catch (Exception e) {
+            // beginExternal already closed the gate (it never reopens): lock the UI explicitly and say why.
+            externalUi = false; endExternalAction(true); lockProblem = "Sin aplicación del sistema para esto."; if (unlocked) lock();
+        }
     }
     /** Permission prompt as an explicit external action (a grant never opens the vault or starts a sensor). */
     private void requestPermissionsExternal(String[] permissions, int requestCode) {
