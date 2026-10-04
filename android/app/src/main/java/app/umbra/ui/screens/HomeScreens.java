@@ -42,54 +42,58 @@ public final class HomeScreens {
         void emergency();
     }
 
+    /**
+     * Chats first: real conversations, one primary action ("Nueva conversación"). Status appears only when it
+     * changes what the person can do (incoming call, access pending, server unreachable); nothing permanent.
+     */
     public static Screen chats(Ui ui, ChatsState s, ChatsActions a, View nav) {
         LinearLayout top = ui.column();
-        top.addView(ui.topBar(null, ui.titleBlock("Chats", ui.connectionChip(s.connectivity())),
+        View status = s.offlineEdition() ? null : ui.connectionChip(s.connectivity());
+        top.addView(ui.topBar(null, ui.titleBlock("Chats", status),
             s.features().available(Feature.EMERGENCY_LOCK) ? ui.iconButton(Glyph.EMERGENCY_LOCK, "Bloqueo de emergencia", a::emergency) : null,
-            ui.iconButton(Glyph.PERSON_ADD, "Agregar contacto", a::addContact),
-            ui.iconButton(Glyph.ADD, "Nuevo mensaje", a::newMessage)));
+            ui.iconButton(Glyph.PERSON_ADD, "Agregar contacto", a::addContact)));
         if (s.incoming() != null)
             top.addView(ui.banner(Tone.ACCENT, Glyph.CALL, "Llamada de " + s.incoming().alias(), null,
                 "Ver", () -> a.openIncoming(s.incoming().callId())));
         // Local chats stay available; admission only gates the realm's network and Nearby operations.
         if (s.admission() != null && !s.admission().admitted())
-            top.addView(ui.banner(s.admission().tone(), s.admission().glyph(), s.admission().title(), null, "Admisión", a::admission));
+            top.addView(ui.banner(s.admission().tone(), s.admission().glyph(), s.admission().title(), null, "Configurar", a::admission));
         if (s.transportNotice() != null)
             top.addView(ui.banner(Tone.WARNING, Glyph.NETWORK_OFF, s.transportNotice(), null, "Detalles", a::networkDetails));
-        top.addView(ui.segmented(new String[]{"Todos", "Personas", "Grupos"}, s.filter().ordinal(), null, i -> a.filter(Filter.values()[i])));
 
-        if (s.loading()) return Screen.of(top, ui.skeleton(5), nav);
+        LinearLayout bottom = ui.column();
+        if (s.loading()) { bottom.addView(nav); return Screen.of(top, ui.skeleton(5), bottom); }
+        // Groups have no end-to-end implementation yet (PRODUCT_GAP): only 1:1 conversations are listed.
         List<ConversationItem> shown = new ArrayList<>();
-        for (ConversationItem c : s.conversations())
-            if (s.filter() == Filter.ALL || (s.filter() == Filter.GROUPS) == c.group()) shown.add(c);
-
-        if (s.filter() == Filter.GROUPS && shown.isEmpty()) {
-            LinearLayout empty = ui.emptyState(Glyph.GROUP, "Grupos", null, null, null);
-            empty.addView(ui.pendingChip());
-            empty.addView(ui.button(Ui.ButtonKind.SECONDARY, "Vista previa", Glyph.GROUP, a::newGroup));
-            return Screen.of(top, empty, nav);
+        for (ConversationItem c : s.conversations()) if (!c.group()) shown.add(c);
+        if (shown.isEmpty()) {
+            bottom.addView(nav);
+            return Screen.of(top, ui.emptyState(Glyph.CHAT, "Sin conversaciones", "Agrega a alguien para empezar.", "Nueva conversación", a::newMessage), bottom);
         }
-        if (shown.isEmpty())
-            return Screen.of(top, ui.emptyState(Glyph.CHAT, "Sin conversaciones", null, "Agregar contacto", a::addContact), nav);
-
-        EditText search = ui.field("Buscar");
-        search.setCompoundDrawablesRelative(ui.icon(Glyph.SEARCH, UmbraColors.TEXT_TERTIARY, 20), null, null, null);
-        search.setCompoundDrawablePadding(ui.dp(10)); search.setSingleLine(true);
-        search.setContentDescription("Buscar conversaciones por alias");
+        LinearLayout fabRow = ui.row(); fabRow.setGravity(android.view.Gravity.END);
+        fabRow.addView(ui.fab("Nueva conversación", Glyph.ADD, a::newMessage));
+        bottom.addView(fabRow, Ui.match());
+        bottom.addView(nav);
         List<ConversationItem> filtered = new ArrayList<>(shown);
         ListView list = Lists.of(ui, filtered, c -> conversationRow(ui, c, a), false);
         list.setContentDescription("Conversaciones");
-        search.addTextChangedListener(new TextWatcher() {
-            public void beforeTextChanged(CharSequence t, int st, int c, int af) {}
-            public void onTextChanged(CharSequence t, int st, int b, int c) {
-                String q = t.toString().toLowerCase(Locale.ROOT); filtered.clear();
-                for (ConversationItem item : shown) if (item.title().toLowerCase(Locale.ROOT).contains(q)) filtered.add(item);
-                ((RowAdapter<?>) list.getAdapter()).notifyDataSetChanged();
-            }
-            public void afterTextChanged(Editable e) {}
-        });
-        top.addView(search);
-        return Screen.list(top, list, nav);
+        if (shown.size() > 6) { // search only when the list is long enough to need it
+            EditText search = ui.field("Buscar");
+            search.setCompoundDrawablesRelative(ui.icon(Glyph.SEARCH, UmbraColors.TEXT_TERTIARY, 20), null, null, null);
+            search.setCompoundDrawablePadding(ui.dp(10)); search.setSingleLine(true);
+            search.setContentDescription("Buscar conversaciones por alias");
+            search.addTextChangedListener(new TextWatcher() {
+                public void beforeTextChanged(CharSequence t, int st, int c, int af) {}
+                public void onTextChanged(CharSequence t, int st, int b, int c) {
+                    String q = t.toString().toLowerCase(Locale.ROOT); filtered.clear();
+                    for (ConversationItem item : shown) if (item.title().toLowerCase(Locale.ROOT).contains(q)) filtered.add(item);
+                    ((RowAdapter<?>) list.getAdapter()).notifyDataSetChanged();
+                }
+                public void afterTextChanged(Editable e) {}
+            });
+            top.addView(search);
+        }
+        return Screen.list(top, list, bottom);
     }
 
     public static View conversationRow(Ui ui, ConversationItem c, ChatsActions a) {
@@ -147,9 +151,11 @@ public final class HomeScreens {
         void enrollNew(); void systemSettings(); void networkSettings();
     }
 
-    public static Screen nearby(Ui ui, NearbyState s, NearbyActions a, View nav) {
+    /** @param back non-null when shown as a pushed screen (connected builds); null as the offline tab. */
+    public static Screen nearby(Ui ui, NearbyState s, NearbyActions a, View nav) { return nearby(ui, s, a, nav, null); }
+    public static Screen nearby(Ui ui, NearbyState s, NearbyActions a, View nav, Runnable back) {
         LinearLayout top = ui.column();
-        top.addView(ui.topBar(null, ui.titleBlock("Cerca", ui.chip(s.nearbyActive() ? Tone.OFFLINE : Tone.NEUTRAL,
+        top.addView(ui.topBar(back, ui.titleBlock("Conexión cercana", ui.chip(s.nearbyActive() ? Tone.OFFLINE : Tone.NEUTRAL,
             s.offlineEdition() ? Glyph.OFFLINE_BLUETOOTH : Glyph.BLUETOOTH, s.nearbyActive() ? "Cercanía activa" : "Cercanía detenida")), ui.helpButton(Help.NEARBY)));
         LinearLayout body = ui.column();
         if (s.nearbyActive()) {
@@ -158,9 +164,9 @@ public final class HomeScreens {
             body.addView(st, ui.margins(Ui.match(), 4, 8));
             body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Detener cercanía", Glyph.STOP, a::stopNearby));
         } else {
-            if (!s.admitted()) body.addView(ui.banner(Tone.WARNING, Glyph.DEVICE_PENDING, "Requiere admisión", null, null, null));
+            if (!s.admitted()) body.addView(ui.banner(Tone.WARNING, Glyph.DEVICE_PENDING, "Requiere acceso privado activo", null, null, null));
             Button start = ui.button(Ui.ButtonKind.PRIMARY, "Activar cercanía", Glyph.BLUETOOTH, a::startNearby);
-            if (!s.admitted()) ui.disabled(start, "requiere admisión vigente");
+            if (!s.admitted()) ui.disabled(start, "requiere acceso privado activo");
             body.addView(start);
         }
         body.addView(ui.sectionHeader("Contactos verificados"));
@@ -171,7 +177,7 @@ public final class HomeScreens {
         Button enroll = ui.button(Ui.ButtonKind.SECONDARY, "Vincular", Glyph.PERSON_ADD, a::enrollNew);
         Button visible = ui.button(Ui.ButtonKind.SECONDARY, "Visible 120 s", Glyph.EYE, a::makeVisible);
         body.addView(enroll); body.addView(visible);
-        if (!s.nearbyActive()) for (Button b : new Button[]{listen, connect, enroll, visible}) ui.disabled(b, "activa cercanía");
+        if (!s.nearbyActive()) for (Button b : new Button[]{listen, connect, enroll, visible}) ui.disabled(b, "activa la conexión cercana");
         body.addView(ui.button(Ui.ButtonKind.GHOST, "Emparejar en Android", Glyph.SETTINGS, a::systemSettings));
         if (!s.offlineEdition()) {
             body.addView(ui.sectionHeader("Red"));
@@ -183,18 +189,23 @@ public final class HomeScreens {
     // ------------------------------------------------------------------ Settings root
     public interface SettingsActions { void open(SettingsSection section); void lockNow(); }
 
+    /** Clean grouped list (no cards): account, security, devices, connectivity, data, advanced, about. */
     public static Screen settings(Ui ui, String alias, ConnectivityPresentation connectivity, SettingsActions a, View nav) {
         LinearLayout top = ui.column();
-        top.addView(ui.topBar(null, ui.titleBlock("Ajustes", ui.connectionChip(connectivity))));
+        top.addView(ui.topBar(null, ui.titleBlock("Ajustes", null)));
         LinearLayout body = ui.column();
-        LinearLayout me = ui.listRow(ui.avatar(alias, false, 52), alias, "Perfil", ui.chevron(), () -> a.open(SettingsSection.PROFILE));
-        body.addView(me);
-        body.addView(ui.divider());
-        for (SettingsSection section : SettingsSection.values()) {
-            if (section == SettingsSection.PROFILE) continue;
-            body.addView(ui.listRow(ui.iconTile(section.glyph, Tone.NEUTRAL), section.title, section.subtitle, ui.chevron(), () -> a.open(section)));
-        }
-        body.addView(ui.button(Ui.ButtonKind.SECONDARY, "Bloquear ahora", Glyph.LOCK, a::lockNow));
+        body.addView(ui.listRow(ui.avatar(alias, false, 52), alias, "Perfil e identidad", ui.chevron(), () -> a.open(SettingsSection.PROFILE)));
+        body.addView(ui.sectionHeader("Privacidad y seguridad"));
+        body.addView(ui.settingRow(SettingsSection.SECURITY.glyph, Tone.NEUTRAL, SettingsSection.SECURITY.title, null, () -> a.open(SettingsSection.SECURITY)));
+        body.addView(ui.settingRow(SettingsSection.PRIVACY.glyph, Tone.NEUTRAL, SettingsSection.PRIVACY.title, null, () -> a.open(SettingsSection.PRIVACY)));
+        body.addView(ui.settingRow(SettingsSection.DEVICES.glyph, Tone.NEUTRAL, SettingsSection.DEVICES.title, null, () -> a.open(SettingsSection.DEVICES)));
+        body.addView(ui.sectionHeader("Conectividad y datos"));
+        body.addView(ui.settingRow(connectivity.glyph(), connectivity.tone(), SettingsSection.NETWORK.title, connectivity.chip(), () -> a.open(SettingsSection.NETWORK)));
+        body.addView(ui.settingRow(SettingsSection.STORAGE.glyph, Tone.NEUTRAL, SettingsSection.STORAGE.title, null, () -> a.open(SettingsSection.STORAGE)));
+        body.addView(ui.sectionHeader("Configuración avanzada"));
+        body.addView(ui.settingRow(SettingsSection.ADMISSION.glyph, Tone.NEUTRAL, SettingsSection.ADMISSION.title, null, () -> a.open(SettingsSection.ADMISSION)));
+        body.addView(ui.settingRow(SettingsSection.ABOUT.glyph, Tone.NEUTRAL, SettingsSection.ABOUT.title, null, () -> a.open(SettingsSection.ABOUT)));
+        body.addView(ui.button(Ui.ButtonKind.SECONDARY, "Bloquear ahora", Glyph.LOCK, a::lockNow), ui.margins(Ui.match(), 16, 8));
         return Screen.of(top, body, nav);
     }
 }

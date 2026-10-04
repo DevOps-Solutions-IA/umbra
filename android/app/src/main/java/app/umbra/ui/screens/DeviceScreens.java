@@ -27,28 +27,23 @@ public final class DeviceScreens {
         if (s.problem() != null) body.addView(ui.errorState(ErrorPresentation.of(ErrorKind.GENERIC).withBody(s.problem()), null, false));
         if (!s.rosterConfigured())
             body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, "Solo este dispositivo", null, null, null));
+        body.addView(ui.sectionHeader("Tus dispositivos"));
         for (DeviceItem d : s.own()) {
             LinearLayout trailing = ui.column(); trailing.setGravity(Gravity.END);
             Glyph state = d.current() ? Glyph.DEVICE_CURRENT : d.active() ? Glyph.DEVICE_AUTHORIZED : Glyph.DEVICE_REVOKED;
             Tone tone = d.current() ? Tone.ACCENT : d.active() ? Tone.VERIFIED : Tone.BLOCKED;
-            trailing.addView(ui.chip(tone, state, d.current() ? "Este dispositivo" : d.active() ? "Autorizado" : "Revocado"));
+            trailing.addView(ui.chip(tone, state, d.current() ? "Este dispositivo" : d.active() ? "Aprobado" : "Revocado"));
             LinearLayout row = ui.listRow(ui.iconTile(state, d.current() ? Tone.ACCENT : Tone.NEUTRAL), d.title(), d.detail(), trailing, null);
             body.addView(row);
-            if (d.revocable()) {
-                Button revoke = ui.button(Ui.ButtonKind.DESTRUCTIVE, "Revocar", Glyph.DEVICE_REVOKED, () -> a.revoke(d));
-                body.addView(revoke);
-                if (!s.features().available(Feature.DEVICE_REVOCATION)) {
-                    ui.disabled(revoke, "próximamente");
-                    body.addView(ui.pendingChip());
-                }
-            }
+            // Revocation is offered only when the roster can be distributed to contacts (DEVICE_REVOCATION);
+            // otherwise no dead button is shown (product gap documented in UMBRA_PRODUCT_DESIGN_V1).
+            if (d.revocable() && s.features().available(Feature.DEVICE_REVOCATION))
+                body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Revocar", Glyph.DEVICE_REVOKED, () -> a.revoke(d)));
             body.addView(ui.divider());
         }
-        Button add = ui.button(Ui.ButtonKind.SECONDARY, "Agregar", Glyph.ADD, a::add);
-        if (!s.features().available(Feature.DEVICE_LINKING_WIZARD)) { ui.disabled(add, "próximamente"); body.addView(add); body.addView(ui.pendingChip()); }
-        else body.addView(add);
+        if (s.features().available(Feature.DEVICE_LINKING_WIZARD)) body.addView(ui.button(Ui.ButtonKind.SECONDARY, "Agregar", Glyph.ADD, a::add));
         if (!s.contacts().isEmpty()) {
-            body.addView(ui.sectionHeader("De tus contactos"));
+            body.addView(ui.sectionHeader("Dispositivos de tus contactos"));
             for (ContactDevices c : s.contacts())
                 body.addView(ui.listRow(ui.avatar(c.alias(), false, 40), c.alias(),
                     c.approved() < 0 ? "Sin lista aprobada" : c.approved() + (c.approved() == 1 ? " dispositivo" : " dispositivos"), null, null));

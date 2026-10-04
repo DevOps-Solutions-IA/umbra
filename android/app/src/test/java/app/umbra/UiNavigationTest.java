@@ -63,9 +63,13 @@ public class UiNavigationTest {
         assertEquals(HomeTab.NEARBY, nav.tab());
     }
     @Test public void connectedShowsCallsTab() {
-        assertEquals(java.util.List.of(HomeTab.CHATS, HomeTab.CALLS, HomeTab.NEARBY, HomeTab.SETTINGS), HomeTab.visible(connected()));
+        // Chat-first: connected reaches Nearby as a pushed screen (Ajustes → Conectividad, Agregar contacto).
+        assertEquals(java.util.List.of(HomeTab.CHATS, HomeTab.CALLS, HomeTab.SETTINGS), HomeTab.visible(connected()));
+        assertEquals(java.util.List.of(HomeTab.CHATS, HomeTab.NEARBY, HomeTab.SETTINGS), HomeTab.visible(offline()));
         Navigator nav = new Navigator(connected()); nav.home();
         assertTrue(nav.push(Route.of(Route.Kind.CALL, "c")));
+        assertTrue(nav.push(Route.of(Route.Kind.NEARBY)));
+        assertTrue(nav.push(Route.of(Route.Kind.PAIRING, "SCAN")));
     }
     @Test public void onlyLockAndOnboardingRoutesAreNotSensitive() {
         for (Route.Kind kind : Route.Kind.values())

@@ -10,12 +10,15 @@ public enum HomeTab {
     public final String label; public final Glyph glyph;
     HomeTab(String label, Glyph glyph) { this.label = label; this.glyph = glyph; }
 
-    /** Offline builds never show the Calls tab (no Internet media exists in that APK). */
+    /**
+     * Chat-first hierarchy. Offline builds never show Calls (no Internet media) and keep Nearby as a tab because it
+     * is their transport; connected builds reach Nearby from Ajustes → Conectividad and from "Agregar contacto".
+     */
     public static List<HomeTab> visible(FeatureAvailability features) {
         List<HomeTab> tabs = new ArrayList<>();
         tabs.add(CHATS);
         if (features.visible(Feature.VOICE_CALLS)) tabs.add(CALLS);
-        tabs.add(NEARBY);
+        if (!features.connected()) tabs.add(NEARBY);
         tabs.add(SETTINGS);
         return tabs;
     }

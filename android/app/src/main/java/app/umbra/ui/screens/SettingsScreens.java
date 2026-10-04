@@ -22,7 +22,15 @@ public final class SettingsScreens {
     public record SettingsState(SettingsSection section, String alias, String identityId, FeatureAvailability features,
                                 boolean offlineEdition, ConnectivityPresentation connectivity, boolean relayRegistered, String relayAddress,
                                 String expiryLabel, int expiryIndex, String version, boolean passwordConfigured, String autoLockLabel,
-                                AdmissionPresentation admission) {}
+                                AdmissionPresentation admission, String autoLockRemaining) {
+        public SettingsState(SettingsSection section, String alias, String identityId, FeatureAvailability features,
+                             boolean offlineEdition, ConnectivityPresentation connectivity, boolean relayRegistered, String relayAddress,
+                             String expiryLabel, int expiryIndex, String version, boolean passwordConfigured, String autoLockLabel,
+                             AdmissionPresentation admission) {
+            this(section, alias, identityId, features, offlineEdition, connectivity, relayRegistered, relayAddress, expiryLabel, expiryIndex,
+                version, passwordConfigured, autoLockLabel, admission, null);
+        }
+    }
     public interface SettingsActions {
         void back(); void createInvitation(); void importInvitation(); void revokeInvitations();
         void lockNow(); void destroyIdentity(); void expiry(int index);
@@ -37,8 +45,8 @@ public final class SettingsScreens {
     public static Screen section(Ui ui, SettingsState s, SettingsActions a) {
         LinearLayout top = ui.column();
         Help help = switch (s.section()) {
-            case SECURITY -> Help.ACCESS; case NETWORK -> Help.NETWORK; case STORAGE -> Help.STORAGE;
-            case PROFILE -> Help.INVITATION; case ABOUT -> Help.DEVELOPMENT; default -> null;
+            case SECURITY -> Help.AUTO_LOCK; case NETWORK -> Help.NETWORK; case STORAGE -> Help.STORAGE;
+            case PROFILE -> Help.PAIRING; case ABOUT -> Help.DEVELOPMENT; default -> null;
         };
         top.addView(help == null ? ui.topBar(a::back, ui.titleBlock(s.section().title, null))
             : ui.topBar(a::back, ui.titleBlock(s.section().title, null), ui.helpButton(help)));
@@ -47,7 +55,6 @@ public final class SettingsScreens {
             case PROFILE -> profile(ui, s, a, body);
             case PRIVACY -> privacy(ui, s, body);
             case SECURITY -> security(ui, s, a, body);
-            case NOTIFICATIONS -> notifications(ui, s, body);
             case NETWORK -> network(ui, s, a, body);
             case STORAGE -> storage(ui, s, a, body);
             case ABOUT -> about(ui, s, body);
@@ -77,22 +84,28 @@ public final class SettingsScreens {
         TextView code = ui.code(Fingerprints.lines(s.identityId(), 4)); code.setPadding(0, ui.dp(8), 0, ui.dp(4)); id.addView(code);
         body.addView(id);
         body.addView(ui.sectionHeader("Contactos"));
-        body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Crear invitación", Glyph.PERSON_ADD, a::createInvitation));
-        body.addView(ui.button(Ui.ButtonKind.SECONDARY, "Importar archivo", Glyph.FILE, a::importInvitation));
-        body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Revocar invitaciones", Glyph.BLOCK, a::revokeInvitations));
-        LinearLayout qr = ui.row(); qr.addView(ui.text(UmbraType.CAPTION, "Invitación por QR"), Ui.weight()); qr.addView(ui.pendingChip());
-        body.addView(qr, ui.margins(Ui.match(), 6, 0));
-        body.addView(ui.listRow(ui.iconTile(Glyph.DEVICES, Tone.NEUTRAL), "Dispositivos", null, ui.chevron(), a::devices));
+        // createInvitation opens "Agregar contacto" (QR, code, file); the file import stays under it as well.
+        body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Agregar contacto", Glyph.PERSON_ADD, a::createInvitation));
+        body.addView(ui.button(Ui.ButtonKind.GHOST, "Cancelar invitaciones sin usar", Glyph.BLOCK, a::revokeInvitations));
+        body.addView(ui.settingRow(Glyph.DEVICES, Tone.NEUTRAL, "Dispositivos", null, a::devices));
     }
 
+    /**
+     * Protections enforced by the domain adapters, shown as states (not switches: none of them can be turned off).
+     * Controls without an implementation are not shown at all (see docs/design/UMBRA_PRODUCT_DESIGN_V1.md gaps).
+     */
     private static void privacy(Ui ui, SettingsState s, LinearLayout body) {
-        body.addView(ui.switchRow("Capturas bloqueadas", null, true, null, null));
-        body.addView(ui.switchRow("Recientes ocultos", null, true, null, null));
-        body.addView(ui.switchRow("Teclado sin aprendizaje", null, true, null, null));
-        body.addView(ui.switchRow("Contenido en notificaciones", null, false, "Próximamente", null));
-        body.addView(ui.switchRow("Abrir enlaces", null, false, "Próximamente", null));
-        body.addView(ui.switchRow("Limpiar metadatos de fotos", null, false, "Próximamente", null));
-        body.addView(ui.switchRow("Portapapeles protegido", null, false, "Próximamente", null));
+        body.addView(statusRow(ui, Glyph.EYE_OFF, "Capturas de pantalla", "Bloqueadas"));
+        body.addView(statusRow(ui, Glyph.EYE_OFF, "Vista en Recientes", "Oculta"));
+        body.addView(statusRow(ui, Glyph.PASSWORD, "Teclado", "Sin aprendizaje"));
+        if (s.features().available(Feature.CLIPBOARD_PROTECTION))
+            body.addView(statusRow(ui, Glyph.SHIELD, "Portapapeles", "Solo texto, se borra al bloquear"));
+        body.addView(statusRow(ui, Glyph.BELL_OFF, "Notificaciones", "Sin contenido"));
+    }
+    private static LinearLayout statusRow(Ui ui, Glyph glyph, String title, String state) {
+        LinearLayout r = ui.settingRow(glyph, Tone.NEUTRAL, title, state, null);
+        r.setContentDescription(title + ": " + state);
+        return r;
     }
 
     private static void security(Ui ui, SettingsState s, SettingsActions a, LinearLayout body) {
@@ -100,7 +113,9 @@ public final class SettingsScreens {
         vault.addView(ui.text(UmbraType.SECURITY_LABEL, "Bóveda"));
         if (s.passwordConfigured()) {
             vault.addView(ui.chip(Tone.SUCCESS, Glyph.PASSWORD, "Contraseña activa"));
-            vault.addView(fact(ui, "Autobloqueo", s.autoLockLabel()));
+            vault.addView(fact(ui, "Bloqueo automático", s.autoLockLabel()));
+            // Observed from the access coordinator at render time; not renewed by touches, never persisted.
+            if (s.autoLockRemaining() != null) vault.addView(fact(ui, "Ahora", s.autoLockRemaining()));
         } else {
             vault.addView(ui.chip(Tone.WARNING, Glyph.VAULT_LOCKED, "Sin contraseña"));
             vault.addView(ui.text(UmbraType.CAPTION, "Solo usa el bloqueo de Android."));
@@ -111,19 +126,15 @@ public final class SettingsScreens {
         body.addView(ui.button(Ui.ButtonKind.PRIMARY, "Bloquear ahora", Glyph.LOCK, a::lockNow));
         LinearLayout status = ui.card();
         status.addView(fact(ui, "Red", s.connectivity().chip()));
-        status.addView(fact(ui, "Admisión", s.admission().title()));
+        status.addView(fact(ui, "Acceso privado", s.admission().title()));
         body.addView(status);
-        body.addView(ui.listRow(ui.iconTile(s.admission().glyph(), s.admission().tone()), "Admisión", null, ui.chevron(), a::admission));
+        body.addView(ui.settingRow(Glyph.DEVICES, Tone.NEUTRAL, "Dispositivos", null, a::devices));
+        body.addView(ui.settingRow(s.admission().glyph(), s.admission().tone(), "Acceso privado", s.admission().title(), a::admission));
         body.addView(ui.sectionHeader("Emergencia"));
         body.addView(EntryScreens.emergencyLock(ui, s.features(), a::emergency));
         body.addView(ui.sectionHeader("Zona de riesgo"));
         body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Destruir identidad", Glyph.TRASH, a::destroyIdentity));
         body.addView(ui.text(UmbraType.CAPTION, "Irreversible.", UmbraColors.WARNING_FG));
-    }
-
-    private static void notifications(Ui ui, SettingsState s, LinearLayout body) {
-        body.addView(ui.banner(Tone.NEUTRAL, Glyph.BELL_OFF, "Sin notificaciones", null, null, null));
-        body.addView(ui.switchRow("Solo «Nuevo mensaje»", null, false, "Próximamente", null));
     }
 
     private static void network(Ui ui, SettingsState s, SettingsActions a, LinearLayout body) {

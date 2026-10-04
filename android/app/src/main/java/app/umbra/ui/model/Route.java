@@ -8,7 +8,8 @@ public record Route(Kind kind, String arg) {
         /** This device's private admission. */ ADMISSION, /** Realm authority tools (domain re-checks authority). */ ADMISSION_ADMIN,
         /** Personal password change (vault open). */ CHANGE_PASSWORD,
         /** Open restricted object (arg: object id). Never restored after lock/recreation. */ CONTENT,
-        /** Add-contact flow (arg: PairingScreens.Mode). Never restored after lock/recreation. */ PAIRING }
+        /** Add-contact flow (arg: PairingScreens.Mode). Never restored after lock/recreation. */ PAIRING,
+        /** Nearby (Bluetooth) as a pushed screen in connected builds (offline shows it as a tab). */ NEARBY }
 
     public static Route of(Kind kind) { return new Route(kind, null); }
     public static Route of(Kind kind, String arg) { return new Route(kind, Objects.requireNonNull(arg)); }

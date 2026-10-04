@@ -80,8 +80,6 @@ public final class AdmissionScreens {
             Button cancel = ui.button(Ui.ButtonKind.GHOST, "Cancelar solicitud", Glyph.CLOSE, a::cancelRequest);
             if (s.busy()) ui.disabled(cancel, "operación en curso");
             body.addView(cancel);
-            LinearLayout qr = ui.row(); qr.addView(ui.text(UmbraType.CAPTION, "Compartir por QR"), Ui.weight()); qr.addView(ui.pendingChip());
-            body.addView(qr, ui.margins(Ui.match(), 6, 0));
         }
         body.addView(ui.sectionHeader("Administración"));
         body.addView(ui.listRow(ui.iconTile(Glyph.SHIELD, Tone.NEUTRAL), "Administración", "Solo autoridad", ui.chevron(), a::admin));

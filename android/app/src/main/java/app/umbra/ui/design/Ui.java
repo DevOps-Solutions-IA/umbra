@@ -202,6 +202,14 @@ public final class Ui {
         if (b instanceof UmbraButton u) u.exitBusy(u.glyph == null ? null : icon(u.glyph, u.foreground, ICON_SMALL));
         else b.setEnabled(true);
     }
+    /** Extended floating action (pill) for the one primary action of a screen; elevation instead of a border. */
+    public Button fab(String label, Glyph glyph, Runnable onClick) {
+        Button b = button(ButtonKind.PRIMARY, label, glyph, onClick);
+        b.setBackground(pressable(shape(UmbraColors.ACCENT_STRONG, RADIUS_PILL), RADIUS_PILL));
+        b.setElevation(dp(6)); b.setPadding(dp(20), dp(SPACE_12), dp(24), dp(SPACE_12));
+        LinearLayout.LayoutParams p = wrap(); p.setMargins(0, dp(SPACE_8), dp(SPACE_4), dp(SPACE_12)); b.setLayoutParams(p);
+        return b;
+    }
     /** Disabled control that states why, instead of silently doing nothing. */
     public Button disabled(Button b, String reason) {
         b.setEnabled(false); b.setAlpha(OPACITY_DISABLED);

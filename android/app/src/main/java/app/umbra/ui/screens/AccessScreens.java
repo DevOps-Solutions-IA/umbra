@@ -49,13 +49,9 @@ public final class AccessScreens {
         if (!step.body.isEmpty()) body.addView(ui.text(UmbraType.BODY_SECONDARY, step.body));
         return body;
     }
+    /** Errors inline; the running phase is shown on the submit button itself (busy, double taps ignored). */
     private static void busy(Ui ui, LinearLayout body, boolean busy, String problem) {
-        if (problem != null) body.addView(ui.banner(Tone.DANGER, Glyph.WARNING, problem, null, null, null), ui.margins(Ui.match(), 10, 0));
-        if (busy) {
-            TextView t = ui.text(UmbraType.CAPTION, "Comprobando…");
-            t.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-            body.addView(t, ui.margins(Ui.match(), 8, 0));
-        }
+        if (problem != null && !busy) body.addView(ui.banner(Tone.DANGER, Glyph.WARNING, problem, null, null, null), ui.margins(Ui.match(), 10, 0));
     }
 
     public static Screen create(Ui ui, CreateState s, CreateActions a) {
@@ -66,7 +62,7 @@ public final class AccessScreens {
         busy(ui, body, s.busy(), s.problem());
         LinearLayout bottom = ui.column();
         Button submit = ui.button(Ui.ButtonKind.PRIMARY, s.legacy() ? "Inscribir" : "Crear", Glyph.PASSWORD, () -> a.submit(password, confirmation));
-        if (s.busy()) ui.disabled(submit, "operación en curso");
+        if (s.busy()) ui.busy(submit, "Creando protección…");
         bottom.addView(submit);
         if (s.legacy()) {
             Button later = ui.button(Ui.ButtonKind.GHOST, "Ahora no", Glyph.CLOSE, a::later);
@@ -86,11 +82,12 @@ public final class AccessScreens {
         body.addView(ui.segmented(PasswordPolicy.AUTO_LOCK_LABELS, s.autoLockIndex(), null, a::autoLock));
         busy(ui, body, s.busy(), s.problem());
         LinearLayout bottom = ui.column();
-        LinearLayout chip = ui.row(); chip.setGravity(android.view.Gravity.CENTER);
-        chip.addView(ui.chip(Tone.NEUTRAL, Glyph.NETWORK_OFF, "Sin conexión"));
-        bottom.addView(chip, Ui.match());
+        if (!s.offlineEdition()) { // unlocking never connects: said once, quietly
+            TextView quiet = ui.text(UmbraType.CAPTION, "Abrir no conecta a la red."); quiet.setGravity(android.view.Gravity.CENTER);
+            bottom.addView(quiet, Ui.match());
+        }
         Button submit = ui.button(Ui.ButtonKind.PRIMARY, "Abrir", Glyph.UNLOCK, () -> a.submit(password));
-        if (s.busy()) ui.disabled(submit, "operación en curso");
+        if (s.busy()) ui.busy(submit, "Abriendo…");
         bottom.addView(submit);
         bottom.addView(ui.button(Ui.ButtonKind.GHOST, "Bloquear", Glyph.LOCK, a::lockNow));
         return Screen.of(null, body, bottom);
@@ -105,7 +102,7 @@ public final class AccessScreens {
         EditText confirmation = secret(ui, body, "Repetir", "Repetir contraseña nueva");
         busy(ui, body, s.busy(), s.problem());
         Button submit = ui.button(Ui.ButtonKind.PRIMARY, "Cambiar", Glyph.CHANGE_PASSWORD, () -> a.submit(current, next, confirmation));
-        if (s.busy()) ui.disabled(submit, "operación en curso");
+        if (s.busy()) ui.busy(submit, "Cambiando contraseña…");
         LinearLayout bottom = ui.column(); bottom.addView(submit);
         return Screen.of(top, body, bottom);
     }

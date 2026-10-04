@@ -58,6 +58,7 @@ public final class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final AtomicBoolean syncBusy = new AtomicBoolean(false);
     private final Map<String,String> drafts = new HashMap<>();
+    private final Set<String> sending = new HashSet<>();
     /**
      * Process-scoped gate: Activity recreation (rotation, configuration) must keep the SAME emergency coordinator,
      * so a CLOSING/INCOMPLETE closure can never be escaped by recreating the Activity (docs/EMERGENCY_LOCK.md).
@@ -508,7 +509,7 @@ public final class MainActivity extends Activity {
         nav.lock(); drafts.clear(); messages = List.of(); locations = List.of(); contacts = List.of(); callSessions = List.of(); trust = Map.of(); contactDevices = Map.of();
         devicesState = null; profile = null; loadedPeer = null; groupSelection.clear(); groupName = ""; qrCache.clear(); videoIntent.clear(); modulatorOpen = false; verifyTechnical = false;
         BluetoothLink link = bluetooth; bluetooth = null; if (link != null) link.close();
-        clearPairing(); pairingProduct = null;
+        clearPairing(); pairingProduct = null; sending.clear();
         transportStatus = "Bloqueado";
     }
     private void authenticate() {
@@ -842,7 +843,15 @@ public final class MainActivity extends Activity {
         return switch (r.kind()) { case CHAT, CONTACT, VERIFY -> r.arg(); default -> null; };
     }
     private boolean onRoute(Route.Kind kind) { return nav.current().kind() == kind; }
-    private boolean onTab(HomeTab tab) { return onRoute(Route.Kind.HOME) && nav.tab() == tab; }
+    private boolean onTab(HomeTab tab) {
+        if (tab == HomeTab.NEARBY && onRoute(Route.Kind.NEARBY)) return true; // connected builds push Nearby as a screen
+        return onRoute(Route.Kind.HOME) && nav.tab() == tab;
+    }
+    /** Offline: the Nearby tab. Connected: a pushed "Conexión cercana" screen (reached from settings/add contact). */
+    private void openNearby() {
+        if (HomeTab.visible(features).contains(HomeTab.NEARBY)) { nav.home(); nav.selectTab(HomeTab.NEARBY); render(); }
+        else go(Route.of(Route.Kind.NEARBY));
+    }
 
     private void refresh() {
         if (!unlocked || engine == null) return;
@@ -979,6 +988,8 @@ public final class MainActivity extends Activity {
             case CHANGE_PASSWORD -> renderChangePassword();
             case CONTENT -> renderViewer(route.arg());
             case PAIRING -> renderPairing();
+            case NEARBY -> mount(HomeScreens.nearby(ui, new HomeScreens.NearbyState(transportStatus, !BuildConfig.ALLOW_RELAY, connectivity(),
+                nearbyActive && bluetooth != null, admissionPresentation().admitted()), nearbyActions(), null, this::back));
             default -> { nav.home(); renderHome(); }
         }
     }
@@ -1117,7 +1128,7 @@ public final class MainActivity extends Activity {
             @Override public void showQr() { close.run(); startPairing(PairingScreens.Mode.SHOW_QR); }
             @Override public void showCode() { close.run(); startPairing(PairingScreens.Mode.SHOW_CODE); }
             @Override public void file() { close.run(); startPairing(PairingScreens.Mode.FILE); }
-            @Override public void nearby() { close.run(); nav.selectTab(HomeTab.NEARBY); render(); }
+            @Override public void nearby() { close.run(); openNearby(); }
             @Override public void configure() { close.run(); go(Route.of(Route.Kind.SETTINGS_SECTION, SettingsSection.NETWORK.name())); }
         }));
     }
@@ -1165,7 +1176,11 @@ public final class MainActivity extends Activity {
             @Override public void videoCall() { startCall(peer, true); }
             @Override public void openCall() { VoiceSnapshotView v = voice(); if (v != null && v.callId() != null) go(Route.of(Route.Kind.CALL, v.callId())); }
             @Override public void attach() { attachSheet(peer, t); }
-            @Override public void send(String text) { action(() -> engine.sendText(peer, text, ttl), id -> { drafts.remove(peer); refresh(); syncNow(); }); }
+            @Override public void send(String text) {
+                if (!sending.add(peer)) return; // one send per tap: repeated taps never duplicate a message
+                action(() -> engine.sendText(peer, text, ttl), id -> { sending.remove(peer); drafts.remove(peer); refresh(); syncNow(); },
+                    e -> { sending.remove(peer); notice(safeError(e)); }, skipped -> sending.remove(peer));
+            }
             @Override public void draft(String text) { drafts.put(peer, text); }
             @Override public void message(MessageItem item) {
                 if (item.kind() == MessageItem.Kind.TEXT) copyText(peer, item); else exportFile(byId.get(item.id()));
@@ -1248,7 +1263,10 @@ public final class MainActivity extends Activity {
             @Override public void back() { verifyTechnical = false; MainActivity.this.back(); }
             @Override public void method(SecurityScreens.Method m) { verifyMethod = m; render(); }
             @Override public void compare(String typed) {
-                action(() -> { engine.verify(peer, typed); return true; }, ok -> { notice("Verificado"); verifyTechnical = false; nav.back(); refresh(); syncNow(); });
+                if (!sending.add("verify:" + peer)) return; // single comparison per tap
+                // Only the domain marks VERIFIED (exact comparison); a pairing never does.
+                action(() -> { engine.verify(peer, typed); return true; }, ok -> { sending.remove("verify:" + peer); notice("Contacto verificado"); verifyTechnical = false; nav.back(); refresh(); syncNow(); },
+                    e -> { sending.remove("verify:" + peer); notice(safeError(e)); }, skipped -> sending.remove("verify:" + peer));
             }
             @Override public void technical(boolean show) { verifyTechnical = show; render(); }
         }));
@@ -1297,9 +1315,9 @@ public final class MainActivity extends Activity {
         int expiryIndex = ttl == 3600 ? 0 : ttl == 604800 ? 2 : 1;
         mount(SettingsScreens.section(ui, new SettingsScreens.SettingsState(section, profile.optString("alias"), profile.optString("id"), features,
             !BuildConfig.ALLOW_RELAY, connectivity(), profile.optBoolean("registered"), profile.optString("relay"), ttlName(), expiryIndex, BuildConfig.VERSION_NAME,
-            passwordConfigured, PasswordPolicy.AUTO_LOCK_LABELS[autoLockIndex], admissionPresentation()), new SettingsScreens.SettingsActions() {
+            passwordConfigured, PasswordPolicy.AUTO_LOCK_LABELS[autoLockIndex], admissionPresentation(), AccessPresentation.remaining(observeAccess())), new SettingsScreens.SettingsActions() {
             @Override public void back() { MainActivity.this.back(); }
-            @Override public void createInvitation() { MainActivity.this.createInvitation(); }
+            @Override public void createInvitation() { addContactSheet(); }
             @Override public void importInvitation() { pickContact(); }
             @Override public void revokeInvitations() { confirm("Revocar invitaciones", "Los contactos existentes se conservan.", "Revocar", true,
                 () -> action(() -> {
@@ -1344,7 +1362,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void connect() { connectNetwork(); }
             @Override public void disconnect() { disconnectNetwork(); }
-            @Override public void nearby() { nav.home(); nav.selectTab(HomeTab.NEARBY); render(); }
+            @Override public void nearby() { openNearby(); }
             @Override public void changePassword() { changeProblem = null; go(Route.of(Route.Kind.CHANGE_PASSWORD)); }
             @Override public void enrollPassword() {
                 confirm("Añadir contraseña", "La bóveda quedará bloqueada. Sin recuperación.",
@@ -2108,7 +2126,9 @@ public final class MainActivity extends Activity {
     private String ttlName() { return ttl == 3600 ? "1 hora" : ttl == 604800 ? "7 días" : "24 horas"; }
     /** ⓘ help sheets: explanations moved off the screens. Secure dialog, dismissed on lock. */
     private void showHelp(Help topic) {
-        if (!unlocked && topic != Help.DEVELOPMENT) return;
+        // Static explanations only; topics shown on locked/emergency screens are allowed while locked.
+        boolean lockedSafe = topic == Help.DEVELOPMENT || topic == Help.EMERGENCY || topic == Help.ACCESS || topic == Help.AUTO_LOCK;
+        if (!unlocked && !lockedSafe) return;
         Dialog[] sheet = new Dialog[1];
         sheet[0] = SecureDialogs.sheet(this, this::track, ui.helpSheet(topic, () -> sheet[0].dismiss()));
     }

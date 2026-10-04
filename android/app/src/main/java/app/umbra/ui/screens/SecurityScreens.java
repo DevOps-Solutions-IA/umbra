@@ -42,23 +42,26 @@ public final class SecurityScreens {
         if (s.trust().level() != TrustLevel.BLOCKED)
             body.addView(ui.button(s.trust().level() == TrustLevel.VERIFIED ? Ui.ButtonKind.SECONDARY : Ui.ButtonKind.PRIMARY, s.trust().primaryAction(), Glyph.SHIELD_CHECK, a::verify));
         LinearLayout info = ui.card();
-        info.addView(fact(ui, "ID", Fingerprints.shortId(s.peerId())));
         info.addView(fact(ui, "Dispositivos", s.approvedDevices() < 0 ? "Sin lista aprobada" : String.valueOf(s.approvedDevices())));
         info.addView(fact(ui, "Archivos", String.valueOf(s.sharedFiles())));
+        body.addView(info);
+        // Identifiers and admission evidence stay behind a secondary "Detalles" section.
+        LinearLayout details = ui.card(); details.setVisibility(View.GONE);
+        details.addView(fact(ui, "ID", Fingerprints.shortId(s.peerId())));
         if (s.admission() != null) {
             // Local admission evidence (peerStatus); shown apart from the trust badge and never as "Verificado".
-            LinearLayout adm = fact(ui, "Admisión", s.admission().value());
+            LinearLayout adm = fact(ui, "Acceso privado", s.admission().value());
             adm.setContentDescription(s.admission().description());
-            info.addView(adm);
+            details.addView(adm);
         }
-        body.addView(info);
+        Button toggle = ui.button(Ui.ButtonKind.GHOST, "Detalles", Glyph.INFO, null);
+        toggle.setStateDescription("Ocultos");
+        toggle.setOnClickListener(v -> { boolean show = details.getVisibility() != View.VISIBLE; details.setVisibility(show ? View.VISIBLE : View.GONE); toggle.setStateDescription(show ? "Visibles" : "Ocultos"); });
+        body.addView(toggle); body.addView(details);
         body.addView(ui.sectionHeader("Acciones"));
         body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, s.trust().level() == TrustLevel.BLOCKED ? "Desbloquear" : "Bloquear", Glyph.BLOCK,
             () -> a.block(s.trust().level() != TrustLevel.BLOCKED)));
         body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Vaciar chat", Glyph.TRASH, a::clear));
-        Button remove = ui.button(Ui.ButtonKind.DESTRUCTIVE, "Eliminar contacto", Glyph.TRASH, null);
-        ui.disabled(remove, "próximamente");
-        body.addView(remove);
         return Screen.of(top, body, null);
     }
 
@@ -84,7 +87,6 @@ public final class SecurityScreens {
         LinearLayout body = ui.column();
         if (level == TrustLevel.IDENTITY_CHANGED) {
             body.addView(ui.banner(s.trust().tone(), s.trust().glyph(), "Nueva identidad", "Requiere su nueva invitación.", null, null));
-            body.addView(ui.pendingChip());
         }
         body.addView(ui.segmented(new String[]{"Código", "QR", "Comparar"}, s.method().ordinal(), null, i -> a.method(Method.values()[i])));
         switch (s.method()) {
@@ -103,8 +105,8 @@ public final class SecurityScreens {
                     LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(ui.dp(220), ui.dp(220)); qp.gravity = Gravity.CENTER_HORIZONTAL; qp.topMargin = ui.dp(10);
                     body.addView(qr, qp);
                 } else body.addView(ui.text(UmbraType.CAPTION, "QR no disponible. Usa el código."));
-                LinearLayout scan = ui.row(); scan.addView(ui.text(UmbraType.CAPTION, "Escanear"), Ui.weight()); scan.addView(ui.pendingChip());
-                body.addView(scan, ui.margins(Ui.match(), 8, 0));
+                // This is the safety QR (verification), never the pairing QR. Scanning it is not implemented: compare instead.
+                body.addView(ui.text(UmbraType.CAPTION, "Muéstralo y compárenlo en ambos teléfonos."), ui.margins(Ui.match(), 8, 0));
             }
             case MANUAL -> {
                 if (level == TrustLevel.BLOCKED) body.addView(ui.text(UmbraType.CAPTION, "Desbloquea para verificar.", UmbraColors.WARNING_FG));
