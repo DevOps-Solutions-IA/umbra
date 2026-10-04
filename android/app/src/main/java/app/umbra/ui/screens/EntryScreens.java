@@ -1,7 +1,9 @@
 package app.umbra.ui.screens;
 
 import android.view.Gravity;
+import android.view.View;
 import android.widget.EditText;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import app.umbra.ui.design.UmbraColors;
@@ -17,7 +19,13 @@ public final class EntryScreens {
      * @param deviceSecure false when Android has no PIN/password/biometric (vault cannot be created)
      * @param notice       neutral result of the last operation (e.g. password created, vault locked again)
      */
-    public record LockState(boolean deviceSecure, boolean offlineEdition, String problem, String notice) {}
+    /**
+     * @param reason         why it locked, from the access coordinator's lock cause (null: nothing useful to say)
+     * @param authenticating an Android authentication prompt is in progress (the button shows that phase)
+     */
+    public record LockState(boolean deviceSecure, boolean offlineEdition, String problem, String notice, String reason, boolean authenticating) {
+        public LockState(boolean deviceSecure, boolean offlineEdition, String problem, String notice) { this(deviceSecure, offlineEdition, problem, notice, null, false); }
+    }
     public interface LockActions { void unlock(); void openSecuritySettings(); }
 
     public static Screen lock(Ui ui, LockState s, LockActions a) {
@@ -25,18 +33,22 @@ public final class EntryScreens {
         body.setPadding(ui.dp(8), ui.dp(96), ui.dp(8), ui.dp(16));
         body.addView(ui.logo(72, UmbraColors.ACCENT_MUTED));
         TextView brand = ui.heading(UmbraType.DISPLAY, "UMBRA"); brand.setLetterSpacing(0.22f); brand.setGravity(Gravity.CENTER);
-        body.addView(brand, ui.margins(Ui.match(), 20, 18));
-        LinearLayout chips = ui.row(); chips.setGravity(Gravity.CENTER);
-        chips.addView(ui.chip(Tone.NEUTRAL, Glyph.LOCK, "Bóveda bloqueada"));
-        chips.addView(ui.chip(Tone.NEUTRAL, Glyph.NETWORK_OFF, "Sin conexión"));
-        body.addView(chips, Ui.match());
+        body.addView(brand, ui.margins(Ui.match(), 20, 8));
+        // One quiet status line; the cause is said once, only when it helps.
+        TextView status = ui.text(UmbraType.BODY_SECONDARY, s.reason() != null ? s.reason() : "UMBRA bloqueado");
+        status.setGravity(Gravity.CENTER); status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        body.addView(status, Ui.match());
         if (s.notice() != null) body.addView(ui.banner(Tone.NEUTRAL, Glyph.INFO, s.notice(), null, null, null), ui.margins(Ui.match(), 16, 0));
         if (s.problem() != null) body.addView(ui.banner(Tone.DANGER, Glyph.WARNING, s.problem(), null, null, null), ui.margins(Ui.match(), 16, 0));
         LinearLayout bottom = ui.column();
         if (!s.deviceSecure()) {
             bottom.addView(ui.banner(Tone.WARNING, Glyph.WARNING, "Falta bloqueo de pantalla", "Activa PIN, contraseña o biometría en Android.", null, null));
             bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Configurar bloqueo", Glyph.SETTINGS, a::openSecuritySettings));
-        } else bottom.addView(ui.button(Ui.ButtonKind.PRIMARY, "Desbloquear", Glyph.UNLOCK, a::unlock));
+        } else {
+            Button unlock = ui.button(Ui.ButtonKind.PRIMARY, "Desbloquear", Glyph.UNLOCK, a::unlock);
+            if (s.authenticating()) ui.busy(unlock, "Esperando a Android…");
+            bottom.addView(unlock);
+        }
         TextView dev = ui.text(UmbraType.CAPTION, "VERSIÓN DE DESARROLLO", UmbraColors.TEXT_TERTIARY); dev.setGravity(Gravity.CENTER); dev.setLetterSpacing(0.08f);
         bottom.addView(dev, ui.margins(Ui.match(), 10, 0));
         return Screen.of(null, body, bottom);

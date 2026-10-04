@@ -52,6 +52,16 @@ public final class VaultFlow {
     /** Legacy (not enrolled) vault: Android authentication alone opens it, as before v1. */
     public static Engine openLegacy(Vault vault, LongSupplier elapsed) throws Exception { return open(vault, elapsed); }
 
+    /**
+     * Builds the Engine after the canonical {@code vault.access().unlock(...)} reported OPENED. Connectivity starts
+     * at UNLOCKED_OFFLINE (never connects). Unreadable records lock the vault again and never delete anything.
+     */
+    public static Engine opened(Vault vault, LongSupplier elapsed) throws Exception {
+        try { return open(vault, elapsed); }
+        catch (AccessGate.LockedException locked) { throw locked; }
+        catch (Exception unreadable) { vault.lock(); throw new RecordsUnreadable(unreadable); }
+    }
+
     private static Engine open(Vault vault, LongSupplier elapsed) throws Exception {
         Engine engine = new Engine(vault, elapsed);
         engine.connectivity().vaultUnlocked();

@@ -18,6 +18,8 @@ public enum Feature {
     NEARBY_BLUETOOTH("Cercanía por Bluetooth"),
     RELAY_SYNC("Sincronización por servidor"),
     QR_SCAN("Escanear QR"),
+    PAIRING_ONLINE("Vincular por QR o código"),
+    PAIRING_FILE("Vincular por archivo"),
     VAULT_PASSWORD("Contraseña personal"),
     PRIVATE_ADMISSION("Admisión de dispositivos"),
     PRIVATE_STARTUP("Inicio sin red"),

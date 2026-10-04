@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mirror of app.umbra.ui.design.UmbraTokens for resources (UiDesignTokensTest keeps both identical). -->
+<resources>
+    <dimen name="umbra_space_4">4dp</dimen>
+    <dimen name="umbra_space_8">8dp</dimen>
+    <dimen name="umbra_space_12">12dp</dimen>
+    <dimen name="umbra_space_16">16dp</dimen>
+    <dimen name="umbra_space_24">24dp</dimen>
+    <dimen name="umbra_space_32">32dp</dimen>
+    <dimen name="umbra_space_40">40dp</dimen>
+    <dimen name="umbra_space_48">48dp</dimen>
+    <dimen name="umbra_radius_small">8dp</dimen>
+    <dimen name="umbra_radius_control">14dp</dimen>
+    <dimen name="umbra_radius_card">18dp</dimen>
+    <dimen name="umbra_radius_sheet">24dp</dimen>
+    <dimen name="umbra_touch_min">48dp</dimen>
+    <dimen name="umbra_button_height">52dp</dimen>
+    <dimen name="umbra_row_height">64dp</dimen>
+    <dimen name="umbra_app_bar_height">56dp</dimen>
+</resources>

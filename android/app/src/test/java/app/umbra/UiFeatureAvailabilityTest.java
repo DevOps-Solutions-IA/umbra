@@ -8,7 +8,7 @@ import static org.junit.Assert.*;
 /** No capability is presented as working without a real implementation in the build. */
 public class UiFeatureAvailabilityTest {
     private static final Feature[] PENDING_SECURITY = {Feature.GROUP_CHAT, Feature.NOTIFICATION_PRIVACY,
-        Feature.PHOTO_METADATA_CLEANING, Feature.QR_SCAN, Feature.MESSAGE_REPLY, Feature.DEVICE_REVOCATION, Feature.DEVICE_LINKING_WIZARD};
+        Feature.PHOTO_METADATA_CLEANING, Feature.MESSAGE_REPLY, Feature.DEVICE_REVOCATION, Feature.DEVICE_LINKING_WIZARD};
 
     @Test public void plannedSecurityFeaturesAreNeverAvailable() {
         for (FeatureAvailability a : new FeatureAvailability[]{FeatureAvailability.forBuild(true, true), FeatureAvailability.forBuild(false, false)})
@@ -16,6 +16,14 @@ public class UiFeatureAvailabilityTest {
                 assertFalse(f.name(), a.available(f));
                 assertEquals(f.name(), "Próximamente", a.label(f));
             }
+    }
+    /** PAIRING_PRODUCT_V1: QR/code and the camera scanner exist only where relay + CAMERA exist; files everywhere. */
+    @Test public void pairingIsOnlineAndScannerOnlyInConnectedFileInBoth() {
+        FeatureAvailability connected = FeatureAvailability.forBuild(true, true), offline = FeatureAvailability.forBuild(false, false);
+        assertTrue(connected.available(Feature.PAIRING_ONLINE)); assertTrue(connected.available(Feature.QR_SCAN));
+        assertEquals(Status.NOT_IN_FLAVOR, offline.status(Feature.PAIRING_ONLINE));
+        assertEquals("offline declares no CAMERA", Status.NOT_IN_FLAVOR, offline.status(Feature.QR_SCAN));
+        assertTrue(connected.available(Feature.PAIRING_FILE)); assertTrue(offline.available(Feature.PAIRING_FILE));
     }
     @Test public void offlineExcludesInternetMediaAndRelay() {
         FeatureAvailability offline = FeatureAvailability.forBuild(false, false);

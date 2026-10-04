@@ -49,6 +49,12 @@ public final class FeatureAvailability {
         a.status.put(Feature.RESTRICTED_VIDEO, Status.AVAILABLE);
         a.status.put(Feature.RESTRICTED_PDF, Status.AVAILABLE);
         a.status.put(Feature.RESTRICTED_CAPTURE, connected ? Status.AVAILABLE : Status.NOT_IN_FLAVOR);
+        // PAIRING_PRODUCT_V1: QR/code need the private relay (connected); the camera scanner is connected-only
+        // (offline declares no CAMERA). The signed file exchange works in both editions. Readiness (relay,
+        // admission, network consent) is still checked at the moment of use; availability is not readiness.
+        a.status.put(Feature.PAIRING_ONLINE, connected ? Status.AVAILABLE : Status.NOT_IN_FLAVOR);
+        a.status.put(Feature.QR_SCAN, connected ? Status.AVAILABLE : Status.NOT_IN_FLAVOR);
+        a.status.put(Feature.PAIRING_FILE, Status.AVAILABLE);
         return a;
     }
 

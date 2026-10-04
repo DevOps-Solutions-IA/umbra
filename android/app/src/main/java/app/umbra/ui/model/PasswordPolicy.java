@@ -19,7 +19,8 @@ public final class PasswordPolicy {
     public static final int MIN_BYTES = 12, MAX_BYTES = 1024;
     /** Process-local auto-lock choices; the domain maximum is 240000 ms (no five-minute option in v1). */
     public static final long[] AUTO_LOCK_MILLIS = {60_000, 120_000, 240_000};
-    public static final String[] AUTO_LOCK_LABELS = {"1 min", "2 min", "4 min"};
+    /** "4 min máx.": the domain ceiling, reduced by time already spent in Android authentication. */
+    public static final String[] AUTO_LOCK_LABELS = {"1 min", "2 min", "4 min máx."};
     public static final int DEFAULT_AUTO_LOCK_INDEX = 2;
 
     public enum Problem {

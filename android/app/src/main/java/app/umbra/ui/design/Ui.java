@@ -20,6 +20,7 @@ import app.umbra.ui.model.*;
 import java.util.List;
 import java.util.function.Consumer;
 import java.util.function.IntConsumer;
+import static app.umbra.ui.design.UmbraTokens.*;
 
 /**
  * Reusable UMBRA components built from framework Views (the app has no AndroidX/Compose).
@@ -30,7 +31,7 @@ import java.util.function.IntConsumer;
  * words (stateDescription) in addition to color.
  */
 public final class Ui {
-    public static final int TOUCH_MIN_DP = 48;
+    public static final int TOUCH_MIN_DP = UmbraTokens.TOUCH_MIN;
     private final Context context;
     private final float density;
 
@@ -167,30 +168,43 @@ public final class Ui {
     public enum ButtonKind { PRIMARY, SECONDARY, DESTRUCTIVE, GHOST }
 
     public Button button(ButtonKind kind, String label, Glyph glyph, Runnable onClick) {
-        Button b = new Button(context);
+        UmbraButton b = new UmbraButton(context, label, glyph);
         b.setText(label); b.setAllCaps(false); UmbraType.LABEL.apply(b);
         int fg, bg; Drawable background;
         switch (kind) {
-            case PRIMARY -> { fg = UmbraColors.ON_ACCENT; bg = UmbraColors.ACCENT_STRONG; background = outlined(bg, UmbraColors.ACCENT_PRIMARY, 14); }
-            case DESTRUCTIVE -> { fg = UmbraColors.DANGER_FG; bg = UmbraColors.DANGER_CONTAINER; background = outlined(bg, UmbraColors.DANGER, 14); }
-            case GHOST -> { fg = UmbraColors.ACCENT_MUTED; bg = 0x00000000; background = shape(bg, 14); }
-            default -> { fg = UmbraColors.TEXT_PRIMARY; bg = UmbraColors.SURFACE_ELEVATED; background = outlined(bg, UmbraColors.BORDER_DEFAULT, 14); }
+            case PRIMARY -> { fg = UmbraColors.ON_ACCENT; bg = UmbraColors.ACCENT_STRONG; background = outlined(bg, UmbraColors.ACCENT_PRIMARY, RADIUS_CONTROL); }
+            case DESTRUCTIVE -> { fg = UmbraColors.DANGER_FG; bg = UmbraColors.DANGER_CONTAINER; background = outlined(bg, UmbraColors.DANGER, RADIUS_CONTROL); }
+            case GHOST -> { fg = UmbraColors.ACCENT_MUTED; bg = 0x00000000; background = shape(bg, RADIUS_CONTROL); }
+            default -> { fg = UmbraColors.TEXT_PRIMARY; bg = UmbraColors.SURFACE_ELEVATED; background = outlined(bg, UmbraColors.BORDER_DEFAULT, RADIUS_CONTROL); }
         }
-        b.setTextColor(fg);
-        b.setBackground(pressable(background, 14));
+        b.setTextColor(fg); b.foreground = fg;
+        b.setBackground(pressable(background, RADIUS_CONTROL));
         b.setStateListAnimator(null);
-        b.setMinHeight(dp(52)); b.setMinimumHeight(dp(52)); b.setMinWidth(dp(TOUCH_MIN_DP));
+        b.setMinHeight(dp(BUTTON_HEIGHT)); b.setMinimumHeight(dp(BUTTON_HEIGHT)); b.setMinWidth(dp(TOUCH_MIN));
         b.setPadding(dp(18), dp(12), dp(18), dp(12));
         b.setGravity(Gravity.CENTER);
-        if (glyph != null) { b.setCompoundDrawablesRelative(icon(glyph, fg, 20), null, null, null); b.setCompoundDrawablePadding(dp(10)); }
+        if (glyph != null) { b.setCompoundDrawablesRelative(icon(glyph, fg, ICON_SMALL), null, null, null); b.setCompoundDrawablePadding(dp(10)); }
         b.setFilterTouchesWhenObscured(true);
-        if (onClick != null) b.setOnClickListener(v -> onClick.run());
+        if (onClick != null) b.setOnClickListener(v -> { if (!b.busy) onClick.run(); });
         b.setLayoutParams(margins(match(), 6, 6));
         return b;
     }
+    /**
+     * Inline operation loader on the button itself: disabled (double taps ignored), phase label and a
+     * spinner. The label must describe the real phase the domain is running ("Abriendo…"), never progress.
+     */
+    public void busy(Button b, String phase) {
+        if (b instanceof UmbraButton u) u.enterBusy(phase, null, dp(SPINNER));
+        else { b.setEnabled(false); b.setText(phase); }
+    }
+    /** Returns a busy button to its idle label and icon. */
+    public void idle(Button b) {
+        if (b instanceof UmbraButton u) u.exitBusy(u.glyph == null ? null : icon(u.glyph, u.foreground, ICON_SMALL));
+        else b.setEnabled(true);
+    }
     /** Disabled control that states why, instead of silently doing nothing. */
     public Button disabled(Button b, String reason) {
-        b.setEnabled(false); b.setAlpha(0.5f);
+        b.setEnabled(false); b.setAlpha(OPACITY_DISABLED);
         b.setContentDescription(b.getText() + ". No disponible: " + reason);
         return b;
     }
@@ -252,10 +266,10 @@ public final class Ui {
 
     // ---------------------------------------------------------------- containers
     public LinearLayout card() {
-        LinearLayout c = column(); c.setBackground(shape(UmbraColors.SURFACE, 18));
-        c.setPadding(dp(16), dp(14), dp(16), dp(14)); c.setLayoutParams(margins(match(), 6, 6)); return c;
+        LinearLayout c = column(); c.setBackground(shape(UmbraColors.SURFACE, RADIUS_CARD));
+        c.setPadding(dp(SPACE_16), dp(14), dp(SPACE_16), dp(14)); c.setLayoutParams(margins(match(), 6, 6)); return c;
     }
-    public LinearLayout elevatedCard() { LinearLayout c = card(); c.setBackground(outlined(UmbraColors.SURFACE_ELEVATED, UmbraColors.OUTLINE, 18)); return c; }
+    public LinearLayout elevatedCard() { LinearLayout c = card(); c.setBackground(outlined(UmbraColors.SURFACE_ELEVATED, UmbraColors.OUTLINE, RADIUS_CARD)); return c; }
 
     /** Status banner: icon + title + optional body + optional action. Announced politely when shown. */
     public LinearLayout banner(Tone tone, Glyph glyph, String title, String body, String action, Runnable onAction) {
@@ -281,7 +295,7 @@ public final class Ui {
     public TextView chip(Tone tone, Glyph glyph, String label) {
         TextView c = text(UmbraType.CAPTION, label, toneColor(tone));
         c.setTypeface(UmbraType.LABEL.typeface());
-        c.setBackground(shape(toneContainer(tone), 100));
+        c.setBackground(shape(toneContainer(tone), RADIUS_PILL));
         c.setPadding(dp(10), dp(5), dp(12), dp(5));
         c.setGravity(Gravity.CENTER_VERTICAL);
         if (glyph != null) { c.setCompoundDrawablesRelative(icon(glyph, toneColor(tone), 16), null, null, null); c.setCompoundDrawablePadding(dp(6)); }
@@ -336,7 +350,7 @@ public final class Ui {
 
     // ---------------------------------------------------------------- lists
     public LinearLayout listRow(View leading, String title, String subtitle, View trailing, Runnable onClick) {
-        LinearLayout r = row(); r.setMinimumHeight(dp(64)); r.setPadding(dp(4), dp(10), dp(4), dp(10));
+        LinearLayout r = row(); r.setMinimumHeight(dp(ROW_HEIGHT)); r.setPadding(dp(SPACE_4), dp(10), dp(SPACE_4), dp(10));
         if (leading != null) { r.addView(leading); }
         LinearLayout texts = column(); texts.setPadding(leading == null ? 0 : dp(14), 0, dp(8), 0);
         TextView t = text(UmbraType.HEADING, title); t.setMaxLines(2); t.setEllipsize(TextUtils.TruncateAt.END); texts.addView(t);
@@ -410,7 +424,7 @@ public final class Ui {
             box.addView(r);
         }
         ObjectAnimator pulse = ObjectAnimator.ofFloat(box, View.ALPHA, 1f, 0.55f);
-        pulse.setDuration(900); pulse.setRepeatMode(ValueAnimator.REVERSE); pulse.setRepeatCount(ValueAnimator.INFINITE);
+        pulse.setDuration(MOTION_SKELETON_PULSE); pulse.setRepeatMode(ValueAnimator.REVERSE); pulse.setRepeatCount(ValueAnimator.INFINITE);
         box.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(View v) { pulse.start(); }
             @Override public void onViewDetachedFromWindow(View v) { pulse.cancel(); }
@@ -419,15 +433,90 @@ public final class Ui {
         return box;
     }
 
+    /** Small spinner view (decorative; the phase text next to it is what is announced). */
+    public ImageView spinner(int color, int sizeDp) {
+        ImageView v = new ImageView(context);
+        SpinnerDrawable d = new SpinnerDrawable(color, Math.max(2f, dp(sizeDp) / 9f));
+        v.setImageDrawable(d); v.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        v.setLayoutParams(new LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp)));
+        v.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(View view) { d.start(); }
+            @Override public void onViewDetachedFromWindow(View view) { d.stop(); }
+        });
+        return v;
+    }
+    /** Inline loader: spinner + real phase label, announced politely. For work inside a screen or sheet. */
+    public LinearLayout inlineLoader(String phase) {
+        LinearLayout r = row(); r.setPadding(dp(SPACE_4), dp(SPACE_12), dp(SPACE_4), dp(SPACE_12));
+        r.addView(spinner(UmbraColors.ACCENT_MUTED, SPINNER));
+        TextView t = text(UmbraType.BODY_SECONDARY, phase); t.setPadding(dp(SPACE_12), 0, 0, 0); r.addView(t, weight());
+        r.setContentDescription(phase); r.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        r.setLayoutParams(match());
+        return r;
+    }
+    /** Full-page loader for a whole flow step (opening the vault, preparing a link): title + phase. */
+    public LinearLayout pageLoader(String title, String phase) {
+        LinearLayout box = column(); box.setGravity(Gravity.CENTER_HORIZONTAL);
+        box.setPadding(dp(SPACE_24), dp(96), dp(SPACE_24), dp(SPACE_24));
+        box.addView(spinner(UmbraColors.ACCENT_MUTED, 36));
+        TextView h = heading(UmbraType.TITLE, title); h.setGravity(Gravity.CENTER); box.addView(h, margins(match(), SPACE_24, SPACE_4));
+        if (phase != null) { TextView p = text(UmbraType.BODY_SECONDARY, phase); p.setGravity(Gravity.CENTER); box.addView(p, match()); }
+        box.setContentDescription(phase == null ? title : title + ". " + phase);
+        box.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        box.setLayoutParams(match());
+        return box;
+    }
+    /** Step state of a multi-stage flow. */
+    public enum StepState { DONE, CURRENT, PENDING, FAILED }
+    /**
+     * Full-flow progress: one line per real phase (done check, current spinner, pending, failed). Phases are
+     * mapped from domain state by the caller; this component never advances on its own.
+     */
+    public LinearLayout stepProgress(String[] steps, StepState[] states) {
+        LinearLayout box = column(); box.setPadding(0, dp(SPACE_8), 0, dp(SPACE_8));
+        StringBuilder spoken = new StringBuilder();
+        for (int i = 0; i < steps.length; i++) {
+            StepState st = states[i];
+            LinearLayout r = row(); r.setMinimumHeight(dp(40));
+            View mark = switch (st) {
+                case DONE -> iconView(Glyph.CHECK, UmbraColors.SUCCESS_FG, ICON_SMALL);
+                case CURRENT -> spinner(UmbraColors.ACCENT_MUTED, ICON_SMALL);
+                case FAILED -> iconView(Glyph.WARNING, UmbraColors.DANGER_FG, ICON_SMALL);
+                default -> { View dot = new View(context); GradientDrawable g = new GradientDrawable(); g.setShape(GradientDrawable.OVAL);
+                    g.setColor(UmbraColors.BORDER_DEFAULT); dot.setBackground(g);
+                    LinearLayout.LayoutParams dp8 = new LinearLayout.LayoutParams(dp(SPACE_8), dp(SPACE_8)); dp8.setMarginStart(dp(6)); dp8.setMarginEnd(dp(6)); dot.setLayoutParams(dp8); yield dot; }
+            };
+            r.addView(mark);
+            int color = st == StepState.PENDING ? UmbraColors.TEXT_TERTIARY : st == StepState.FAILED ? UmbraColors.DANGER_FG : UmbraColors.TEXT_PRIMARY;
+            TextView t = text(st == StepState.CURRENT ? UmbraType.LABEL : UmbraType.BODY, steps[i], color);
+            t.setPadding(dp(SPACE_12), 0, 0, 0); r.addView(t, weight());
+            r.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            box.addView(r);
+            if (st == StepState.CURRENT || st == StepState.FAILED) spoken.append(steps[i]);
+        }
+        box.setContentDescription(spoken.length() == 0 ? steps[steps.length - 1] : spoken.toString());
+        box.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        box.setLayoutParams(match());
+        return box;
+    }
+    /** Settings/list row: icon tile, title, optional current value and chevron. Whole row is one target. */
+    public LinearLayout settingRow(Glyph glyph, Tone tone, String title, String value, Runnable onClick) {
+        TextView v = null;
+        if (value != null) { v = text(UmbraType.BODY_SECONDARY, value); v.setMaxLines(2); v.setPadding(0, 0, dp(SPACE_8), 0); }
+        LinearLayout trailing = row(); if (v != null) trailing.addView(v); if (onClick != null) trailing.addView(chevron());
+        LinearLayout r = listRow(glyph == null ? null : iconTile(glyph, tone), title, null, trailing, onClick);
+        r.setContentDescription(value == null ? title : title + ": " + value);
+        return r;
+    }
     // ---------------------------------------------------------------- inputs
     /** Text input without autofill, personalized learning or state saving (no content in bundles). */
     public EditText field(String hint) {
         EditText e = new EditText(context); UmbraType.BODY.apply(e);
         e.setHint(hint); e.setHintTextColor(UmbraColors.TEXT_TERTIARY);
-        e.setBackground(outlined(UmbraColors.SURFACE, UmbraColors.OUTLINE, 14));
-        e.setPadding(dp(14), dp(12), dp(14), dp(12)); e.setMinHeight(dp(52));
+        e.setBackground(outlined(UmbraColors.SURFACE, UmbraColors.OUTLINE, RADIUS_CONTROL));
+        e.setPadding(dp(14), dp(SPACE_12), dp(14), dp(SPACE_12)); e.setMinHeight(dp(FIELD_HEIGHT));
         // setSingleLine() replaces TextView's line/pixel minimum; retain the View touch target.
-        e.setMinimumHeight(dp(52));
+        e.setMinimumHeight(dp(FIELD_HEIGHT));
         // Domain privacy adapter: no save/restore, autofill, content capture or personalized IME learning.
         app.umbra.privacy.PrivateAndroidSurface.sensitiveInput(e);
         e.setSaveFromParentEnabled(false);
@@ -514,7 +603,7 @@ public final class Ui {
     // ---------------------------------------------------------------- navigation chrome
     /** Top bar: optional back, a title block and trailing actions. */
     public LinearLayout topBar(Runnable back, View titleBlock, View... actions) {
-        LinearLayout bar = row(); bar.setMinimumHeight(dp(56)); bar.setPadding(0, dp(4), 0, dp(4));
+        LinearLayout bar = row(); bar.setMinimumHeight(dp(APP_BAR_HEIGHT)); bar.setPadding(0, dp(4), 0, dp(4));
         if (back != null) bar.addView(iconButton(Glyph.BACK, "Volver", back));
         LinearLayout.LayoutParams tp = weight(); tp.setMarginStart(dp(back == null ? 4 : 6)); bar.addView(titleBlock, tp);
         for (View a : actions) if (a != null) bar.addView(a);
@@ -533,7 +622,7 @@ public final class Ui {
         nav.setPadding(dp(4), dp(6), dp(4), dp(6));
         for (int i = 0; i < items.size(); i++) {
             final int index = i; boolean on = i == selected; NavItem item = items.get(i);
-            LinearLayout cell = column(); cell.setGravity(Gravity.CENTER); cell.setMinimumHeight(dp(56));
+            LinearLayout cell = column(); cell.setGravity(Gravity.CENTER); cell.setMinimumHeight(dp(NAV_HEIGHT));
             LinearLayout pill = row(); pill.setGravity(Gravity.CENTER); pill.setPadding(dp(16), dp(4), dp(16), dp(4));
             if (on) pill.setBackground(shape(UmbraColors.SURFACE_SOFT, 100));
             pill.addView(iconView(item.glyph(), on ? UmbraColors.ACCENT_MUTED : UmbraColors.TEXT_SECONDARY, 22));

@@ -15,10 +15,17 @@ public enum Help {
         "No hay copia ni recuperación.",
         "Crear o cambiarla deja la bóveda bloqueada.")),
     AUTO_LOCK("Autobloqueo", List.of(
-        "Vale solo mientras UMBRA siga abierta.",
-        "Máximo 4 minutos.",
+        "Es un máximo, no una promesa: 4 min como mucho.",
+        "El tiempo de desbloqueo de Android ya cuenta.",
+        "Tocar la pantalla no lo renueva.",
         "Salir de la app siempre bloquea.",
         "No es el bloqueo de emergencia.")),
+    PAIRING("Agregar contacto", List.of(
+        "El QR y el código sirven una sola vez y vencen.",
+        "Un QR de vinculación no es el QR de verificación.",
+        "El contacto queda sin verificar.",
+        "Verifiquen el código de seguridad para conversar.",
+        "Sin conexión privada, usa un archivo de vinculación.")),
     ADMISSION("Admisión", List.of(
         "Autoriza a este dispositivo en el entorno.",
         "Cada teléfono necesita la suya.",
