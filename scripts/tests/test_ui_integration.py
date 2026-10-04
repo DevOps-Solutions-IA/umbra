@@ -12,7 +12,7 @@ CONFIG = '-keepattributes Signature\n'
 MAPPING = '\n'.join([
     'app.umbra.ui.flow.RestrictedFlow$Viewer -> a.b:', 'app.umbra.ui.design.ProtectedFrameView -> a.c:',
     'app.umbra.ui.screens.ContentScreens -> a.d:', 'app.umbra.ui.model.EmergencyPresentation -> a.e:',
-    'app.umbra.ui.design.QrCodes -> a.f:', 'com.google.zxing.qrcode.decoder.Version -> b.a:',
+    'app.umbra.ui.design.QrCodes -> a.f:', 'app.umbra.ui.screens.PairingScreens -> a.g:', 'app.umbra.ui.model.PairingPresentation -> a.h:', 'com.google.zxing.qrcode.decoder.Version -> b.a:',
     'com.google.zxing.qrcode.encoder.Encoder -> b.b:']) + '\n'
 
 
@@ -60,7 +60,8 @@ class UiIntegrationRunnerTests(unittest.TestCase):
         self.assertNotIn('*', root.attrib[tools + 'keep'])
 
     def test_counts_are_fixed(self):
-        self.assertEqual({False: 35, True: 32}, ui.EXPECTED)
+        self.assertEqual({False: 39, True: 36}, ui.EXPECTED)
+        self.assertFalse(ui.valid('OK (32 tests)\nINSTRUMENTATION_CODE: -1\n', 0, 36), 'pre-convergence count is stale')
         self.assertTrue(ui.valid('OK (32 tests)\nINSTRUMENTATION_CODE: -1\n', 0, 32))
         self.assertFalse(ui.valid('OK (31 tests)\nINSTRUMENTATION_CODE: -1\n', 0, 32))
         self.assertFalse(ui.valid('INSTRUMENTATION_STATUS_CODE: -3\nOK (32 tests)\nINSTRUMENTATION_CODE: -1\n', 0, 32))

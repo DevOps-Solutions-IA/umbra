@@ -215,7 +215,7 @@ public class UiScreensRenderTest {
         View v = render("01-lock", ui -> EntryScreens.lock(ui, new EntryScreens.LockState(true, !BuildConfig.ALLOW_RELAY, null, null), new EntryScreens.LockActions() {
             public void unlock() {} public void openSecuritySettings() {}
         }));
-        assertTrue(hasText(v, "Bóveda bloqueada"));
+        assertTrue(hasText(v, "UMBRA bloqueado"));
         assertNotNull(button(v, "Desbloquear"));
         assertTrue(hasText(v, "VERSIÓN DE DESARROLLO"));
         assertConcise(v);
@@ -257,10 +257,11 @@ public class UiScreensRenderTest {
         assertAccessible(v);
         View empty = render("17-empty-state", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(List.of(), false, HomeScreens.Filter.ALL, FEATURES, !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, null, null, null), a, nav(ui, HomeTab.CHATS)));
         assertTrue(hasText(empty, "Sin conversaciones"));
-        assertNotNull(button(empty, "Agregar contacto"));
+        assertNotNull("one primary action", button(empty, "Nueva conversación"));
+        assertNotNull("chat list keeps the primary action", button(v, "Nueva conversación"));
         assertConcise(v); assertConcise(empty);
-        View groups = render("03b-home-groups-pending", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(items, false, HomeScreens.Filter.GROUPS, FEATURES, !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, null, null, null), a, nav(ui, HomeTab.CHATS)));
-        assertTrue(hasText(groups, "Próximamente"));
+        // Groups have no end-to-end implementation: no group filter, preview or pending marker in the chat list.
+        assertFalse(hasExact(v, "Grupos")); assertFalse(hasText(v, "Vista previa")); assertFalse(hasText(v, "Próximamente"));
         render("03c-home-loading", ui -> HomeScreens.chats(ui, new HomeScreens.ChatsState(items, true, HomeScreens.Filter.ALL, FEATURES, !BuildConfig.ALLOW_RELAY, OFFLINE_SESSION, null, null, null), a, nav(ui, HomeTab.CHATS)));
     }
 
@@ -464,6 +465,139 @@ public class UiScreensRenderTest {
         }
     }
 
+    // ------------------------------------------------------------------ PAIRING_PRODUCT_V1 (synthetic data only)
+    private static final PairingScreens.FlowActions FLOW = new PairingScreens.FlowActions() {
+        public void close() {} public void cancelPairing() {} public void retry() {} public void verify() {} public void later() {}
+        public void submitCode(EditText[] g) {} public void requestCamera() {} public void enterCodeInstead() {}
+        public void scannerSurface(android.view.TextureView v) { fail("the camera must not open in a render test"); }
+        public void createFile() {} public void pickFile() {} public void saveResponse() {}
+    };
+    private static app.umbra.pairing.PairingSnapshot pairingSnap(app.umbra.pairing.PairingSnapshot.Role role, app.umbra.pairing.PairingSnapshot.Phase phase,
+                                                              app.umbra.pairing.PairingException.Code failure, boolean verify) {
+        return new app.umbra.pairing.PairingSnapshot("synthetic", role, phase, app.umbra.pairing.PairingSnapshot.NextAction.WAITING_FOR_PEER, 582, failure,
+            phase == app.umbra.pairing.PairingSnapshot.Phase.COMPLETE ? BRUNO : null, verify);
+    }
+    private static PairingScreens.Flow flow(PairingScreens.Mode mode, app.umbra.pairing.PairingSnapshot snap, String busy, String problem, boolean retry,
+                                            Bitmap qr, char[] code, String scanState, boolean denied, PairingScreens.FileStage file) {
+        return new PairingScreens.Flow(mode, snap, busy, problem, retry, qr, code, snap == null ? null : PairingPresentation.validFor(snap.expiresInSeconds()),
+            scanState, denied, file);
+    }
+    private static void assertNoProtocolTerms(View v) {
+        String text = visibleText(v).toLowerCase(Locale.ROOT);
+        for (String banned : new String[]{"invite", "request", "ack", "realm", "capability", "prekey", "token", "rendezvous", "relay"})
+            assertFalse("protocol term on screen: " + banned, text.contains(banned));
+    }
+
+    @Test public void addContactOffersScanCodeQrAndFileWithoutProtocolTerms() {
+        PairingScreens.EntryActions ea = new PairingScreens.EntryActions() {
+            public void scan() {} public void enterCode() {} public void showQr() {} public void showCode() {} public void file() {} public void nearby() {} public void configure() {}
+        };
+        assertEquals("camera scanner only where the manifest has CAMERA", BuildConfig.ALLOW_RELAY, app.umbra.ui.media.QrScanner.AVAILABLE);
+        View ready = render("30a-add-contact", ui -> Screen.of(null, PairingScreens.addContact(ui, new PairingScreens.Entry(app.umbra.ui.media.QrScanner.AVAILABLE, BuildConfig.ALLOW_RELAY, null), ea), null));
+        assertTrue(hasText(ready, "Agregar contacto"));
+        assertTrue(hasText(ready, "Archivo de vinculación"));
+        assertEquals(BuildConfig.ALLOW_RELAY, hasText(ready, "Escanear QR"));
+        assertEquals(BuildConfig.ALLOW_RELAY, hasText(ready, "Ingresar código"));
+        assertEquals(BuildConfig.ALLOW_RELAY, hasText(ready, "Mostrar mi QR"));
+        assertNoProtocolTerms(ready); assertAccessible(ready); assertConcise(ready);
+        if (BuildConfig.ALLOW_RELAY) {
+            View notReady = render("30b-add-contact-no-private-connection", ui -> Screen.of(null, PairingScreens.addContact(ui,
+                new PairingScreens.Entry(true, true, PairingPresentation.ONLINE_UNAVAILABLE), ea), null));
+            assertTrue(hasText(notReady, "Conexión privada no disponible"));
+            assertTrue("online pairing is never faked", hasText(notReady, "Configurar"));
+            for (View x : all(notReady)) if (x instanceof LinearLayout row && String.valueOf(row.getContentDescription()).startsWith("Escanear QR"))
+                assertFalse("not clickable while the private connection is missing", row.isClickable());
+            assertConcise(notReady);
+        }
+    }
+
+    @Test public void pairingQrAndCodeAreShownWithoutRevealingThemAsText() {
+        Bitmap qr = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888);
+        for (int y = 0; y < 64; y++) for (int x = 0; x < 64; x++) qr.setPixel(x, y, ((x / 8 + y / 8) % 2 == 0) ? Color.BLACK : Color.WHITE);
+        app.umbra.pairing.PairingSnapshot waiting = pairingSnap(app.umbra.pairing.PairingSnapshot.Role.INVITER, app.umbra.pairing.PairingSnapshot.Phase.INVITE_CREATED, null, true);
+        View showQr = render("31a-pairing-show-qr", ui -> PairingScreens.flow(ui, flow(PairingScreens.Mode.SHOW_QR, waiting, null, null, false, qr, null, null, false, null), FLOW));
+        boolean described = false;
+        for (View x : all(showQr)) if (x instanceof android.widget.ImageView iv && "Código QR para agregar este contacto".contentEquals(String.valueOf(iv.getContentDescription()))) described = true;
+        assertTrue("QR is described without reading its payload", described);
+        assertTrue(hasText(showQr, "Válido durante 9:42"));
+        assertTrue(hasText(showQr, "Esperando al otro dispositivo…"));
+        assertNotNull(button(showQr, "Cancelar vinculación"));
+        assertNoProtocolTerms(showQr); assertAccessible(showQr); assertConcise(showQr);
+        char[] code = "ABCDEFGHJKMNPQRS".toCharArray();
+        View showCode = render("31b-pairing-show-code", ui -> PairingScreens.flow(ui, flow(PairingScreens.Mode.SHOW_CODE, waiting, null, null, false, null, code, null, false, null), FLOW));
+        TextView shown = null;
+        for (View x : all(showCode)) if (x instanceof TextView t && "ABCD-EFGH-JKMN-PQRS".contentEquals(t.getText())) shown = t;
+        assertNotNull("code shown in four groups", shown);
+        assertTrue("a value, not copy", Ui.technical(shown));
+        assertFalse("never selectable or copyable", shown.isTextSelectable() || shown.isLongClickable());
+        assertEquals("A B C D, E F G H, J K M N, P Q R S", String.valueOf(shown.getContentDescription()));
+        assertTrue(hasText(showCode, "Un solo uso"));
+        assertConcise(showCode); assertAccessible(showCode);
+        View preparing = render("31c-pairing-preparing", ui -> PairingScreens.flow(ui, flow(PairingScreens.Mode.SHOW_QR, null, "Preparando…", null, false, null, null, null, false, null), FLOW));
+        assertTrue(hasText(preparing, "Preparando"));
+    }
+
+    @Test public void pairingEntryScanAndResultsAreHonest() {
+        View enter = render("32a-pairing-enter-code", ui -> PairingScreens.flow(ui, flow(PairingScreens.Mode.ENTER_CODE, null, null, null, false, null, null, null, false, null), FLOW));
+        int groups = 0;
+        for (EditText e : fields(enter)) {
+            groups++;
+            assertTrue("visible uppercase input, no suggestions", (e.getInputType() & android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS) != 0);
+            assertFalse(e.isSaveEnabled());
+        }
+        assertEquals(HumanCodeInput.GROUPS, groups);
+        assertNotNull(button(enter, "Continuar"));
+        assertConcise(enter); assertAccessible(enter);
+        View working = render("32b-pairing-code-working", ui -> PairingScreens.flow(ui, flow(PairingScreens.Mode.ENTER_CODE, null, "Verificando código…", null, false, null, null, null, false, null), FLOW));
+        Button busy = button(working, "Verificando código…");
+        assertNotNull("the button itself shows the real phase", busy);
+        assertFalse("double taps are ignored while busy", busy.isEnabled());
+        View denied = render("32c-pairing-camera-denied", ui -> PairingScreens.flow(ui, flow(PairingScreens.Mode.SCAN, null, null, null, false, null, null, "Permite la cámara para escanear.", true, null), FLOW));
+        assertTrue(hasText(denied, "Permite la cámara"));
+        assertNotNull(button(denied, "Permitir cámara"));
+        assertNotNull("always an alternative to the camera", button(denied, "Ingresar código"));
+        app.umbra.pairing.PairingSnapshot added = pairingSnap(app.umbra.pairing.PairingSnapshot.Role.JOINER, app.umbra.pairing.PairingSnapshot.Phase.COMPLETE, null, true);
+        View done = render("32d-pairing-added-unverified", ui -> PairingScreens.flow(ui, flow(PairingScreens.Mode.ENTER_CODE, added, null, null, false, null, null, null, false, null), FLOW));
+        assertTrue(hasText(done, "Contacto agregado"));
+        assertTrue(hasText(done, "Verificación pendiente"));
+        assertNotNull(button(done, "Verificar ahora"));
+        assertNotNull(button(done, "Más tarde"));
+        String text = visibleText(done).toLowerCase(Locale.ROOT);
+        assertFalse("pairing never claims verification", text.contains("verificado") || text.contains("seguro"));
+        assertConcise(done); assertAccessible(done);
+        View expired = render("32e-pairing-expired", ui -> PairingScreens.flow(ui, flow(PairingScreens.Mode.SHOW_CODE, null, null,
+            PairingPresentation.failure(app.umbra.pairing.PairingException.Code.EXPIRED), false, null, null, null, false, null), FLOW));
+        assertTrue(hasText(expired, "Este código venció."));
+        assertNull("no retry for a typed terminal failure", button(expired, "Intentar de nuevo"));
+        View unavailable = render("32f-pairing-unavailable", ui -> PairingScreens.flow(ui, flow(PairingScreens.Mode.SHOW_QR, null, null,
+            PairingPresentation.failure(app.umbra.pairing.PairingException.Code.UNAVAILABLE), true, null, null, null, false, null), FLOW));
+        assertNotNull(button(unavailable, "Intentar de nuevo"));
+        View file = render("32g-pairing-file", ui -> PairingScreens.flow(ui, flow(PairingScreens.Mode.FILE, null, null, null, false, null, null, null, false, PairingScreens.FileStage.START), FLOW));
+        assertNotNull(button(file, "Seleccionar archivo"));
+        assertNotNull(button(file, "Crear archivo"));
+        assertNoProtocolTerms(file); assertConcise(file);
+    }
+
+    @Test public void accessPhasesShowRealWorkAndLockReasons() {
+        EntryScreens.LockActions la = new EntryScreens.LockActions() { public void unlock() {} public void openSecuritySettings() {} };
+        View locked = render("33a-lock-after-autolock", ui -> EntryScreens.lock(ui, new EntryScreens.LockState(true, !BuildConfig.ALLOW_RELAY, null, null,
+            AccessPresentation.lockReason(app.umbra.core.AccessGate.LockCause.AUTOLOCK), false), la));
+        assertTrue(hasText(locked, "Se bloqueó por tiempo."));
+        View authenticating = render("33b-lock-authenticating", ui -> EntryScreens.lock(ui, new EntryScreens.LockState(true, !BuildConfig.ALLOW_RELAY, null, null, null, true), la));
+        Button waiting = button(authenticating, "Esperando a Android…");
+        assertNotNull(waiting); assertFalse(waiting.isEnabled());
+        AccessScreens.UnlockActions ua = new AccessScreens.UnlockActions() { public void submit(EditText p) {} public void autoLock(int i) {} public void lockNow() {} };
+        View opening = render("33c-unlock-working", ui -> AccessScreens.unlock(ui, new AccessScreens.UnlockState(true, null, 2, !BuildConfig.ALLOW_RELAY), ua));
+        Button open = button(opening, "Abriendo…");
+        assertNotNull("unlock shows its phase on the button", open); assertFalse(open.isEnabled());
+        assertNotNull("the selector says the ceiling is a maximum", button(opening, "4 min máx."));
+        AccessScreens.CreateActions ca = new AccessScreens.CreateActions() { public void submit(EditText p, EditText c) {} public void later() {} public void lockNow() {} };
+        View creating = render("33d-create-working", ui -> AccessScreens.create(ui, new AccessScreens.CreateState(false, true, null), ca));
+        assertNotNull(button(creating, "Creando protección…"));
+        assertConcise(locked); assertConcise(opening); assertConcise(creating);
+        assertAccessible(opening);
+    }
+
     @Test public void offlineEditionShowsBluetoothIdentityAndNoInternetFeatures() {
         HomeScreens.NearbyActions na = new HomeScreens.NearbyActions() {
             public void startNearby() {} public void stopNearby() {} public void listen() {} public void makeVisible() {} public void connectVerified() {}
@@ -526,7 +660,7 @@ public class UiScreensRenderTest {
         AccessScreens.UnlockActions ua = new AccessScreens.UnlockActions() { public void submit(EditText p) {} public void autoLock(int i) {} public void lockNow() {} };
         View unlock = render("24c-password-unlock", ui -> AccessScreens.unlock(ui, new AccessScreens.UnlockState(false, AccessStep.UNLOCK_FAILED, 2, !BuildConfig.ALLOW_RELAY), ua));
         assertTrue(hasText(unlock, AccessStep.UNLOCK_FAILED));
-        assertTrue(hasText(unlock, "Sin conexión"));
+        assertEquals("unlocking never connects (said once, connected only)", BuildConfig.ALLOW_RELAY, hasText(unlock, "Abrir no conecta"));
         assertTrue(Help.NETWORK.lines.contains("Desbloquear no conecta."));
         assertNotNull(help(unlock, Help.AUTO_LOCK));
         assertConcise(unlock);

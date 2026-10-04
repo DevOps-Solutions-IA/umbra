@@ -19,11 +19,12 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 UI_CLASSES = ('app.umbra.UiScreensRenderTest', 'app.umbra.UiSecurityFlowTest', 'app.umbra.UiContentIntegrationTest')
 ACTIVITY_CLASS = 'app.umbra.LockedActivityTest'
-# 24 render + 3 security flow + 5 content integration; LockedActivityTest (3) needs a debuggable target.
-EXPECTED = {False: 35, True: 32}
+# 28 render (4 added for pairing/access) + 3 security flow + 5 content integration; LockedActivityTest (3) needs a
+# debuggable target.
+EXPECTED = {False: 39, True: 36}
 UI_ENTRY_POINTS = ('app.umbra.ui.flow.RestrictedFlow$Viewer', 'app.umbra.ui.design.ProtectedFrameView',
                    'app.umbra.ui.screens.ContentScreens', 'app.umbra.ui.model.EmergencyPresentation',
-                   'app.umbra.ui.design.QrCodes')
+                   'app.umbra.ui.design.QrCodes', 'app.umbra.ui.screens.PairingScreens', 'app.umbra.ui.model.PairingPresentation')
 # The QR encoder the production path (QrCodes) reaches must survive shrinking. R8 may legitimately class-inline
 # stateless facades (MultiFormatWriter, QRCodeWriter), so the check requires the QR encoder package itself (e.g.
 # qrcode.decoder.Version tables, qrcode.encoder.*), renaming allowed. Functional proof is the R8 instrumentation

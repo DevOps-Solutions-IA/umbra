@@ -33,7 +33,7 @@ public class LockedActivityTest {
     }
     private static void assertLocked(MainActivity activity) {
         assertTrue((activity.getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_SECURE) != 0);
-        assertTrue(containsText(activity.getWindow().getDecorView(), "Bóveda bloqueada"));
+        assertTrue(containsText(activity.getWindow().getDecorView(), "UMBRA bloqueado"));
         assertFalse(activity.getDatabasePath("umbra.db").exists());
     }
     @Test public void launchUsesSecureWindowAndRemainsLockedWithoutDeviceCredential() {
