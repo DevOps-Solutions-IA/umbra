@@ -43,7 +43,8 @@ public final class HumanCodeInput {
             if (i > 0) { if (i % GROUP == 0) { out[j++] = ','; out[j++] = ' '; } else out[j++] = ' '; }
             out[j++] = code[i];
         }
-        return Arrays.copyOf(out, j);
+        char[] exact = Arrays.copyOf(out, j); Arrays.fill(out, '\0');
+        return exact;
     }
 
     public static void wipe(char[] buffer) { if (buffer != null) Arrays.fill(buffer, '\0'); }

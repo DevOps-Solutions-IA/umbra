@@ -83,7 +83,17 @@ public final class PairingScreens {
         void createFile(); void pickFile(); void saveResponse();
     }
 
-    public static Screen flow(Ui ui, Flow f, FlowActions a) {
+    /**
+     * Views/buffers the host updates or wipes without re-mounting: the validity line (countdown in place) and the
+     * char[] copies of the code backing the displayed text and its spoken label (wiped when the flow is cleared).
+     */
+    public static final class Handles {
+        public TextView validity;
+        private final java.util.List<char[]> buffers = new java.util.ArrayList<>();
+        public void wipe() { for (char[] b : buffers) HumanCodeInput.wipe(b); buffers.clear(); validity = null; }
+    }
+    public static Screen flow(Ui ui, Flow f, FlowActions a) { return flow(ui, f, new Handles(), a); }
+    public static Screen flow(Ui ui, Flow f, Handles h, FlowActions a) {
         String title = switch (f.mode()) {
             case SHOW_QR -> "Mi QR"; case SHOW_CODE -> "Mi código"; case ENTER_CODE -> "Ingresar código";
             case SCAN -> "Escanear QR"; case FILE -> "Archivo de vinculación";
@@ -107,11 +117,11 @@ public final class PairingScreens {
         }
 
         switch (f.mode()) {
-            case SHOW_QR -> showQr(ui, body, f);
-            case SHOW_CODE -> showCode(ui, body, f);
+            case SHOW_QR -> showQr(ui, body, f, h);
+            case SHOW_CODE -> showCode(ui, body, f, h);
             case ENTER_CODE -> enterCode(ui, body, bottom, f, a);
             case SCAN -> scan(ui, body, bottom, f, a);
-            case FILE -> file(ui, body, bottom, f, a);
+            case FILE -> file(ui, body, bottom, f, a, h);
         }
         // Online flows show the real phases once the domain reports them.
         if (f.mode() != Mode.FILE && (f.snapshot() != null || (f.busyPhase() != null && f.mode() != Mode.ENTER_CODE)))
@@ -128,13 +138,14 @@ public final class PairingScreens {
         return ui.stepProgress(PairingPresentation.STEPS, states);
     }
 
-    private static void validity(Ui ui, LinearLayout body, Flow f) {
+    private static void validity(Ui ui, LinearLayout body, Flow f, Handles h) {
         if (f.validFor() == null) return;
         TextView t = ui.text(UmbraType.LABEL, f.validFor(), UmbraColors.TEXT_SECONDARY); t.setGravity(Gravity.CENTER);
+        h.validity = t;
         body.addView(t, ui.margins(Ui.match(), UmbraTokens.SPACE_12, 0));
     }
 
-    private static void showQr(Ui ui, LinearLayout body, Flow f) {
+    private static void showQr(Ui ui, LinearLayout body, Flow f, Handles h) {
         if (f.qr() == null) { body.addView(ui.pageLoader("Preparando QR…", null)); return; }
         FrameLayout frame = new FrameLayout(ui.context());
         frame.setBackground(ui.shape(0xFFFFFFFF, UmbraTokens.RADIUS_CARD)); // the code needs a light quiet zone
@@ -146,24 +157,25 @@ public final class PairingScreens {
         LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ui.dp(280), ui.dp(280)); p.gravity = Gravity.CENTER_HORIZONTAL;
         p.topMargin = ui.dp(UmbraTokens.SPACE_16);
         body.addView(frame, p);
-        validity(ui, body, f);
+        validity(ui, body, f, h);
         Motion.enter(frame);
     }
 
-    private static void showCode(Ui ui, LinearLayout body, Flow f) {
+    private static void showCode(Ui ui, LinearLayout body, Flow f, Handles h) {
         if (f.code() == null) { body.addView(ui.pageLoader("Preparando código…", null)); return; }
-        char[] grouped = HumanCodeInput.grouped(f.code());
+        char[] grouped = HumanCodeInput.grouped(f.code()); h.buffers.add(grouped);
         TextView code = ui.text(UmbraType.DISPLAY, "");
         code.setText(grouped, 0, grouped.length); // char[]: no extra String copy of the code
         code.setTypeface(UmbraType.MONOSPACE.typeface()); code.setLetterSpacing(0.06f); code.setGravity(Gravity.CENTER);
         code.setTextIsSelectable(false); code.setLongClickable(false); code.setTag(Ui.TECHNICAL);
-        code.setContentDescription(CharBuffer.wrap(HumanCodeInput.spoken(f.code())));
+        char[] spoken = HumanCodeInput.spoken(f.code()); h.buffers.add(spoken);
+        code.setContentDescription(CharBuffer.wrap(spoken));
         code.setBackground(ui.outlined(UmbraColors.SURFACE, UmbraColors.OUTLINE, UmbraTokens.RADIUS_CARD));
         int pad = ui.dp(UmbraTokens.SPACE_16); code.setPadding(pad, ui.dp(UmbraTokens.SPACE_24), pad, ui.dp(UmbraTokens.SPACE_24));
         body.addView(code, ui.margins(Ui.match(), UmbraTokens.SPACE_16, 0));
         TextView once = ui.text(UmbraType.CAPTION, "Un solo uso. Díctalo solo a esa persona."); once.setGravity(Gravity.CENTER);
         body.addView(once, ui.margins(Ui.match(), UmbraTokens.SPACE_8, 0));
-        validity(ui, body, f);
+        validity(ui, body, f, h);
         Motion.enter(code);
     }
 
@@ -238,7 +250,7 @@ public final class PairingScreens {
         }
     }
 
-    private static void file(Ui ui, LinearLayout body, LinearLayout bottom, Flow f, FlowActions a) {
+    private static void file(Ui ui, LinearLayout body, LinearLayout bottom, Flow f, FlowActions a, Handles h) {
         FileStage st = f.fileStage() == null ? FileStage.START : f.fileStage();
         if (f.busyPhase() != null) { body.addView(ui.inlineLoader(f.busyPhase())); return; }
         switch (st) {
@@ -257,7 +269,7 @@ public final class PairingScreens {
             }
             case DONE -> bottom.addView(ui.button(Ui.ButtonKind.GHOST, "Cerrar", Glyph.CLOSE, a::close));
         }
-        if (f.snapshot() != null && PairingPresentation.stage(f.snapshot()) == PairingPresentation.Stage.WAITING) validity(ui, body, f);
+        if (f.snapshot() != null && PairingPresentation.stage(f.snapshot()) == PairingPresentation.Stage.WAITING) validity(ui, body, f, h);
     }
 
     /** Contact exists locally and is UNVERIFIED: never "seguro" or "verificado". */

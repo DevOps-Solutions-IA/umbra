@@ -91,7 +91,7 @@ public final class MainActivity extends Activity {
     /** Survives the export picker's lock (non-sensitive): where the file flow continues after saving. */
     private PairingScreens.FileStage pairingAfterExport;
     /** Mode to reopen after a permission prompt forced a new authentication (non-sensitive). */
-    private PairingScreens.Mode pairingResume; private String pairingHint;
+    private PairingScreens.Mode pairingResume; private long pairingResumeAt; private String pairingHint;
     /** Operation id (not a capability) to re-observe after the export picker; the snapshot is asked again, never kept. */
     private String pairingAfterExportId;
     private Vault vault;
@@ -197,6 +197,7 @@ public final class MainActivity extends Activity {
         super.onPause(); resumed = false;
         // A system authentication prompt in progress is not "leaving UMBRA": its own cancel callback handles it.
         if (authenticating && !unlocked) return;
+        if (permissionPrompt && externalRequest == null) beginExternalAction(app.umbra.access.AccessSnapshot.ExternalAction.PERMISSION_PROMPT);
         // background() invalidates at once; a pending picker/settings/permission context keeps only its opaque id.
         app.umbra.access.AccessSession a = access();
         if (a != null) a.background(); else gate.lockWithCause(AccessGate.LockCause.BACKGROUND);
@@ -237,19 +238,29 @@ public final class MainActivity extends Activity {
         int ticket = generation;
         mount(Screen.of(null, ui.pageLoader("Abriendo…", null), null));
         worker.submit(() -> {
-            Engine opened = null; boolean ready = false; AccessStep step = null; Exception failure = null; boolean granted = false;
+            Engine opened = null; boolean ready = false; AccessStep step = null; Exception failure = null; boolean granted = false; AccessStep terminal = null;
             try {
                 if (destroyed || ticket != generation) return;
                 if (request != null) {
                     // Throws LockedException for a stale/cancelled ticket: an old prompt can never open a later epoch.
                     try { owner.androidAuthenticationSucceeded(request); granted = true; }
                     catch (AccessGate.LockedException stale) { throw stale; }
-                    catch (RuntimeException metadata) { granted = gate.timing().open(); if (!granted) throw metadata; failure = metadata; }
+                    catch (RuntimeException metadata) {
+                        granted = gate.timing().open();
+                        if (!granted) {
+                            // The domain locked on a typed CORRUPT/KEY_UNAVAILABLE finding: explain it (presentation only).
+                            app.umbra.access.AccessSnapshot.Phase phase = owner.snapshot().phase();
+                            if (phase == app.umbra.access.AccessSnapshot.Phase.CORRUPT || phase == app.umbra.access.AccessSnapshot.Phase.KEY_UNAVAILABLE)
+                                terminal = phase == app.umbra.access.AccessSnapshot.Phase.CORRUPT ? AccessStep.CORRUPT : AccessStep.KEY_UNAVAILABLE;
+                            throw metadata;
+                        }
+                        failure = metadata;
+                    }
                 } else { gate.unlock(legacyEmergency); granted = true; } // no Vault existed before the emergency closure
                 // After an emergency closure the coordinator closed the previous Vault: rebuild it, never reuse it.
                 if (replaceVault || vault == null || owner == null || owner != vault.access()) {
-                    replaceVault = false; Vault old = vault; vault = new Vault(getApplicationContext(), gate);
-                    if (old != null) try { old.close(); } catch (RuntimeException closed) { /* already closed by the coordinator */ }
+                    // The old Vault was closed by the emergency coordinator; Vault.close() again would lock the shared gate.
+                    replaceVault = false; vault = new Vault(getApplicationContext(), gate);
                     try { vault.access().refresh(); failure = null; } catch (AccessGate.LockedException locked) { throw locked; }
                     catch (RuntimeException metadata) { failure = metadata; }
                 }
@@ -261,10 +272,11 @@ public final class MainActivity extends Activity {
                     case CORRUPT -> AccessStep.CORRUPT;
                     case KEY_UNAVAILABLE -> AccessStep.KEY_UNAVAILABLE;
                     case OPEN -> AccessStep.OPEN;
-                    default -> failure != null ? (keyUnavailable(failure) ? AccessStep.KEY_UNAVAILABLE : AccessStep.CORRUPT) : null;
+                    // A non-typed failure (I/O) is not "corrupt": it locks with a retry notice instead.
+                    default -> failure != null && keyUnavailable(failure) ? AccessStep.KEY_UNAVAILABLE : null;
                 };
                 failure = null;
-                if (step == null) throw new AccessGate.LockedException();
+                if (step == null) throw new IllegalStateException("Access protection could not be inspected");
                 if (step == AccessStep.LEGACY_ENROLLMENT) {
                     // Not enrolled yet: Android authentication alone opens it, exactly as before v1.
                     opened = VaultFlow.openLegacy(vault, SystemClock::elapsedRealtime); ready = opened.initialized();
@@ -272,7 +284,7 @@ public final class MainActivity extends Activity {
                 }
             } catch (Exception e) { failure = e; step = null; }
             final Engine engineResult = opened; final boolean readyResult = ready; final AccessStep stepResult = step; final Exception problem = failure;
-            final boolean grantedResult = granted;
+            final boolean grantedResult = granted; final AccessStep terminalResult = terminal;
             main.post(() -> {
                 if (destroyed || ticket != generation || !resumed) {
                     // The UI moved on (pause/lock) while the worker opened the gate: close it again, keep nothing.
@@ -281,6 +293,14 @@ public final class MainActivity extends Activity {
                     return;
                 }
                 if (problem != null) {
+                    if (terminalResult != null) {
+                        lockProblem = AccessPresentation.of(terminalResult == AccessStep.CORRUPT ? app.umbra.access.AccessSnapshot.Phase.CORRUPT
+                            : app.umbra.access.AccessSnapshot.Phase.KEY_UNAVAILABLE).title();
+                        showLocked(); return;
+                    }
+                    if (grantedResult && !(problem instanceof AccessGate.LockedException) && !hasVaultFailure(problem) && !keyUnavailable(problem)) {
+                        lockProblem = "No se pudo abrir. Intenta de nuevo."; lock(AccessGate.LockCause.VAULT_FAILURE); return;
+                    }
                     // An invalidated/unrecoverable Android key is explained, never looped or regenerated.
                     if (grantedResult) unlocked = true;
                     if (keyUnavailable(problem)) { accessStep = AccessStep.KEY_UNAVAILABLE; render(); return; }
@@ -298,10 +318,12 @@ public final class MainActivity extends Activity {
     private void vaultOpened() {
         accessStep = AccessStep.OPEN; accessBusy = false; accessProblem = null;
         if (initialised) {
+            boolean externalResult = pendingResult != null;
             nav.home(); refresh(); resumeExternalResult();
-            // Return to the scanner after the camera permission prompt (presentation only; a new pairing starts).
+            // Return to the scanner only right after the camera prompt this user just answered (granted), never later.
             PairingScreens.Mode resume = pairingResume; pairingResume = null;
-            if (resume != null && pendingResult == null) startPairing(resume);
+            if (resume != null && !externalResult && SystemClock.elapsedRealtime() - pairingResumeAt < 60_000
+                && checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) startPairing(resume);
         } else onboarding();
     }
     // ------------------------------------------------------------------ personal password
@@ -498,10 +520,10 @@ public final class MainActivity extends Activity {
         if (afterEmergency) {
             if (emergency != EmergencyLock.State.CLOSED) { showLocked(); return; } // closing or INCOMPLETE: denied
             replaceVault = true;
-            if (vault == null) { // no coordinator existed before the closure: prepare the ticket directly
-                try { emergencyTicket = gate.emergency().prepareAuthentication(); }
-                catch (AccessGate.LockedException denied) { emergencyTicket = null; showLocked(); return; }
-            }
+            // The coordinator closed the previous Vault: its session must not be used (refresh would reopen it and
+            // closing it later would lock the shared gate). Prepare the emergency ticket directly, after CLOSED.
+            try { emergencyTicket = gate.emergency().prepareAuthentication(); }
+            catch (AccessGate.LockedException denied) { emergencyTicket = null; showLocked(); return; }
         }
         deviceSecure = true;
         authenticating = true;
@@ -520,7 +542,7 @@ public final class MainActivity extends Activity {
                 if (problem != null) {
                     authenticating = false; lockProblem = "Keystore no disponible. No se creó nada."; showLocked(); return;
                 }
-                app.umbra.access.AccessSession a = access();
+                app.umbra.access.AccessSession a = afterEmergency ? null : access();
                 if (a != null) {
                     // Supersedes any previous external context; prepares the emergency ticket itself when CLOSED.
                     try { authOwner = a; authRequest = a.beginExternal(app.umbra.access.AccessSnapshot.ExternalAction.ANDROID_AUTHENTICATION); }
@@ -548,7 +570,7 @@ public final class MainActivity extends Activity {
             @Override public void onAuthenticationError(int code, CharSequence text) {
                 authenticating = false; unlocked = false;
                 app.umbra.access.AccessSession owner = authOwner; app.umbra.access.AccessSession.ExternalRequest request = authRequest;
-                authOwner = null; authRequest = null; emergencyTicket = null;
+                authOwner = null; authRequest = null; emergencyTicket = null; pairingResume = null;
                 if (owner != null && request != null) owner.externalReturned(request, true); else gate.lockWithCause(AccessGate.LockCause.USER_REQUEST);
                 observeAccess(); showLocked();
             }
@@ -580,15 +602,23 @@ public final class MainActivity extends Activity {
      * Worker operation bound to the current authentication generation. Results and failures that arrive after
      * a lock are dropped, so a late callback can never repopulate a screen or restore a session.
      */
-    private <T> void action(Callable<T> operation, Consumer<T> success, Consumer<Exception> failure) {
+    private <T> void action(Callable<T> operation, Consumer<T> success, Consumer<Exception> failure) { action(operation, success, failure, null); }
+    /**
+     * As above; {@code discard} runs on the main thread when the operation is skipped or its result is dropped
+     * (lock, generation change), so results holding secrets (code chars, QR bitmaps) are wiped, never leaked.
+     */
+    private <T> void action(Callable<T> operation, Consumer<T> success, Consumer<Exception> failure, Consumer<T> discard) {
         int ticket = generation;
-        if (worker.isShutdown()) return;
+        if (worker.isShutdown()) { if (discard != null) discard.accept(null); return; }
         worker.submit(() -> {
             try {
-                if (!unlocked || ticket != generation) return;
+                if (!unlocked || ticket != generation) { if (discard != null) main.post(() -> discard.accept(null)); return; }
                 gate.requireUnlocked();
                 T result = operation.call();
-                main.post(() -> { if (!destroyed && unlocked && ticket == generation) success.accept(result); });
+                main.post(() -> {
+                    if (!destroyed && unlocked && ticket == generation) success.accept(result);
+                    else if (discard != null) discard.accept(result);
+                });
             } catch (Exception e) {
                 main.post(() -> {
                     if (!destroyed && unlocked && ticket == generation) {
@@ -790,8 +820,9 @@ public final class MainActivity extends Activity {
     @Override public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(request, permissions, results); externalUi = false;
         boolean granted = results.length > 0; for (int r : results) granted &= r == PackageManager.PERMISSION_GRANTED;
-        endExternalAction(!granted);
-        if (request == 304) scannerPermissionResult(granted);
+        permissionPrompt = false;
+        if (externalRequest != null) endExternalAction(!granted);
+        if (request == 304) { scannerPermissionResult(granted); if (!granted) pairingResume = null; }
         if (!unlocked) return;
         render();
         if (!granted) {
@@ -1702,10 +1733,12 @@ public final class MainActivity extends Activity {
     // ------------------------------------------------------------------ PAIRING_PRODUCT_V1 (add contact)
     /** One product coordinator per open session, on the same authorized Records as the Engine. Worker only. */
     private app.umbra.pairing.PairingProduct pairing() {
-        app.umbra.pairing.PairingProduct p = pairingProduct;
-        if (p == null) { p = new app.umbra.pairing.PairingProduct(vault); pairingProduct = p; }
+        Vault current = vault; app.umbra.pairing.PairingProduct p = pairingProduct;
+        // Rebuilt whenever the Vault was replaced (emergency closure): never bound to a closed Records.
+        if (p == null || pairingVault != current) { p = new app.umbra.pairing.PairingProduct(current); pairingProduct = p; pairingVault = current; }
         return p;
     }
+    private volatile Vault pairingVault;
     /** "Conexión privada no disponible" unless relay, admission and the user's network consent are all present. */
     private String pairingOnlineProblem() {
         if (!BuildConfig.ALLOW_RELAY) return null;
@@ -1727,7 +1760,8 @@ public final class MainActivity extends Activity {
         HumanCodeInput.wipe(pairingCode); pairingCode = null;
         Bitmap qr = pairingQr; pairingQr = null; if (qr != null) qr.recycle();
         pairingSnap = null; pairingBusy = null; pairingProblem = null; pairingRetryable = false; pairingMode = null; pairingFileStage = null;
-        scanState = null; pairingDelay = 0; pairingHint = null;
+        scanState = null; pairingDelay = 0; pairingHint = null; pendingPairingExport = null; pairingMountedKey = null;
+        pairingHandles.wipe();
     }
     private boolean pairingCurrent(long token) { return !destroyed && unlocked && token == pairingToken && onRoute(Route.Kind.PAIRING); }
     private void pairingObserved(long token, app.umbra.pairing.PairingSnapshot snap) {
@@ -1758,7 +1792,7 @@ public final class MainActivity extends Activity {
                 return new QrStep(step.snapshot(), bitmap(m));
             }
         }, r -> { if (!pairingCurrent(token)) { r.qr().recycle(); return; } pairingQr = r.qr(); pairingObserved(token, r.snapshot()); },
-            e -> pairingFailed(token, e));
+            e -> pairingFailed(token, e), r -> { if (r != null) r.qr().recycle(); });
     }
     private static Bitmap bitmap(com.google.zxing.common.BitMatrix m) {
         int w = m.getWidth(), h = m.getHeight(); int[] px = new int[w * h];
@@ -1776,7 +1810,7 @@ public final class MainActivity extends Activity {
                 return new CodeStep(pairing().pairingStatus(code.id()), code.display()); // display() is a copy; close() wipes the original
             }
         }, r -> { if (!pairingCurrent(token)) { HumanCodeInput.wipe(r.code()); return; } pairingCode = r.code(); pairingObserved(token, r.snapshot()); },
-            e -> pairingFailed(token, e));
+            e -> pairingFailed(token, e), r -> { if (r != null) HumanCodeInput.wipe(r.code()); });
     }
     private void acceptPairingCode(EditText[] groups) {
         if (pairingBusy != null || pairingSnap != null) return; // single submission; double taps are ignored
@@ -1789,7 +1823,7 @@ public final class MainActivity extends Activity {
         action(() -> {
             try (RelayClient relay = openRelay(relayAddress, ticket, true)) { return pairing().acceptHumanCode(code, relay).snapshot(); }
             finally { HumanCodeInput.wipe(code); } // acceptHumanCode does not take ownership of the caller array
-        }, snap -> pairingObserved(token, snap), e -> pairingFailed(token, e));
+        }, snap -> pairingObserved(token, snap), e -> pairingFailed(token, e), skipped -> HumanCodeInput.wipe(code));
     }
     private void acceptPairingQr(String invitation) {
         long token = pairingToken;
@@ -1829,9 +1863,13 @@ public final class MainActivity extends Activity {
                 action(() -> pairing().pairingStatus(id), next -> pairingObserved(token, next), e -> pairingFailed(token, e));
                 return;
             }
-            render(); main.postDelayed(this, 1000);
+            updatePairingValidity(); main.postDelayed(this, 1000);
         }
     };
+    private void updatePairingValidity() {
+        TextView v = pairingHandles.validity;
+        if (v != null && pairingSnap != null) v.setText(PairingPresentation.validFor(pairingRemaining()));
+    }
     private long pairingRemaining() {
         if (pairingSnap == null) return 0;
         return Math.max(0, pairingSnap.expiresInSeconds() - (SystemClock.elapsedRealtime() - pairingObservedAt) / 1000);
@@ -1871,6 +1909,9 @@ public final class MainActivity extends Activity {
         pairingFileStage = PairingScreens.FileStage.SAVE_RESPONSE; pendingPairingExport = r.exportKey(); render();
     }
     private String pendingPairingExport;
+    /** Key of the pairing screen currently mounted: unchanged state is not re-mounted (keeps typed input, camera, buffers). */
+    private String pairingMountedKey;
+    private final PairingScreens.Handles pairingHandles = new PairingScreens.Handles();
     private void savePairingResponse() {
         String key = pendingPairingExport; if (key == null) return; pendingPairingExport = null;
         boolean added = PairingPresentation.stage(pairingSnap) == PairingPresentation.Stage.ADDED;
@@ -1898,15 +1939,20 @@ public final class MainActivity extends Activity {
     private void renderPairing() {
         if (pairingMode == null) { nav.back(); render(); return; }
         PairingScreens.Mode mode = pairingMode;
-        // A running camera is not restarted by unrelated refreshes (sync tick, notices): the screen is unchanged.
-        if (mode == PairingScreens.Mode.SCAN && scanner != null && !scanner.isClosed() && pairingSnap == null && pairingBusy == null
-            && pairingProblem == null && scanState == null) return;
+        // Unrelated refreshes (sync tick, notices) do not re-mount an unchanged pairing screen: the camera keeps running,
+        // a partly typed code is kept, and the countdown is updated in place.
+        String key = mode + "|" + pairingBusy + "|" + pairingProblem + "|" + pairingHint + "|" + scanState + "|" + scannerPermissionDenied + "|"
+            + pairingFileStage + "|" + (pairingSnap == null ? null : pairingSnap.phase() + ":" + pairingSnap.nextAction() + ":" + pairingSnap.failure())
+            + "|" + (pairingQr != null) + "|" + (pairingCode != null);
+        if (key.equals(pairingMountedKey) && onRoute(Route.Kind.PAIRING)) { updatePairingValidity(); return; }
+        pairingMountedKey = key;
+        pairingHandles.wipe();
         String validFor = pairingSnap != null && PairingPresentation.stage(pairingSnap) == PairingPresentation.Stage.WAITING
             ? PairingPresentation.validFor(pairingRemaining()) : null;
         PairingScreens.Flow flow = new PairingScreens.Flow(mode, pairingSnap, pairingBusy, pairingProblem, pairingRetryable, pairingQr, pairingCode,
             validFor, mode == PairingScreens.Mode.ENTER_CODE ? pairingHint : scanState, scannerPermissionDenied, pairingFileStage);
         if (mode != PairingScreens.Mode.SCAN || pairingSnap != null || pairingBusy != null || pairingProblem != null) closeScanner();
-        mount(PairingScreens.flow(ui, flow, new PairingScreens.FlowActions() {
+        mount(PairingScreens.flow(ui, flow, pairingHandles, new PairingScreens.FlowActions() {
             @Override public void close() { if (pairingSnap != null && PairingPresentation.stage(pairingSnap) == PairingPresentation.Stage.WAITING) cancelPairingFlow(); else closePairing(); }
             @Override public void cancelPairing() { cancelPairingFlow(); }
             @Override public void retry() { PairingScreens.Mode m = pairingMode; startPairing(m); }
@@ -1917,7 +1963,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void later() { closePairing(); refresh(); }
             @Override public void submitCode(EditText[] groups) { acceptPairingCode(groups); }
-            @Override public void requestCamera() { pairingResume = PairingScreens.Mode.SCAN; requestPermissionsExternal(new String[]{Manifest.permission.CAMERA}, 304); }
+            @Override public void requestCamera() { pairingResume = PairingScreens.Mode.SCAN; pairingResumeAt = SystemClock.elapsedRealtime(); requestPermissionsExternal(new String[]{Manifest.permission.CAMERA}, 304); }
             @Override public void enterCodeInstead() { startPairing(PairingScreens.Mode.ENTER_CODE); }
             @Override public void scannerSurface(android.view.TextureView view) { openScanner(view); }
             @Override public void createFile() { createPairingFile(); }
@@ -1960,9 +2006,11 @@ public final class MainActivity extends Activity {
     }
     /** Permission prompt as an explicit external action (a grant never opens the vault or starts a sensor). */
     private void requestPermissionsExternal(String[] permissions, int requestCode) {
-        if (!beginExternalAction(app.umbra.access.AccessSnapshot.ExternalAction.PERMISSION_PROMPT)) return;
-        externalUi = true; requestPermissions(permissions, requestCode);
+        // The context is declared when the system prompt actually takes the window (onPause), before leaving. A request
+        // Android answers without UI (permanently denied) therefore does not lock UMBRA for nothing.
+        permissionPrompt = true; externalUi = true; requestPermissions(permissions, requestCode);
     }
+    private boolean permissionPrompt;
     private boolean beginExternalAction(app.umbra.access.AccessSnapshot.ExternalAction action) {
         app.umbra.access.AccessSession a = access();
         if (a == null) return true; // before any vault exists (lock screen → Android security settings)
