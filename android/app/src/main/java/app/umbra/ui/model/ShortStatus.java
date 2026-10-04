@@ -29,6 +29,19 @@ public final class ShortStatus {
     public static final int MAX = 40;
 
     public static String transport(String text) { return map(TRANSPORT, text, "Cercanía"); }
+    /**
+     * Real BluetoothLink handshake stages (name of BluetoothLink.Stage) as short phases. "Conectado" only after the
+     * domain reports AUTHENTICATED; a socket alone is not a connection to a verified contact.
+     */
+    public static String nearbyStage(String stage) {
+        if (stage == null) return "Cercanía";
+        return switch (stage) {
+            case "CONNECTING" -> "Conectando…";
+            case "SOCKET_CONNECTED", "HELLO_SENT", "HELLO_RECEIVED", "PROOF_SENT" -> "Comprobando el otro teléfono…";
+            case "AUTHENTICATED" -> "Conectado";
+            default -> "Cercanía";
+        };
+    }
     public static String location(String text) { return map(LOCATION, text, "Compartiendo"); }
 
     private static String map(Map<String, String> known, String text, String fallback) {

@@ -809,6 +809,9 @@ public final class MainActivity extends Activity {
             @Override public void status(String text) {
                 main.post(() -> { if (unlocked && ticket == generation) { transportStatus = app.umbra.ui.model.ShortStatus.transport(text); if (onTab(HomeTab.NEARBY)) refresh(); } });
             }
+            @Override public void stage(BluetoothLink.Stage stage) {
+                main.post(() -> { if (unlocked && ticket == generation) { transportStatus = app.umbra.ui.model.ShortStatus.nearbyStage(stage.name()); if (onTab(HomeTab.NEARBY)) refresh(); } });
+            }
         }, consent);
     }
     private boolean bluetoothPermission() {
