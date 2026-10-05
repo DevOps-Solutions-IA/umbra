@@ -88,8 +88,18 @@ NOT_EXECUTED: CI de GitHub (push bloqueado), pruebas físicas.
 
 - Suite UI: **39 debug / 36 R8** (`UiScreensRenderTest` 28).
 - Inventario completo: **124 offline / 127 connected**.
-- Timeout de suite 330 → 345 s: **PROVISIONAL, NO MEDIDO**. Al correr la CI, medir con el recibo de
-  `instrumentation_progress` y fijar el mínimo justificado (o volver a 330 si cabe).
+- Timeout de suite 330 → 345 s: **PROVISIONAL**. Primera medición real (CI del PR #23 sobre `7eeec43`):
+  connected **318.188584192 s**, offline **307.961290426 s** con `SUITE_TIMEOUT_SECONDS = 345`. Sin cambio
+  del timeout; la decisión 330 vs 345 se tomará con mediciones adicionales.
+
+## Cierre de CI (PR #23)
+
+Único fallo en `7eeec43`: Verify UMBRA / android, en `scripts/smoke_release_launch.py`, que aún exigía el
+copy histórico «Bóveda bloqueada»; la pantalla de bloqueo actual (y `LockedActivityTest`) muestra «UMBRA
+bloqueado». En ese run la instrumentación completa pasó (127 connected / 124 offline), JVM 470 connected /
+409 offline y la política de APK debug/release de ambos sabores. Corrección solo de tooling: el gate usa
+`LOCKED_STATUS = 'UMBRA bloqueado'`, y `scripts/tests/test_release_smoke_contract.py` lo ata a
+`EntryScreens.lock`, `AccessPresentation` (LOCKED) y `LockedActivityTest`. UI, dominio y timeout sin cambios.
 
 ## Pendiente (no completado por inferencia)
 

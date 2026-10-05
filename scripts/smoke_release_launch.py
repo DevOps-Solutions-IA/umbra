@@ -14,6 +14,11 @@ import xml.etree.ElementTree as ET
 from build_android import java_home
 
 root = Path(__file__).resolve().parents[1]
+# Visible lock contract: EntryScreens.lock status on a cold start (AccessPresentation LOCKED copy), the text
+# LockedActivityTest asserts. scripts/tests/test_release_smoke_contract.py keeps them aligned.
+LOCKED_STATUS = 'UMBRA bloqueado'
+def locked_ui_visible(tree):
+    return any(node.get('text') == LOCKED_STATUS for node in tree.iter('node'))
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--serial', required=True)
 parser.add_argument('--sdk', default=os.environ.get('ANDROID_HOME') or os.environ.get('ANDROID_SDK_ROOT'))
@@ -49,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix='umbra-synthetic-r8-') as d:
             assert any(package+'/app.umbra.ui.MainActivity' in line for line in resumed.splitlines() if 'mResumedActivity:' in line or 'topResumedActivity=' in line)
             run(adb,'-s',serial,'shell','uiautomator','dump','/sdcard/umbra-r8-synthetic.xml')
             tree=ET.fromstring(run(adb,'-s',serial,'shell','cat','/sdcard/umbra-r8-synthetic.xml'))
-            assert any(node.get('text')=='Bóveda bloqueada' for node in tree.iter('node'))
+            assert locked_ui_visible(tree), 'locked status not displayed: '+LOCKED_STATUS
             print('PASS',flavor,'release/R8 installed using ephemeral synthetic signer, resumed and displayed locked UI; no unlock/native-crypto/Keystore claim',flush=True)
         finally:
             if installed:
