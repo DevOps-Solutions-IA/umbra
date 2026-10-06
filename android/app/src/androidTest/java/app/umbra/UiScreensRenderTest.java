@@ -780,7 +780,8 @@ public class UiScreensRenderTest {
             assertNotNull(help(offline, Help.NETWORK));
             assertFalse("normal settings expose no server address", visibleText(offline).contains("servidor.ejemplo.test"));
             assertFalse("normal settings expose no address field", visibleText(offline).contains("Dirección"));
-            assertTrue("server address is not user-editable", fields(offline).isEmpty());
+            assertEquals("only the administrator invitation secret remains editable", 1, fields(offline).size());
+            assertSecretInputs(offline, 1);
             assertConcise(offline);
             View notAdmitted = render("27b-network-not-admitted", ui -> SettingsScreens.section(ui,
                 state.apply(ConnectivityPresentation.of("UNLOCKED_OFFLINE", false, false, false, true, none), false), sa));
