@@ -76,6 +76,18 @@ def main():
     if not valid_report(pairing_log.read_text(), result.returncode, expected_tests=5):
         raise RuntimeError(f'Pairing real Vault instrumentation failed: {pairing_log}')
     evidence['pairingVaultTests'] = 5
+    provisioning_log = args.reports / 'provisioning-tests.log'
+    with provisioning_log.open('w') as stream:
+        result = subprocess.run([*adb, 'shell', 'am', 'instrument', '-w', '-r', '-e', 'class',
+            'app.umbra.DeviceProvisioningTest', package + '.test/androidx.test.runner.AndroidJUnitRunner'],
+            stdout=stream, stderr=subprocess.STDOUT, timeout=180)
+    if not valid_report(provisioning_log.read_text(), result.returncode, expected_tests=2):
+        raise RuntimeError(f'Offline provisioning Android instrumentation failed: {provisioning_log}')
+    evidence['provisioningTests'] = 2
+    if args.optimized:
+        if not re.search(r'^app\.umbra\.admission\.ProvisioningService -> [^:]+:$', mapping.read_text(), re.M):
+            raise RuntimeError('Optimized provisioning implementation missing')
+    evidence['provisioningDoesNotProve'] = 'Production authenticated hardware or server availability'
     pairing_restart = ['python', str(ROOT / 'scripts/run_pairing_restart.py'), '--serial', args.serial,
                        '--flavor', args.flavor, '--log-dir', str(args.reports / 'pairing-restart')]
     if args.optimized:

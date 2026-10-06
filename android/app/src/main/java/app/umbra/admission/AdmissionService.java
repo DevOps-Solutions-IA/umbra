@@ -12,14 +12,18 @@ public final class AdmissionService {
     public static final int MAX_DECISIONS=4096, MAX_PEERS=4096, MAX_CHALLENGES=64;
     private final Records db;
     private final app.umbra.connectivity.ConnectivityService connectivity;
+    private final ProvisioningService provisioning;
     private final LongSupplier clock;
     private final java.util.Map<String,Runnable> challengeLeases=new java.util.concurrent.ConcurrentHashMap<>();
     public AdmissionService(Records db) { this(db,Bytes::now); }
     public AdmissionService(Records db,LongSupplier clock) {
         this.db=db; this.clock=clock;
         connectivity=new app.umbra.connectivity.ConnectivityService(db,this,app.umbra.calls.CallPlatform.ENABLED);
+        provisioning=new ProvisioningService(db,this);
     }
     public app.umbra.connectivity.ConnectivityService connectivity() { return connectivity; }
+    /** Public offline provisioning bound to this service's storage and connectivity. */
+    public ProvisioningService provisioning() { return provisioning; }
     private String read(String key) { byte[] v=db.get("admission",key); return v==null?null:Bytes.text(v); }
     private void write(String key,String value) { db.put("admission",key,Bytes.utf8(value)); }
     private RealmConfig realm() { String r=read("realm"); if(r==null) throw AdmissionCodec.invalid(); return RealmConfig.decode(r); }

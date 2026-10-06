@@ -7,13 +7,17 @@ services:
     volumes:
       - relay_data:/data
     expose: ["8080"]
+    environment:
+      UMBRA_ADMISSION_REALM: ${UMBRA_ADMISSION_REALM:?Set the public UMBRA_ADMISSION_REALM in .env}
+      # Bind admission proofs to the same public HTTPS origin served by Caddy.
+      UMBRA_ADMISSION_ORIGIN: https://${UMBRA_DOMAIN:?Set UMBRA_DOMAIN in .env}
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 128
     mem_limit: 512m
     networks: [private]
   caddy:
-    image: caddy:2
+    image: caddy:2@sha256:8dc9fa87b36b25303d1c67d2a09f5824b7f3bfd72cb052f246e5da2133fe29a8
     restart: unless-stopped
     ports:
       - "80:80"
