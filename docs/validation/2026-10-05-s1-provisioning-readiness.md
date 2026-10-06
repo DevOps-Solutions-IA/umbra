@@ -79,3 +79,45 @@ VERIFIED_ONLY, Vault/Keystore, emergencia y exclusiones offline.
 La excepción humana de PR24 ya se agotó. Este cambio sensible nuevo requiere
 revisión humana conforme a AGENTS antes de merge; CI verde y revisión asistida
 por IA no constituyen esa aprobación. No declarar producción ni cierre físico.
+
+## Addendum: inventario de instrumentación y entorno local
+
+Primer candidato publicado `edacb6d300977fee158fd608dab0979123913a26`,
+árbol `edaff0e7ecb2fa12951a55d7631001b4cca403b1`. Verify run
+37416234272, intento1, job Android112117007529 rechazó la suite por exigir
+127 casos cuando Android ejecutó y aprobó129. Artifact11391688855, ZIP
+SHA-256 `f6ebeca3d224aedd34e65b819757861e9111a2aca5147e4a35182977d41f122a`,
+contiene `OK (129 tests)` y terminal -1, sin fallos ni omisiones; los dos
+nuevos casos pasaron. Tiempo Android303,199s y host304,022s, bajo345s.
+Offline no llegó a ejecutarse en ese job. No interpretar el rojo como fallo
+de admisión/SQLite ni contar Offline como aprobado.
+
+Se reprodujo el rechazo del runner sobre el recibo real antes del cambio.
+Ahora exige exactamente129 connected y126 offline, dos casos adicionales
+por flavor. Trece tests focales del runner pasan y rechazan conteos viejos,
+conteos desviados, crashes y skips incluso con resumen del conteo correcto.
+El replay del recibo pasa; no constituye otra ejecución Android. Preservado
+el timeout345s y todas las demás condiciones. El nuevo SHA necesita CI propia.
+
+Durante este diagnóstico GitHub registró un intento2 del mismo run/HEAD;
+esta tarea no lo inició ni lo canceló. Preservar ambos resultados.
+
+La JVM completa local aprobó491 connected y430 offline, sin fallos, errores
+ni omisiones. El primer build agregado local falló en `readdir` de DrvFS
+(`Cannot allocate memory`) durante lint; no se demostró OOM ni causa precisa.
+El lint aislado y luego el build completo con un worker pasaron (269 tareas,
+10m19s), incluidos APK debug/release, R8, lint e instrumentación compilada.
+Guardas de APK, permisos y JNI pasaron para ambos flavors y builds.
+El cambio de concurrencia es una medida local, no una corrección productiva
+ni una modificación de CI. Mantener ese fallo histórico.
+
+El guard de historial local compartido devolvió exit2 por un subprocess Git
+sin diagnóstico de comando. Inventario, metadata y lectura completa actual
+de objetos no reprodujeron el error; no se tocaron refs/objetos. La copia
+restaurada propia aprobó fsck y el guard completo (2218 blobs). El checkout
+limpio de CI aprobó repository-guard. No declarar resuelta la causa local.
+
+Respaldado el primer candidato en bundle completo, restauración aislada y
+SHA-256 verificados; el siguiente recibo debe conservarlo y añadir otro
+respaldo del candidato corregido, sin sobrescribirlo. Ninguna APK fue
+instalada en teléfonos ni se desplegó infraestructura.
