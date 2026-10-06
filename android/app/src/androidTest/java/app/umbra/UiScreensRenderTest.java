@@ -434,12 +434,13 @@ public class UiScreensRenderTest {
         int[] emergencies = {0};
         HomeScreens.SettingsActions ra = new HomeScreens.SettingsActions() { public void open(SettingsSection s) {} public void lockNow() {} };
         View rootSettings = render("13-settings", ui -> HomeScreens.settings(ui, "Ana", OFFLINE_SESSION, ra, nav(ui, HomeTab.SETTINGS)));
+        assertEquals(BuildConfig.ALLOW_RELAY ? "https://relay.egoumbra.sbs" : "", BuildConfig.RELAY_ORIGIN);
         for (SettingsSection s : SettingsSection.values()) if (s != SettingsSection.PROFILE) assertTrue(s.title, hasText(rootSettings, s.title));
         assertAccessible(rootSettings);
         assertConcise(rootSettings);
         SettingsScreens.SettingsActions sa = new SettingsScreens.SettingsActions() {
             public void back() {} public void createInvitation() {} public void importInvitation() {} public void revokeInvitations() {} public void lockNow() {}
-            public void destroyIdentity() {} public void expiry(int i) {} public void register(String a, String i) {} public void syncNow() {} public void unregister() {}
+            public void destroyIdentity() {} public void expiry(int i) {} public void register(String i) {} public void syncNow() {} public void unregister() {}
             public void connect() {} public void disconnect() {} public void nearby() {} public void changePassword() {} public void enrollPassword() {}
             public void admission() {} public void devices() {} public void emergency() { emergencies[0]++; }
         };
@@ -761,12 +762,12 @@ public class UiScreensRenderTest {
     @Test public void networkAndSecuritySettingsReflectOnlyDomainConsent() {
         SettingsScreens.SettingsActions sa = new SettingsScreens.SettingsActions() {
             public void back() {} public void createInvitation() {} public void importInvitation() {} public void revokeInvitations() {} public void lockNow() {}
-            public void destroyIdentity() {} public void expiry(int i) {} public void register(String a, String i) {} public void syncNow() {} public void unregister() {}
+            public void destroyIdentity() {} public void expiry(int i) {} public void register(String i) {} public void syncNow() {} public void unregister() {}
             public void connect() {} public void disconnect() {} public void nearby() {} public void changePassword() {} public void enrollPassword() {}
             public void admission() {} public void devices() {} public void emergency() {}
         };
         java.util.function.BiFunction<ConnectivityPresentation, Boolean, SettingsScreens.SettingsState> state = (c, admitted) -> new SettingsScreens.SettingsState(
-            SettingsSection.NETWORK, "Ana", ME, FEATURES, !BuildConfig.ALLOW_RELAY, c, true, BuildConfig.ALLOW_RELAY ? "https://servidor.ejemplo.test" : "", "24 horas", 1,
+            SettingsSection.NETWORK, "Ana", ME, FEATURES, !BuildConfig.ALLOW_RELAY, c, false, BuildConfig.ALLOW_RELAY ? "https://servidor.ejemplo.test" : "", "24 horas", 1,
             BuildConfig.VERSION_NAME, true, "4 min", AdmissionPresentation.of(admitted ? "ADMITTED" : "NOT_ADMITTED", false, false));
         ConnectivityPresentation.Service none = ConnectivityPresentation.Service.NOT_OBSERVED;
         View offline = render("27a-network-unlocked-offline", ui -> SettingsScreens.section(ui, state.apply(OFFLINE_SESSION, true), sa));
@@ -777,11 +778,14 @@ public class UiScreensRenderTest {
         } else {
             assertTrue(button(offline, "Conectar").isEnabled());
             assertNotNull(help(offline, Help.NETWORK));
+            assertFalse("normal settings expose no server address", visibleText(offline).contains("servidor.ejemplo.test"));
+            assertFalse("normal settings expose no address field", visibleText(offline).contains("Dirección"));
+            assertTrue("server address is not user-editable", fields(offline).isEmpty());
             assertConcise(offline);
             View notAdmitted = render("27b-network-not-admitted", ui -> SettingsScreens.section(ui,
                 state.apply(ConnectivityPresentation.of("UNLOCKED_OFFLINE", false, false, false, true, none), false), sa));
             assertFalse(button(notAdmitted, "Conectar").isEnabled());
-            assertFalse(button(notAdmitted, "Registrar buzón").isEnabled());
+            assertFalse(button(notAdmitted, "Conectar y registrar").isEnabled());
             View connected = render("27c-network-connected", ui -> SettingsScreens.section(ui,
                 state.apply(ConnectivityPresentation.of("CONNECTED", false, false, false, true, ConnectivityPresentation.Service.RESPONDED), true), sa));
             assertNotNull(button(connected, "Desconectar"));
@@ -930,7 +934,7 @@ public class UiScreensRenderTest {
                 box.addView(ui.errorState(ErrorPresentation.of(k, "SecurityException: synthetic diagnostic"), () -> {}, true));
             return Screen.of(null, box, null);
         });
-        assertTrue(hasText(v, "Servidor sin respuesta"));
+        assertTrue(hasText(v, "Conexión privada no disponible"));
         assertFalse("technical details collapsed by default", hasText(v, "synthetic diagnostic"));
         assertNotNull(button(v, "Detalles técnicos"));
         assertAccessible(v);

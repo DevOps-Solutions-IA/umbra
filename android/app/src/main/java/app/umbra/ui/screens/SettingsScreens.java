@@ -34,7 +34,7 @@ public final class SettingsScreens {
     public interface SettingsActions {
         void back(); void createInvitation(); void importInvitation(); void revokeInvitations();
         void lockNow(); void destroyIdentity(); void expiry(int index);
-        void register(String address, String invitation); void syncNow(); void unregister();
+        void register(String invitation); void syncNow(); void unregister();
         void connect(); void disconnect(); void nearby();
         void changePassword(); void enrollPassword(); void admission();
         void devices();
@@ -153,37 +153,39 @@ public final class SettingsScreens {
         if (c.disconnectEnabled()) body.addView(ui.button(Ui.ButtonKind.DESTRUCTIVE, "Desconectar", Glyph.CLOUD_OFF, a::disconnect));
         else {
             Button connect = ui.button(Ui.ButtonKind.PRIMARY, "Conectar", Glyph.CLOUD, a::connect);
-            if (!c.connectEnabled()) ui.disabled(connect, s.relayRegistered() ? "requiere acceso privado activo" : "configura el servidor");
+            if (!c.connectEnabled()) ui.disabled(connect, s.relayAddress() == null || s.relayAddress().isEmpty() ? "requiere configuración privada" : "requiere acceso privado activo");
             body.addView(connect);
         }
         body.addView(ui.listRow(ui.iconTile(Glyph.BLUETOOTH, Tone.OFFLINE), "Cercanía", c.nearby(), ui.chevron(), a::nearby));
-        body.addView(ui.sectionHeader("Servidor"));
+        body.addView(ui.sectionHeader("Servicio privado"));
         LinearLayout server = ui.card();
+        boolean configured = s.relayAddress() != null && !s.relayAddress().isEmpty();
+        server.addView(fact(ui, "Configuración", configured ? "Preparada" : "Pendiente"));
         server.addView(fact(ui, "Buzón", s.relayRegistered() ? "Registrado" : "Sin registrar"));
-        if (s.relayAddress() != null && !s.relayAddress().isEmpty()) server.addView(fact(ui, "Dirección", s.relayAddress().replaceFirst("^https://", "")));
         body.addView(server);
-        EditText address = ui.field("https://servidor"); address.setSingleLine(true);
-        address.setText(s.relayAddress() == null ? "" : s.relayAddress());
-        address.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
-        body.addView(ui.labeledField("Dirección", address));
-        EditText[] invite = new EditText[1];
-        TextView inviteLabel = ui.text(UmbraType.CAPTION, "Invitación del administrador");
-        LinearLayout inviteField = ui.passwordField("Invitación", e -> invite[0] = e);
-        if (invite[0].getId() == android.view.View.NO_ID) invite[0].setId(android.view.View.generateViewId());
-        inviteLabel.setLabelFor(invite[0].getId());
-        body.addView(inviteLabel, ui.margins(Ui.match(), 8, 0));
-        body.addView(inviteField);
-        Button register = ui.button(Ui.ButtonKind.SECONDARY, "Registrar buzón", Glyph.CLOUD, () -> {
-            String inv = invite[0].getText().toString(); invite[0].setText(""); a.register(address.getText().toString().trim(), inv.trim());
-        });
-        if (!s.admission().admitted()) ui.disabled(register, "requiere acceso privado activo");
-        body.addView(register);
-        Button sync = ui.button(Ui.ButtonKind.SECONDARY, "Sincronizar", Glyph.RETRY, a::syncNow);
-        if (!c.networkEnabled()) ui.disabled(sync, "red deshabilitada");
-        body.addView(sync);
-        Button unregister = ui.button(Ui.ButtonKind.DESTRUCTIVE, "Eliminar buzón", Glyph.TRASH, a::unregister);
-        if (!c.networkEnabled()) ui.disabled(unregister, "conecta primero");
-        body.addView(unregister);
+        if (!s.relayRegistered()) {
+            EditText[] invite = new EditText[1];
+            TextView inviteLabel = ui.text(UmbraType.CAPTION, "Invitación del administrador");
+            LinearLayout inviteField = ui.passwordField("Invitación", e -> invite[0] = e);
+            if (invite[0].getId() == android.view.View.NO_ID) invite[0].setId(android.view.View.generateViewId());
+            inviteLabel.setLabelFor(invite[0].getId());
+            body.addView(inviteLabel, ui.margins(Ui.match(), 8, 0));
+            body.addView(inviteField);
+            Button register = ui.button(Ui.ButtonKind.SECONDARY, "Conectar y registrar", Glyph.CLOUD, () -> {
+                String inv = invite[0].getText().toString(); invite[0].setText(""); a.register(inv.trim());
+            });
+            if (!configured) ui.disabled(register, "requiere configuración privada");
+            else if (!s.admission().admitted()) ui.disabled(register, "requiere acceso privado activo");
+            body.addView(register);
+        }
+        if (s.relayRegistered()) {
+            Button sync = ui.button(Ui.ButtonKind.SECONDARY, "Sincronizar", Glyph.RETRY, a::syncNow);
+            if (!c.networkEnabled()) ui.disabled(sync, "red deshabilitada");
+            body.addView(sync);
+            Button unregister = ui.button(Ui.ButtonKind.DESTRUCTIVE, "Eliminar buzón", Glyph.TRASH, a::unregister);
+            if (!c.networkEnabled()) ui.disabled(unregister, "conecta primero");
+            body.addView(unregister);
+        }
     }
 
     private static void storage(Ui ui, SettingsState s, SettingsActions a, LinearLayout body) {

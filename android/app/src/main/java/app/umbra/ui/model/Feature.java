@@ -16,7 +16,7 @@ public enum Feature {
     DEVICE_REVOCATION("Revocar dispositivos"),
     DEVICE_LINKING_WIZARD("Vincular dispositivos"),
     NEARBY_BLUETOOTH("Cercanía por Bluetooth"),
-    RELAY_SYNC("Sincronización por servidor"),
+    RELAY_SYNC("Sincronización privada"),
     QR_SCAN("Escanear QR"),
     PAIRING_ONLINE("Vincular por QR o código"),
     PAIRING_FILE("Vincular por archivo"),

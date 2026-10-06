@@ -31,7 +31,7 @@ public class UiCopyTest {
         assertFalse(SpanishText.isSpanish(null));
         assertFalse(SpanishText.isSpanish("  "));
         assertFalse(SpanishText.isSpanish("Relay unavailable"));
-        assertTrue(SpanishText.isSpanish("Servidor sin respuesta"));
+        assertTrue(SpanishText.isSpanish("Conexión privada no disponible"));
     }
 
     @Test public void presentationCopyIsSpanishAndShort() {

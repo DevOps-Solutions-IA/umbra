@@ -32,7 +32,7 @@ public class UiConnectivityPresentationTest {
         String text = (c.chip() + c.title() + c.body() + c.service()).toLowerCase(Locale.ROOT);
         for (String claim : new String[]{"servidor disponible", "conectado al servidor", "llamada activa", "en línea"}) assertFalse(claim, text.contains(claim));
         assertEquals("No reconecta sola.", c.body());
-        assertEquals("Servidor respondió", online("CONNECTED", false, Service.RESPONDED).service());
+        assertEquals("Servicio privado disponible", online("CONNECTED", false, Service.RESPONDED).service());
         assertNull("no service line while not connected", online("UNLOCKED_OFFLINE", true, Service.RESPONDED).service());
     }
     @Test public void errorRequiresANewExplicitAction() {
