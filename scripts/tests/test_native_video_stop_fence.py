@@ -63,7 +63,7 @@ class NativeVideoStopFenceTest(unittest.TestCase):
 ''')
 
  def test_stale_thread_reference_and_exact_deadline_reject(self):
-  self.run_java(''' 
+  self.run_java('''
  var s=new Session();try {
   long request=System.nanoTime();var reads=new AtomicInteger();
   try{NativeVideoStopFence.await(s,Session.class,s.owner.get(),()->reads.incrementAndGet()==1?s.owner.get():Thread.currentThread(),request,request+1_000_000_000L,System::nanoTime);throw new AssertionError("Stale worker accepted");}
