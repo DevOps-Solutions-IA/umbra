@@ -14,7 +14,7 @@ public record ErrorPresentation(ErrorKind kind, String title, String body, Glyph
         String t = sanitize(technical);
         return switch (kind) {
             case NO_CONNECTION -> new ErrorPresentation(kind, "Sin conexión", "Los mensajes quedan cifrados en cola.", Glyph.NETWORK_OFF, Tone.WARNING, true, t);
-            case RELAY_UNAVAILABLE -> new ErrorPresentation(kind, "Servidor sin respuesta", "Los mensajes siguen en cola.", Glyph.CLOUD_OFF, Tone.WARNING, true, t);
+            case RELAY_UNAVAILABLE -> new ErrorPresentation(kind, "Conexión privada no disponible", "Los mensajes siguen en cola.", Glyph.CLOUD_OFF, Tone.WARNING, true, t);
             case TURN_UNAVAILABLE -> new ErrorPresentation(kind, "Llamada no establecida", "No se transmitió audio.", Glyph.CALL_END, Tone.DANGER, true, t);
             case CONTACT_UNVERIFIED -> new ErrorPresentation(kind, "Sin verificar", "Compara el código antes de enviar.", Glyph.SHIELD, Tone.WARNING, false, t);
             case IDENTITY_CHANGED -> new ErrorPresentation(kind, "Identidad cambió", "Verifica de nuevo antes de continuar.", Glyph.IDENTITY_CHANGED, Tone.IDENTITY, false, t);

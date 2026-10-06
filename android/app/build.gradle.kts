@@ -50,6 +50,7 @@ android {
         create("connected") {
             dimension = "transport"
             buildConfigField("boolean", "ALLOW_RELAY", "true")
+            buildConfigField("String", "RELAY_ORIGIN", "\"https://relay.egoumbra.sbs\"")
             buildConfigField("String", "VOICE_NATIVE_SHA256", "\"$voiceArtifactSha256\"")
         }
         create("offline") {
@@ -57,6 +58,7 @@ android {
             applicationIdSuffix = ".offline"
             versionNameSuffix = "-offline"
             buildConfigField("boolean", "ALLOW_RELAY", "false")
+            buildConfigField("String", "RELAY_ORIGIN", "\"\"")
         }
     }
     compileOptions {

@@ -743,6 +743,8 @@ public final class MainActivity extends Activity {
     }
     private RelayClient openRelay(String address, int ticket, boolean requireOnline) throws Exception {
         if (!BuildConfig.ALLOW_RELAY) throw new FailurePresentation.UiRefusal("No incluido en esta edición.");
+        if (BuildConfig.RELAY_ORIGIN.isEmpty() || !BuildConfig.RELAY_ORIGIN.equals(address))
+            throw new SecurityException("private origin mismatch");
         RelayClient relay = new RelayClient(address, () -> unlocked && ticket == generation && (!requireOnline || !networkPaused), engine.admission());
         activeRelay = relay;
         if (!unlocked || ticket != generation) { relay.close(); throw new AccessGate.LockedException(); }
@@ -1079,11 +1081,15 @@ public final class MainActivity extends Activity {
     }
 
     // ------------------------------------------------------------------ explicit network consent
+    private boolean relayConfiguredForBuild() {
+        return BuildConfig.ALLOW_RELAY && profile != null && !BuildConfig.RELAY_ORIGIN.isEmpty()
+            && BuildConfig.RELAY_ORIGIN.equals(profile.optString("relay"));
+    }
     private ConnectivityPresentation connectivity() {
         ConnectivityPresentation.Service service = relayUnreachable ? ConnectivityPresentation.Service.UNREACHABLE
             : relayResponded ? ConnectivityPresentation.Service.RESPONDED : ConnectivityPresentation.Service.NOT_OBSERVED;
-        boolean relayKnown = profile != null && !profile.optString("relay").isEmpty();
-        return ConnectivityPresentation.of(connectivityState, !BuildConfig.ALLOW_RELAY, canConnect, nearbyActive && bluetooth != null, relayKnown, service);
+        return ConnectivityPresentation.of(connectivityState, !BuildConfig.ALLOW_RELAY, canConnect, nearbyActive && bluetooth != null,
+            relayConfiguredForBuild(), service);
     }
     private AdmissionPresentation admissionPresentation() {
         AdmissionFlow.Snapshot a = admission;
@@ -1094,7 +1100,13 @@ public final class MainActivity extends Activity {
     private void connectNetwork() {
         if (!BuildConfig.ALLOW_RELAY || connectBusy || !unlocked || engine == null) return;
         connectBusy = true; relayUnreachable = false; relayResponded = false;
-        action(() -> { AndroidConnectivity.connect(this, engine.connectivity(), engine.profile().getString("relay"), true); return engine.connectivity().isNetworkSessionAllowed(); },
+        action(() -> {
+            String origin = engine.profile().getString("relay");
+            if (BuildConfig.RELAY_ORIGIN.isEmpty() || !BuildConfig.RELAY_ORIGIN.equals(origin))
+                throw new SecurityException("private origin mismatch");
+            AndroidConnectivity.connect(this, engine.connectivity(), origin, true);
+            return engine.connectivity().isNetworkSessionAllowed();
+        },
             allowed -> { connectBusy = false; networkPaused = !allowed; refresh(); if (allowed) syncNow(); },
             failure -> { connectBusy = false; notice("No se habilitó la red."); refresh(); });
     }
@@ -1320,8 +1332,9 @@ public final class MainActivity extends Activity {
     // ------------------------------------------------------------------ settings
     private void renderSettings(SettingsSection section) {
         int expiryIndex = ttl == 3600 ? 0 : ttl == 604800 ? 2 : 1;
+        String configuredRelay = relayConfiguredForBuild() ? BuildConfig.RELAY_ORIGIN : "";
         mount(SettingsScreens.section(ui, new SettingsScreens.SettingsState(section, profile.optString("alias"), profile.optString("id"), features,
-            !BuildConfig.ALLOW_RELAY, connectivity(), profile.optBoolean("registered"), profile.optString("relay"), ttlName(), expiryIndex, BuildConfig.VERSION_NAME,
+            !BuildConfig.ALLOW_RELAY, connectivity(), profile.optBoolean("registered") && relayConfiguredForBuild(), configuredRelay, ttlName(), expiryIndex, BuildConfig.VERSION_NAME,
             passwordConfigured, PasswordPolicy.AUTO_LOCK_LABELS[autoLockIndex], admissionPresentation(), AccessPresentation.remaining(observeAccess())), new SettingsScreens.SettingsActions() {
             @Override public void back() { MainActivity.this.back(); }
             @Override public void createInvitation() { addContactSheet(); }
@@ -1344,15 +1357,17 @@ public final class MainActivity extends Activity {
                 });
             }
             @Override public void expiry(int index) { ttl = new long[]{3600, 86400, 604800}[index]; render(); }
-            @Override public void register(String address, String invite) {
+            @Override public void register(String invite) {
                 if (!BuildConfig.ALLOW_RELAY) return;
                 action(() -> {
-                    String base = RelayClient.validate(address);
-                    // Explicit consent for this origin, requested by the person's "Conectar y registrar" action.
+                    var provisioned = engine.admission().provisioning().status();
+                    if (!provisioned.configured()) throw new SecurityException("private configuration required");
+                    String base = RelayClient.validate(provisioned.exactOrigin());
+                    if (!BuildConfig.RELAY_ORIGIN.equals(base)) throw new SecurityException("private origin mismatch");
+                    // Explicit consent for the internally provisioned origin, requested by "Conectar y registrar".
                     var conn = engine.connectivity();
                     boolean sameOrigin = false;
                     if (conn.isNetworkSessionAllowed()) try { conn.networkLease(base); sameOrigin = true; } catch (SecurityException otherOrigin) { sameOrigin = false; }
-                    // The person asked to register at this address: end any session for another origin, then consent to this one.
                     if (!sameOrigin) { if (conn.isNetworkSessionAllowed()) conn.disconnect(); AndroidConnectivity.connect(MainActivity.this, conn, base, true); }
                     try (RelayClient relay = openRelay(base, generation, false)) { relay.register(engine.profile(), invite); }
                     engine.updateRelay(base, true); return true;
@@ -1361,7 +1376,7 @@ public final class MainActivity extends Activity {
             }
             @Override public void syncNow() { MainActivity.this.syncNow(); }
             @Override public void unregister() {
-                confirm("Eliminar buzón", "Se pierden los mensajes pendientes del servidor.", "Eliminar", true, () -> action(() -> {
+                confirm("Eliminar buzón", "Se pierden los mensajes pendientes del servicio privado.", "Eliminar", true, () -> action(() -> {
                     JSONObject me = engine.profile();
                     try (RelayClient relay = openRelay(me.getString("relay"), generation, false)) { relay.unregister(me); }
                     engine.updateRelay(me.getString("relay"), false); return true;
@@ -1558,14 +1573,21 @@ public final class MainActivity extends Activity {
             if (!member) { notice(kind == AdmissionImport.Kind.REQUEST || kind == AdmissionImport.Kind.RENEWAL_REQUEST
                 ? "Solicitud: revísala en Administración." : AdmissionPresentation.IMPORT_REJECTED); return; }
             String body = kind == AdmissionImport.Kind.REALM
-                ? preview.detail() + "\n\nCompara la huella con la del administrador."
+                ? preview.detail() + (BuildConfig.ALLOW_RELAY ? "\nDestino: " + BuildConfig.RELAY_ORIGIN : "")
+                    + "\n\nVerifica que el archivo proviene del administrador por el canal acordado."
                 : "UMBRA comprobará la firma.";
-            confirm(AdmissionImport.describe(kind), body, "Importar", false, () -> action(() -> {
-                AdmissionFlow.applyMember(engine.admission(), preview.parsed(), true);
+            String confirmLabel = kind == AdmissionImport.Kind.REALM ? "Verifiqué la fuente" : "Importar";
+            confirm(AdmissionImport.describe(kind), body, confirmLabel, false, () -> action(() -> {
+                if (kind == AdmissionImport.Kind.REALM && BuildConfig.ALLOW_RELAY) {
+                    if (BuildConfig.RELAY_ORIGIN.isEmpty()) throw new SecurityException("private origin unavailable");
+                    var provisioning = engine.admission().provisioning();
+                    var review = provisioning.review(BuildConfig.RELAY_ORIGIN, preview.parsed().parts().get(0));
+                    provisioning.install(review, true);
+                } else AdmissionFlow.applyMember(engine.admission(), preview.parsed(), true);
                 return AdmissionFlow.read(engine.admission(), Bytes.now());
             }, after -> {
                 admission = after;
-                notice(kind == AdmissionImport.Kind.REALM ? "Entorno configurado. Sin admisión aún." : admissionPresentation().title());
+                notice(kind == AdmissionImport.Kind.REALM ? "Configuración privada instalada. Sin admisión aún." : admissionPresentation().title());
                 refresh();
             }, failure -> notice(FailurePresentation.text(failure))));
         }, failure -> notice(AdmissionPresentation.IMPORT_REJECTED));
@@ -1772,7 +1794,7 @@ public final class MainActivity extends Activity {
     /** "Conexión privada no disponible" unless relay, admission and the user's network consent are all present. */
     private String pairingOnlineProblem() {
         if (!BuildConfig.ALLOW_RELAY) return null;
-        boolean relay = profile != null && profile.optBoolean("registered") && !profile.optString("relay").isEmpty();
+        boolean relay = relayConfiguredForBuild() && profile.optBoolean("registered");
         boolean admitted = admission != null && "ADMITTED".equals(admission.state());
         return PairingScreens.onlineProblem(relay, admitted, !networkPaused);
     }

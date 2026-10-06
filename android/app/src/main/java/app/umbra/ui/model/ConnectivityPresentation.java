@@ -30,8 +30,8 @@ public record ConnectivityPresentation(State state, String chip, Tone tone, Glyp
         State s = State.fromEngine(engineState);
         String nearby = nearbyActive ? "Cercanía activa" : "Cercanía detenida";
         String svc = s != State.CONNECTED ? null : switch (service) {
-            case RESPONDED -> "Servidor respondió";
-            case UNREACHABLE -> "Servidor sin respuesta";
+            case RESPONDED -> "Servicio privado disponible";
+            case UNREACHABLE -> "Servicio privado sin respuesta";
             case NOT_OBSERVED -> "Sin sincronizar aún";
         };
         if (offlineEdition)
