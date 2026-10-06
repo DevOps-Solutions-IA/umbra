@@ -83,7 +83,16 @@ public final class AccessGate {
     }
     /** Revoke old domain grants without extending Android authentication's lifetime. */
     public synchronized Lease invalidateAuthorizations() {
-        requireUnlocked(); invalidate(); epoch++; return new Lease(epoch);
+        requireUnlocked();
+        // Revoke the former grants before cleanup callbacks can observe or use them.
+        epoch++;
+        try { invalidate(); }
+        catch (RuntimeException failure) {
+            // Partial cleanup cannot leave this authenticated epoch available for new work.
+            open = false; cause = LockCause.VAULT_FAILURE;
+            throw failure;
+        }
+        return new Lease(epoch);
     }
     /** Remaining original authentication lifetime; never renews it. */
     public synchronized long remainingNanos(Lease lease) {

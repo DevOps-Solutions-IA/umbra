@@ -71,3 +71,25 @@ por inferencia. Un APK debug no es una entrega de producción.
   cancelación al bloquear, límites de recursos y validación de entradas de ambos transportes.
 - Los cambios en autenticación, wire format, almacenamiento o dependencias criptográficas
   requieren pruebas de rechazo, compatibilidad/migración y revisión humana antes de fusionar.
+
+## Excepción única — PR #24 como baseline de desarrollo
+
+El propietario autoriza expresamente, el 5 de octubre de 2026 (America/Bogota),
+una excepción al requisito de revisión humana **únicamente para integrar PR #24**
+como baseline de desarrollo. La consolidación parte de
+`96eaf212a9760574c15b2f5570019572c74e38ac`, contra main
+`3716f09e415c69f59102e74cffa6a1bbb154dec6`; el SHA final, incluidos los cambios
+documentales de esta excepción, debe quedar identificado en el recibo del PR.
+
+Condiciones obligatorias: revisión técnica real asistida por IA con alcance y
+limitaciones registrados; resolución de hallazgos bloqueantes; CI completa del
+SHA final; comprobación del HEAD/base/TREE antes del merge controlado. Un nuevo
+SHA invalida el verde del anterior. No inventar una aprobación humana ni
+autoaprobar el PR. Si una protección de GitHub exige aprobación, no eludirla.
+
+**No se ha realizado revisión humana especializada. Sigue pendiente antes de
+producción.** Esta excepción se agota con la integración de PR #24; no habilita
+publicación, despliegue OCI, sustitución de APK, cambios de protecciones ni
+reducción de seguridad. La regla general anterior continúa vigente para todos
+los cambios sensibles futuros. Véase
+`docs/validation/2026-10-05-pr24-development-review-exception.md`.
