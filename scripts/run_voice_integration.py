@@ -581,6 +581,18 @@ def main():
             (args.reports/"network-pending.json").write_text(json.dumps(staged,indent=2)+"\n")
             print("PENDING_CAPTURE_FINALIZATION: native scenario completed, network not yet accepted")
 
+        except Exception as scenario_failure:
+            if shaped:
+                try:
+                    from voice_impairment_diagnostic import record
+                    def collect_queue(serial):
+                        return subprocess.run(command_for(serial, ("shell", "su", "0", "tc", "-s", "qdisc", "show", "dev", "wlan0")),
+                            check=True, capture_output=True, timeout=5).stdout.decode("utf-8", errors="replace")
+                    record(args.reports, (args.a, args.b), collect_queue)
+                except Exception:
+                    # Preserve the original scenario failure even if diagnostic storage fails.
+                    scenario_failure.add_note("Synthetic impairment diagnostic unavailable")
+            raise
         finally:
             errors=[]
             for serial in shaped:
