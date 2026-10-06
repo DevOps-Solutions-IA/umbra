@@ -1,6 +1,7 @@
 # Reanudar R01 — Message Reply, carril de ChatGPT
 
-Estado: R01-A fundamento aislado; R01 sigue parcialmente implementado y sin merge.
+Estado: R01-A + R01-B1 aislados; codec candidato y pruebas de compatibilidad.
+R01 sigue parcialmente implementado y sin integración a Engine/UI ni merge.
 Base: `4fdd338f3fff4c6864ea820ca85cba6cf284b8da`.
 Rama: `chatgpt/r01-message-reply`.
 Worktree propietario: `UMBRA_R01_REPLY` junto a `UMBRA_MAIN`.
@@ -36,9 +37,19 @@ ni envía: verifica metadatos de un original ordinario local ya autenticado/auto
 MESSAGE_REPLY continúa PENDING_BACKEND. Engine, Wire, UI y manifiestos no están cableados.
 El contrato actual soporta solo mensajes ordinarios v1 por dos dispositivos; no fanout v2.
 
-## Siguiente unidad concreta
+## Avance R01-B1
 
-Antes de R01-B, acordar con el carril amarillo el contrato de compatibilidad y roster:
+ReplyPayload valida un payload candidato cifrado de tipo reply, sus campos exactos,
+metadatos, participantes, TTL y binding al sobre. Es un decoder puro, NO autentica
+ni recibe mensajes por sí solo. Engine y Wire siguen sin aceptar este tipo.
+Leer docs/contracts/R01_REPLY_WIRE_CANDIDATE.md y el recibo fechado R01-B1.
+Las nuevas pruebas ejecutan libsignal/JNI real con helpers de tests y Records en
+memoria: rechazo de formato antiguo, alteraciones, rollback y llegada fuera de orden.
+No equivalen al envío de replies de producción, SQLite Android ni radio física.
+
+## Siguiente unidad concreta — R01-B2
+
+Antes de R01-B2, acordar con el carril amarillo el contrato de compatibilidad y roster:
 - Wire actual exige campos exactos; no agregar un campo a text ni un kind nuevo sin
   recepción/negociación explícitas y pruebas con el parser anterior.
 - Definir soporte del peer, mensajes fuera de orden y fanout lógico v2 sin sustituir
