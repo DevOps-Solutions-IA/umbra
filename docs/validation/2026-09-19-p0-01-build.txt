@@ -1,0 +1,160 @@
+Java: /usr/lib/jvm/java-21-openjdk-amd64/bin/java
+Android SDK: /mnt/c/Android/sdk-linux
+Gradle: 8.13 ($REPO/.umbra-tools/gradle-8.13/bin/gradle)
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.13/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preConnectedDebugBuild UP-TO-DATE
+> Task :app:generateConnectedDebugBuildConfig
+> Task :app:javaPreCompileConnectedDebug
+> Task :app:checkConnectedDebugAarMetadata
+> Task :app:processConnectedDebugNavigationResources
+> Task :app:compileConnectedDebugNavigationResources
+> Task :app:generateConnectedDebugResValues
+> Task :app:mapConnectedDebugSourceSetPaths
+> Task :app:generateConnectedDebugResources
+> Task :app:mergeConnectedDebugResources
+> Task :app:packageConnectedDebugResources
+> Task :app:createConnectedDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksConnectedDebug
+> Task :app:parseConnectedDebugLocalResources
+> Task :app:processConnectedDebugMainManifest
+> Task :app:processConnectedDebugManifest
+> Task :app:preConnectedDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileConnectedDebugUnitTest
+> Task :app:processConnectedDebugJavaRes NO-SOURCE
+> Task :app:processConnectedDebugUnitTestJavaRes NO-SOURCE
+> Task :app:preOfflineDebugBuild UP-TO-DATE
+> Task :app:generateOfflineDebugBuildConfig
+> Task :app:javaPreCompileOfflineDebug
+> Task :app:checkOfflineDebugAarMetadata
+> Task :app:processOfflineDebugNavigationResources
+> Task :app:compileOfflineDebugNavigationResources
+> Task :app:generateOfflineDebugResValues
+> Task :app:mapOfflineDebugSourceSetPaths
+> Task :app:generateOfflineDebugResources
+> Task :app:mergeOfflineDebugResources
+> Task :app:packageOfflineDebugResources
+> Task :app:createOfflineDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksOfflineDebug
+> Task :app:parseOfflineDebugLocalResources
+> Task :app:processOfflineDebugMainManifest
+> Task :app:processOfflineDebugManifest
+> Task :app:preOfflineDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileOfflineDebugUnitTest
+> Task :app:processOfflineDebugManifestForPackage
+> Task :app:processOfflineDebugJavaRes NO-SOURCE
+> Task :app:processOfflineDebugUnitTestJavaRes NO-SOURCE
+> Task :app:mergeConnectedDebugNativeDebugMetadata NO-SOURCE
+> Task :app:mergeConnectedDebugShaders
+> Task :app:compileConnectedDebugShaders NO-SOURCE
+> Task :app:generateConnectedDebugAssets UP-TO-DATE
+> Task :app:mergeConnectedDebugAssets
+> Task :app:compressConnectedDebugAssets
+> Task :app:desugarConnectedDebugFileDependencies
+> Task :app:checkConnectedDebugDuplicateClasses
+> Task :app:mergeConnectedDebugJniLibFolders
+> Task :app:mergeLibDexConnectedDebug
+> Task :app:mergeConnectedDebugJavaResource
+> Task :app:validateSigningConnectedDebug
+> Task :app:writeConnectedDebugAppMetadata
+> Task :app:writeConnectedDebugSigningConfigVersions
+> Task :app:mergeOfflineDebugNativeDebugMetadata NO-SOURCE
+> Task :app:mergeOfflineDebugShaders
+> Task :app:compileOfflineDebugShaders NO-SOURCE
+> Task :app:generateOfflineDebugAssets UP-TO-DATE
+> Task :app:mergeOfflineDebugAssets
+> Task :app:compressOfflineDebugAssets
+> Task :app:checkOfflineDebugDuplicateClasses
+> Task :app:desugarOfflineDebugFileDependencies
+> Task :app:processConnectedDebugManifestForPackage
+> Task :app:l8DexDesugarLibConnectedDebug
+> Task :app:mergeLibDexOfflineDebug
+> Task :app:mergeOfflineDebugJniLibFolders
+> Task :app:validateSigningOfflineDebug
+> Task :app:l8DexDesugarLibOfflineDebug
+> Task :app:writeOfflineDebugAppMetadata
+> Task :app:writeOfflineDebugSigningConfigVersions
+> Task :app:preConnectedDebugAndroidTestBuild SKIPPED
+> Task :app:mergeOfflineDebugJavaResource
+> Task :app:generateConnectedDebugAndroidTestResValues
+> Task :app:extractProguardFiles
+> Task :app:preOfflineDebugAndroidTestBuild SKIPPED
+> Task :app:mergeExtDexConnectedDebug
+> Task :app:generateOfflineDebugAndroidTestResValues
+> Task :app:mergeExtDexOfflineDebug
+> Task :app:processOfflineDebugResources
+> Task :app:processConnectedDebugResources
+
+> Task :app:compileOfflineDebugJavaWithJavac
+Note: $REPO/android/app/src/main/java/app/umbra/ui/MainActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :app:compileConnectedDebugJavaWithJavac
+Note: $REPO/android/app/src/main/java/app/umbra/ui/MainActivity.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :app:bundleConnectedDebugClassesToRuntimeJar
+> Task :app:bundleConnectedDebugClassesToCompileJar
+> Task :app:bundleOfflineDebugClassesToRuntimeJar
+> Task :app:bundleOfflineDebugClassesToCompileJar
+> Task :app:dexBuilderConnectedDebug
+> Task :app:compileConnectedDebugUnitTestJavaWithJavac
+> Task :app:testConnectedDebugUnitTest
+> Task :app:compileOfflineDebugUnitTestJavaWithJavac
+> Task :app:testOfflineDebugUnitTest
+> Task :app:mergeConnectedDebugGlobalSynthetics
+> Task :app:mergeProjectDexConnectedDebug
+> Task :app:dexBuilderOfflineDebug
+> Task :app:mergeOfflineDebugGlobalSynthetics
+> Task :app:generateConnectedDebugAndroidTestLintModel
+> Task :app:generateConnectedDebugLintReportModel
+> Task :app:generateConnectedDebugUnitTestLintModel
+> Task :app:mergeProjectDexOfflineDebug
+> Task :app:generateOfflineDebugAndroidTestLintModel
+> Task :app:generateOfflineDebugLintReportModel
+> Task :app:generateOfflineDebugUnitTestLintModel
+> Task :app:lintAnalyzeConnectedDebugAndroidTest
+> Task :app:lintAnalyzeConnectedDebugUnitTest
+> Task :app:lintAnalyzeOfflineDebugAndroidTest
+> Task :app:mergeConnectedDebugNativeLibs
+> Task :app:lintAnalyzeOfflineDebugUnitTest
+> Task :app:mergeOfflineDebugNativeLibs
+> Task :app:lintAnalyzeOfflineDebug
+> Task :app:lintAnalyzeConnectedDebug
+
+> Task :app:lintReportOfflineDebug
+Wrote HTML report to file://$REPO/android/app/build/reports/lint-results-offlineDebug.html
+
+> Task :app:lintOfflineDebug
+
+> Task :app:lintReportConnectedDebug
+Wrote HTML report to file://$REPO/android/app/build/reports/lint-results-connectedDebug.html
+
+> Task :app:lintConnectedDebug
+
+> Task :app:stripConnectedDebugDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libsignal_jni.so. Run with --info option to learn more.
+
+> Task :app:stripOfflineDebugDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libsignal_jni.so. Run with --info option to learn more.
+
+> Task :app:packageConnectedDebug
+> Task :app:createConnectedDebugApkListingFileRedirect
+> Task :app:assembleConnectedDebug
+> Task :app:packageOfflineDebug
+> Task :app:createOfflineDebugApkListingFileRedirect
+> Task :app:assembleOfflineDebug
+
+[Incubating] Problems report is available at: file://$REPO/android/build/reports/problems/problems-report.html
+
+BUILD SUCCESSFUL in 1m 53s
+105 actionable tasks: 105 executed
+PASS merged manifest: offlineDebug; INTERNET=False
+PASS merged manifest: connectedDebug; INTERNET=True
+PASS connected: permissions=android.permission.ACCESS_NETWORK_STATE,android.permission.BLUETOOTH_ADVERTISE,android.permission.BLUETOOTH_CONNECT,android.permission.BLUETOOTH_SCAN,android.permission.HIDE_OVERLAY_WINDOWS,android.permission.INTERNET,android.permission.USE_BIOMETRIC
+PASS Signal JNI ELF packaged for arm64-v8a,armeabi-v7a,x86,x86_64; desktop/testing JNI excluded
+SHA256 7f6708f28163f6c1a6fa4d559a1f71fab91e157f0cbaa2b1ef1a2b93420f84ce  android/app/build/outputs/apk/connected/debug/app-connected-debug.apk
+PASS offline: permissions=android.permission.BLUETOOTH_ADVERTISE,android.permission.BLUETOOTH_CONNECT,android.permission.BLUETOOTH_SCAN,android.permission.HIDE_OVERLAY_WINDOWS,android.permission.USE_BIOMETRIC
+PASS Signal JNI ELF packaged for arm64-v8a,armeabi-v7a,x86,x86_64; desktop/testing JNI excluded
+SHA256 c6e9ff4b94c6f175d358c63a1b4ab827940e47be08089c122de1626302187d7a  android/app/build/outputs/apk/offline/debug/app-offline-debug.apk

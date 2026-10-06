@@ -1,0 +1,49 @@
+{
+  "date": "2026-09-21",
+  "scope": "local working tree before publication; not final Actions validation",
+  "toolchain": {
+    "python": "3.13.12",
+    "jdk": "21.0.11",
+    "gradle": "8.13",
+    "agp": "8.13.2",
+    "compileSdk": 36,
+    "targetSdk": 36,
+    "buildTools": "35.0.0"
+  },
+  "commands": [
+    {
+      "command": "bash scripts/test_local.sh",
+      "exit": 0,
+      "backendTests": 149,
+      "javaCoreScenarios": 105,
+      "sourcePolicyChecks": 12
+    },
+    {
+      "command": "python -m unittest discover -s scripts/tests -p 'test_*.py' -v",
+      "exit": 0,
+      "tests": 139
+    },
+    {
+      "command": "python scripts/build_android.py --release",
+      "exit": 0,
+      "connectedJvm": 157,
+      "offlineJvm": 117,
+      "debugReleaseBothVariants": true,
+      "lint": true,
+      "apkPolicy": true
+    },
+    {
+      "command": "python scripts/repository_guard.py",
+      "exit": 0,
+      "currentFiles": 288
+    }
+  ],
+  "apkSha256": {
+    "android/app/build/outputs/apk/connected/debug/app-connected-debug.apk": "ef0f682a3e07389df511cff9bdc655ad46fcd616db31cd942a236ef91b6f6f16",
+    "android/app/build/outputs/apk/connected/release/app-connected-release-unsigned.apk": "5660f5689a43b7bb742a42ea5e0d8767269764ed67c24da27ae24235c52dd2c3",
+    "android/app/build/outputs/apk/offline/debug/app-offline-debug.apk": "75af517a52a2d854a1e38dc7a5dcf9a18ad8fbb9d44db52c30d9568adc3fef22",
+    "android/app/build/outputs/apk/offline/release/app-offline-release-unsigned.apk": "2ab4d11134a4907166608e206d309dc0dbbc852bca2aa37e266466b9ce138817"
+  },
+  "hardware": "NOT_EXECUTED",
+  "productionReleaseMediaExecution": "NOT_EXECUTED; isolated R8 mediaLab execution documented separately"
+}

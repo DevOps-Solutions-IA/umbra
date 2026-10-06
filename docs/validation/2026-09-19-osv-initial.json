@@ -1,0 +1,185 @@
+[
+  {
+    "ecosystem": "PyPI",
+    "name": "annotated-doc",
+    "version": "0.0.4"
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "annotated-types",
+    "version": "0.7.0"
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "anyio",
+    "version": "4.13.0",
+    "vulns": [
+      {
+        "id": "GHSA-5p39-cfhj-2xmp",
+        "modified": "2026-09-18T17:30:07.278440Z"
+      },
+      {
+        "id": "GHSA-82r6-8w77-94w6",
+        "modified": "2026-09-18T17:30:07.278457Z"
+      }
+    ]
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "click",
+    "version": "8.1.8",
+    "vulns": [
+      {
+        "id": "PYSEC-2026-2132",
+        "modified": "2026-07-13T07:15:21.899333Z"
+      }
+    ]
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "fastapi",
+    "version": "0.128.2"
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "h11",
+    "version": "0.16.0"
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "idna",
+    "version": "3.17"
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "pydantic",
+    "version": "2.13.4"
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "pydantic_core",
+    "version": "2.46.4"
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "starlette",
+    "version": "0.50.0",
+    "vulns": [
+      {
+        "id": "GHSA-82w8-qh3p-5jfq",
+        "modified": "2026-09-10T03:51:08.156199Z"
+      },
+      {
+        "id": "GHSA-86qp-5c8j-p5mr",
+        "modified": "2026-09-10T03:51:08.121685Z"
+      },
+      {
+        "id": "GHSA-jp82-jpqv-5vv3",
+        "modified": "2026-09-10T03:50:50.050800Z"
+      },
+      {
+        "id": "GHSA-wqp7-x3pw-xc5r",
+        "modified": "2026-09-10T03:50:51.079936Z"
+      },
+      {
+        "id": "GHSA-x746-7m8f-x49c",
+        "modified": "2026-09-10T03:50:12.272722Z"
+      },
+      {
+        "id": "PYSEC-2026-161",
+        "modified": "2026-05-26T15:41:31.112064Z"
+      },
+      {
+        "id": "PYSEC-2026-2280",
+        "modified": "2026-07-13T07:15:42.498495Z"
+      },
+      {
+        "id": "PYSEC-2026-2281",
+        "modified": "2026-07-13T07:15:42.493904Z"
+      },
+      {
+        "id": "PYSEC-2026-248",
+        "modified": "2026-06-27T11:15:06.799060Z"
+      },
+      {
+        "id": "PYSEC-2026-249",
+        "modified": "2026-06-27T11:15:06.800792Z"
+      }
+    ]
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "typing-inspection",
+    "version": "0.4.2"
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "typing_extensions",
+    "version": "4.16.0"
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "uvicorn",
+    "version": "0.48.0"
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "httpx",
+    "version": "0.28.1"
+  },
+  {
+    "ecosystem": "PyPI",
+    "name": "pytest",
+    "version": "9.0.2",
+    "vulns": [
+      {
+        "id": "GHSA-6w46-j5rx-g56g",
+        "modified": "2026-09-10T03:50:32.768043Z"
+      },
+      {
+        "id": "PYSEC-2026-1845",
+        "modified": "2026-07-07T17:47:51.848748Z"
+      }
+    ]
+  },
+  {
+    "ecosystem": "Maven",
+    "name": "org.signal:libsignal-client",
+    "version": "0.102.3"
+  },
+  {
+    "ecosystem": "Maven",
+    "name": "org.signal:libsignal-android",
+    "version": "0.102.3"
+  },
+  {
+    "ecosystem": "Maven",
+    "name": "com.google.zxing:core",
+    "version": "3.5.3"
+  },
+  {
+    "ecosystem": "Maven",
+    "name": "org.json:json",
+    "version": "20250517"
+  },
+  {
+    "ecosystem": "Maven",
+    "name": "junit:junit",
+    "version": "4.13.2"
+  },
+  {
+    "ecosystem": "Maven",
+    "name": "org.jetbrains.kotlin:kotlin-stdlib",
+    "version": "2.2.20"
+  },
+  {
+    "ecosystem": "Maven",
+    "name": "org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm",
+    "version": "1.10.2"
+  },
+  {
+    "ecosystem": "Maven",
+    "name": "org.jetbrains.kotlinx:kotlinx-serialization-json-jvm",
+    "version": "1.9.0"
+  }
+]

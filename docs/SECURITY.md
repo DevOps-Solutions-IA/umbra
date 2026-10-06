@@ -1,4 +1,82 @@
+## 2026-09-28 restricted file-video candidate / physical laboratory
+
+The candidate AVC_MP4 profile uses the existing restricted policy and per-object
+Signal/AES-GCM delivery. It re-encodes bounded video/audio through Android codecs
+and a RAM-only muxer destination. This is not yet accepted file-video playback;
+see docs/protocol/RESTRICTED_VIDEO.md for limits and missing native validation.
+No camera/microphone/network permission is added to offline. No file/URI exporter
+or external viewer fallback is provided. A failed native cleanup invalidates
+access rather than silently opening another preparation.
+
+The physical runner uses isolated packages, explicit USB selection and fixed
+synthetic tests. Its non-authenticated test-key observation does not validate the
+production authenticated Vault/Keystore boundary. No phone has been observed by
+ADB in this checkpoint; no hardware level or physical success is claimed.
+
 # Seguridad y límites de UMBRA 0.2
+
+## Avance acumulativo — PDF y preparación, 2026-09-28
+
+PR #16 sigue abierta en borrador. `c7584ee` incorpora PDF acotado en proceso
+Android aislado; privacidad debug pasó en run 36461176840. R8 falló antes de
+instrumentar por una omisión del fixture en TraceReferences, corregida en a909b60
+y comprobada localmente en ambos mappings; falta repetir su ejecución Android. `c808418` aprobó privacidad debug/R8 y el resto de
+resultados se conserva por SHA, no como aceptación de cambios posteriores.
+La corrección `4e969dc` impide enviar una preparación de una generación anterior
+con un consentimiento nuevo. La siguiente revisión añade ownership de pendientes,
+cuatro slots, invalidación inmediata y cierre comprobable sin esperar bajo el gate.
+Ver UI_API_CONTRACT y validation/2026-09-28-restricted-pdf-checkpoint.md.
+Video de archivo aún no implementado; matriz final y contrato definitivo pendientes.
+No hay integración de UI de Claude ni validación física nueva. Master A/B/C abierto.
+
+## Master v3 — continuación técnica, 2026-09-28
+
+PR #16 permanece parcial, sin UI de Claude. Consultar
+[revisión del checkpoint](validation/2026-09-28-checkpoint-13a5da6-review.md) y
+[AAC nativo y pendientes](validation/2026-09-28-restricted-audio-native.md).
+Contratos provisionales en UI_API_CONTRACT y API_GAPS_UI_SECURITY; no congelados.
+13a5da6 aprobó nueve workflows y falló video. bde7abb falló duración AAC en
+privacidad debug/R8; no contar builds como reproducción aceptada. A/B/C no cerrados.
+
+
+## Bloqueo de emergencia — 2026-09-28, implementación bajo validación
+
+Rama `codex/emergency-lock`, base exacta `52cd1e531b9de41ecd398ba53309b630ce1074f5`
+de PR #14, comprobada contra GitHub antes de modificar. Una solicitud deniega el
+AccessGate antes de esperar cierres independientes. CLOSED exige confirmaciones;
+INCOMPLETE impide otra sesión. Se conserva la bóveda y el commit ya confirmado.
+Ver [contrato para UI](EMERGENCY_LOCK.md), [ADR](adr/ADR-emergency-lock.md) y
+[evidencia](validation/2026-09-28-emergency-lock.md). Botón de Claude y aplicación
+combinada pendientes. Ningún resultado histórico valida esta implementación.
+
+
+## Private startup strict — 2026-09-27, implementación bajo validación
+
+Rama `codex/private-startup-no-network`, base exacta
+`a78a3ffd6962d15acf38efc070ca8f88385fc1fa` de PR #13. Desbloquear no conecta:
+gate de dominio por generación, HTTPS y Nearby separados, cancelación al bloquear.
+No se modifica la rama de UI de Claude. La Activity heredada necesita el ajuste
+mínimo documentado para dejar de restaurar el antiguo flag online.
+Ver [contrato](PRIVATE_STARTUP.md), [ADR](adr/ADR-private-startup.md) y
+[evidencia](validation/2026-09-27-private-startup.md). AVD y CI del nuevo HEAD
+siguen pendientes hasta registrarlos allí. No hay disponibilidad instantánea
+mientras está desconectada. Emergency Lock y demás ampliaciones quedan fuera.
+
+
+## Private device admission — 2026-09-27, bajo validación
+
+Rama dependiente `codex/private-device-admission`, base exacta
+`0de2b102d2d09b1eeed0e4fe233d3b27976e1036`. Autoridad Ed25519 dedicada,
+credenciales por dispositivo y prueba de posesión obligatoria se añaden a las
+políticas existentes; no conceden VERIFIED ni membresía por vinculación.
+Relay cierra APIs privadas sin configuración/admisión. Bóveda, Signal, TURN y
+permisos offline se conservan. UI de Claude y MainActivity no se modifican.
+Consultar [contrato](ADMISSION.md), [ADR](adr/ADR-private-device-admission.md)
+y [evidencia nueva](validation/2026-09-27-private-device-admission.md).
+CI final, AVD y RFCOMM nuevos todavía NO EJECUTADOS en este recibo inicial;
+ningún resultado de PR #11 valida estos cambios. Rotación/recuperación de
+la autoridad y nuevas pantallas quedan fuera de alcance.
+
 
 **No utilizar para secretos reales hasta cerrar las pruebas y la auditoría pendientes.** Esta entrega no está certificada, no es invulnerable y no tiene comparación de superioridad frente a otros mensajeros.
 
@@ -25,3 +103,193 @@ Las dependencias conservan versiones explícitas, pero el grafo transitorio, has
 ## Reporte y operación
 
 No existe todavía un canal de vulnerabilidades de producción configurado. El propietario deberá establecer uno, con responsables de respuesta y actualizaciones. No enviar secretos, tokens de buzón ni claves privadas en reportes. Conservar un caso de reproducción mínimo con identidades sintéticas y comunicar el hash de la revisión probada.
+
+
+## Identidad y emparejamiento v1 — bloque de 2026-09-20
+
+La nueva invitación es un secreto bearer firmado, no un directorio ni una prueba
+humana. El QR compacto contiene clave pública, capacidad y tiempos; quien obtenga
+el archivo puede intentar consumirlo primero. Request/ack revelan tarjetas a los
+participantes y generan transcripciones firmadas transferibles. No extender a
+esas transcripciones las propiedades de deniability de mensajes libsignal.
+
+El relay persiste hashes y un digest de solicitud, nunca tarjetas ni nuevas claves
+privadas. Ve capacidades durante las solicitudes HTTPS y puede correlacionar
+creación/consumo/IP/tiempos. Un relay hostil puede negar servicio; no puede marcar
+contactos verificados ni hacer que se acepte una firma inválida. El consumo local
+con contacto y confirmación comparte transacción; reintentar el mismo transcript
+es idempotente, otro solicitante pierde. Revocar después de vincular no deshace
+el contacto: bloquearlo es una operación distinta.
+
+VERIFIED_ONLY se aplica a texto y archivos en Engine, incluidas llamadas directas.
+Una sustitución requiere suspender la identidad anterior y verificar explícitamente
+la nueva; el alias no transfiere confianza. Invitaciones de tarjetas históricas y
+vinculación Bluetooth siguen disponibles por compatibilidad: no se reclasifican
+como invitaciones de un uso. Los dos extremos necesitan verificación humana.
+
+Ver [identidad](adr/ADR-identity-model.md), [metadatos](adr/ADR-metadata.md),
+[recuperación](adr/ADR-recovery.md) y [protocolo](protocol/PAIRING.md).
+Dispositivos, ubicación y llamadas aún no forman parte del bloque implementado.
+
+
+## Dispositivos v1 — segunda entrega
+
+[ADR de autoridad](adr/ADR-device-model.md) y [protocolo](protocol/DEVICE_LINKING.md).
+La lista firmada no equivale a verificación humana: agregar una clave exige aprobar
+el conjunto completo desde una raíz ya verificada. Engine rechaza claves revocadas
+incluso por APIs de tarjetas/Bluetooth antiguas. A1 administra y cada dispositivo
+tiene claves/ratchets propios; el relay no concede pertenencia. Retirar A1 es terminal.
+
+La delegación de borrado de buzón se transmite cifrada y no concede lectura. Antes
+de recibirla no se promete revocación remota. Un cambio local no retira bytes ya
+emitidos ni copias recibidas. Clientes desconectados aplican cambios al aprenderlos;
+listas caducadas requieren renovación/importación. No hay detección global de
+forks/retención ni defensa contra rollback privilegiado de toda la bóveda.
+
+Los harnesses usan identidades sintéticas. SQLite de androidTest se ejecuta en UID
+debug `.dev`, distinto de release y en directorio sintético exclusivo y está ausente de release; no rebaja Keystore. Véase el [informe](validation/2026-09-20-device-linking-core.md)
+para distinguir integración ejecutada de hardware y auditoría pendientes.
+
+
+## Ubicación v1 — tercera entrega
+
+[ADR](adr/ADR-location.md), [protocolo](protocol/LOCATION.md) y
+[evidencia](validation/2026-09-21-encrypted-location-core.md).
+Ubicación es contenido sensible Signal, con VERIFIED_ONLY, consentimiento local,
+leases y dispositivos destinatarios fijos. Firma/autenticación no prueba dónde
+está una persona. El receptor y un OS comprometido pueden conservar/copiar puntos.
+Las celdas reducen detalle; trayectorias repetidas pueden seguir siendo identificables.
+No hay mapas ni coordenadas/tipo en claro en el relay; IP, tiempos, tamaños y patrones
+de conexión siguen visibles. No se promete anonimato ni borrado de copias remotas.
+
+Captura visible solo mientras la bóveda está desbloqueada y Activity en primer plano;
+pausa, expiración, permiso/proveedor perdido, revocación o confianza suspendida detienen.
+Reabrir exige consentimiento nuevo. Solo COARSE/FINE añadidos, no BACKGROUND_LOCATION,
+servicios de captura, micrófono o cámara. Offline sigue sin permisos de red; el SO
+puede usar sus servicios de posicionamiento independientemente. Pruebas sintéticas
+Android/JVM no acreditan GPS ni Keystore hardware; revisión independiente pendiente.
+
+
+## Señalización 1:1 v1 — cuarta entrega
+
+[ADR](adr/ADR-call-signaling.md), [protocolo](protocol/CALL_SIGNALING.md),
+[evidencia](validation/2026-09-21-authenticated-call-signaling.md).
+El iniciador selecciona un receptor del conjunto consentido mediante Signal y
+persistencia transaccional. Aceptar no activa media ni eleva confianza. Versiones
+de membresía, identidad y lease se revalidan; reinicio/bloqueo no reanudan llamadas.
+RELAY_ONLY único modo habilitado, sin downgrade por control remoto o error TURN.
+El contrato no demuestra tráfico exclusivamente TURN: adaptador/WebRTC real queda
+pendiente. Sin SDP/ICE/callId en claro en relay, pero persisten metadatos de buzones,
+IP, tiempos y tamaños. TURN no ofrece anonimato frente al operador. Sin secretos
+TURN en APK ni claves multimedia derivadas/exportadas del ratchet. Offline rechaza
+llamadas y conserva chat/ubicación/RFCOMM. No nuevos permisos micrófono/cámara/red.
+
+## Voz nativa — quinta entrega en curso
+
+Connected incorpora WebRTC fijado y TURN obligatorio antes de crear PeerConnection.
+Consentimiento de media ligado a CallService/selección/lease; DTLS-SRTP y comparación
+del certificado remoto efectivo con huella autenticada por Signal antes de habilitar
+pistas. Bloquear/cancelar invalida captura; no recuperación automática ni llamadas
+prolongadas en segundo plano. Fallar conectividad no activa P2P. Offline no incorpora
+WebRTC, RECORD_AUDIO ni MODIFY_AUDIO_SETTINGS. No hay cámara.
+
+La evidencia de audio es sintética en AVD con SQLite de laboratorio, no micrófonos ni
+Keystore hardware. El operador TURN sigue viendo direcciones/tiempos/volumen. Pruebas
+adversariales completas de red, IPv6, revocación durante audio y release necesitan sus
+resultados específicos; ver [informe](validation/2026-09-21-turn-voice-core.md).
+
+## Autorización de destinos TURN (2026-09-21)
+
+La distribución Maven inicial seguía TURN `300 ALTERNATE-SERVER` a un destino no
+autorizado (ocho paquetes reproducidos). Se sustituyó por una compilación fijada con
+rechazo nativo antes de modificar el destino. Las cuatro ABI compilaron en Actions
+35577083313. En dos AVD x86_64: nueve peticiones al TURN autorizado, cero al destino
+alternativo; el mismo AAR conservó Opus bidireccional, mute y rechazo DTLS adulterado.
+No extrapolar esta observación IPv4/UDP a otras familias o hardware.
+
+El SHA del AAR revisado es `bbc5675f91b31f901e1a482b00991a36ac2b3d912d2782b80e1cc1b756b1c413`.
+Gradle, la guarda de repositorio y `NativeDistributionPolicy` fijan su integridad.
+Un reemplazo de dependencia no hereda esa capacidad automáticamente. La entrada
+productiva sigue exigiendo permiso, consentimiento, selección, verificación, lease
+vigente y comprobación DTLS nativa; el hash no autoriza una llamada por sí solo.
+Pruebas de micrófono/hardware, IPv6, TURN TLS y recorrido de voz R8 quedan pendientes.
+
+## Regresión R8 detectada al iniciar video (2026-09-21)
+
+El primer recorrido de voz con código optimizado abortó al cargar WebRTC porque
+R8 eliminaba `org.jni_zero.JniZero`, fuera de la regla org.webrtc. El APK release
+anterior también carecía de esa entrada. Se conserva ahora únicamente la superficie
+anotada CalledByNative de JNI Zero y se exige su presencia en el DEX connected.
+El primer audio sintético R8 pasó con Engine/Signal/HTTPS/TURN en dos AVD; el arnés
+separado conserva las APIs que referencia, con cuerpos/nombres optimizables.
+No equivale al APK productivo exacto, micrófono físico, video o Keystore hardware.
+Consultar [evidencia](validation/2026-09-21-turn-video-core.md) para CI y pendientes.
+
+## Extensión de video en validación (2026-09-21)
+
+La propuesta remota no autoriza captura local. Las direcciones enviar/recibir se
+consienten por separado y quedan ligadas al cambio/generación/dispositivo confirmado.
+Apagar invalida captura antes de persistir STOP; un fallo de disco no debe mantener
+la cámara activa. Reactivación exige consentimiento nuevo; bloqueo/caducidad no se
+renuevan. No se añaden permisos ni WebRTC a offline.
+
+Una superficie remota puede estar atrasada: se distingue último frame del estado de
+transporte. No hay grabación ni persistencia de imágenes; esto no impide copias por
+el receptor. TURN/ISP siguen viendo metadatos. Las pruebas locales sintéticas no
+validan cámaras físicas, Keystore hardware ni todas las familias/transporte de red.
+Ver evidencia de fallos, límites y resultados parciales en la sexta entrega.
+
+La señalización ICE incremental conserva el digest de descripción y la generación;
+no permite cambiar TURN ni la política RELAY. La autorización de captura exige
+relay en ambos candidatos seleccionados y certificado DTLS efectivo autenticado.
+Las pruebas de huella exigen al menos un rechazo nativo por binding y cero captura
+en ambos extremos; la cancelación del otro extremo no se presenta como una segunda
+comprobación de certificado. Timeout o falta de evidencia no cuentan como éxito.
+
+## Evidencia posterior de video — 2026-09-22
+
+Código `171324bf` pasó las matrices debug/R8 y regresiones en Actions35661260991,
+35661261035 y35661261036. Ver [aceptación delimitada](validation/2026-09-22-turn-video-acceptance.md).
+TURN/TLS y trayecto cliente-TURN IPv6 tienen evidencia nueva; no se extiende a
+asignaciones relay IPv6, hardware físico o APK productivo exacto. El cierre de
+superficies ya no depende del listener reemplazable; los límites de cancelación
+medidos no demuestran retiro de paquetes ni borrado de copias del destinatario.
+
+## Modulación local de voz (entrega en curso)
+
+El efecto modifica el timbre saliente, no acredita anonimato ni impide reconocer
+a la persona. PCM natural existe transitoriamente en captura/APM; no se conserva
+un historial ni se promete borrado forense de RAM. TURN, DTLS, libsignal, selección
+de dispositivo, permisos, autolock y límites de sesión no cambian. Error del
+procesador silencia; OFF desde MODULATED requiere confirmación local y no quita
+mute. El límite atómico protege bloques admitidos tras el cambio; audio ya
+encolado en Opus o en tránsito puede llegar después. El receptor puede guardar
+lo que recibe. Ver [ADR](adr/ADR-voice-modulator.md) y
+[contrato](protocol/VOICE_PROCESSING.md). Pruebas remotas y R8 deben constar en
+evidencia propia del commit; una prueba de DSP no certifica el pipeline completo.
+
+## Personal password vault — execution #11 under validation
+
+An enrolled vault requires Argon2id-derived material AND its device Keystore key.
+The UI authentication flag cannot supply the random DEK. Legacy enrollment is
+explicit and reciphers records atomically once; password change rewraps only the
+DEK. Android authentication/hardware requirements and offline policy remain.
+See [threat model and limits](VAULT_PASSWORD.md) and
+[evidence](validation/2026-09-26-personal-vault-password.md). No recovery or server
+password material. Historical legacy copies and privileged full-state rollback
+are not retroactively prevented. AVD software-key fixtures do not prove physical
+hardware security, biometric interaction or protection against a compromised OS.
+
+
+### Restricted file-media implementation limits (master v4 checkpoint)
+
+File video uses the same consumed session and authorization as restricted notes,
+not call permissions. Caller-supplied surfaces must be protected before first frame
+and cleared on disposal; final Claude UI integration remains pending. Anonymous
+kernel-size-sealed memfd replaces the incompatible FUSE MP4 output descriptor;
+there is no named plaintext staging file or disk fallback. PDF parser process
+binding loss is not explicit cancellation; authenticated result and actual process
+Binder death are both required within the original deadline. AAC sanitation bounds
+retained EOS padding without changing duration/security test thresholds. Physical
+synthetic findings are scope-limited; no OS-compromise/forensic or physical-peer
+claims. See dated validation for exact tested bytes and outstanding cases.

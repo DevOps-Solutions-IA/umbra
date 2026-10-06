@@ -1,0 +1,37 @@
+{
+  "validated_source_commit": "8fdea14efb3c8a78a0faf66d01f9d254a8dc8a20",
+  "recorded_at_utc": "2026-09-19T20:07:33.205716+00:00",
+  "artifacts": [
+    {
+      "path": "android/app/build/outputs/apk/androidTest/connected/debug/app-connected-debug-androidTest.apk",
+      "bytes": 898334,
+      "sha256": "d90f5a9e07651a962466a05b1044fbfd46ddb9d7a8ef94a5b69d82e84db1b4bb"
+    },
+    {
+      "path": "android/app/build/outputs/apk/androidTest/offline/debug/app-offline-debug-androidTest.apk",
+      "bytes": 898350,
+      "sha256": "0b5752d5856a5dc70252956f962007ee95e45f92db924a154d62e95f471f54bd"
+    },
+    {
+      "path": "android/app/build/outputs/apk/connected/debug/app-connected-debug.apk",
+      "bytes": 463635637,
+      "sha256": "8cd1a977b9e41d3cc9c724c18ffc061daf5c3e87c07c187c37e92abafdbb08d8"
+    },
+    {
+      "path": "android/app/build/outputs/apk/connected/release/app-connected-release-unsigned.apk",
+      "bytes": 458089755,
+      "sha256": "e6c370622bf8a84b72eb254f1c6aa5c1215b866025ef647a05d7432ad3b79a7b"
+    },
+    {
+      "path": "android/app/build/outputs/apk/offline/debug/app-offline-debug.apk",
+      "bytes": 463635585,
+      "sha256": "5da848c3f6c0ec87e25e8bc10a33a12dd8d304360e70417954776f6fd4c80151"
+    },
+    {
+      "path": "android/app/build/outputs/apk/offline/release/app-offline-release-unsigned.apk",
+      "bytes": 458089699,
+      "sha256": "8747c9511841d7ecf5bca45a3709b57982ea32589051e8af24ad21bf59853351"
+    }
+  ],
+  "container_image": "sha256:8626eb7ecff3616cdca94e29da11035c0a6a0e61d94a547134f6951437614498"
+}

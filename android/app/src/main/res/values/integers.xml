@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Mirror of app.umbra.ui.design.UmbraTokens motion durations (ms). -->
+<resources>
+    <integer name="umbra_motion_fast">120</integer>
+    <integer name="umbra_motion_standard">200</integer>
+    <integer name="umbra_motion_emphasis">280</integer>
+</resources>

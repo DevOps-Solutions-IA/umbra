@@ -1,12 +1,18 @@
 # Publicación privada inicial
 
-**Estado al entregar: repositorio local preparado, repositorio remoto NO creado.**
-Cuenta conectada consultada: `devopssolutionsia`. La conexión disponible en la conversación
-no ofrecía acciones de creación/subida y el entorno no tenía autenticación GitHub CLI.
-No se instalaron plugins alternativos ni se pidieron tokens. No se hizo ninguna escritura remota.
+## Estado operativo verificado el 2026-09-19 UTC
+
+`DevOps-Solutions-IA/umbra` ya existe, es privado y usa `main` como rama predeterminada.
+El desarrollo continúa mediante PRs. El publicador es una herramienta de creación inicial;
+no debe usarse para actualizar este repositorio existente ni para evitar su revisión.
+
+La preparación del 2026-09-18 precedió a esa publicación: entonces se había consultado la
+cuenta `devopssolutionsia`, no se disponía de GitHub CLI autenticado y no se había creado
+el remoto. Los informes fechados de esa preparación se conservan como históricos.
 
 ## Procedimiento desde el equipo del propietario
-Descomprimir `UMBRA_GitHub_Codex.zip` y abrir una terminal dentro de `UMBRA`.
+Este procedimiento solo se aplica a un destino nuevo cuya creación haya autorizado el propietario.
+Abrir una terminal dentro de la copia del código que se haya revisado para publicar.
 Se requieren Git, GitHub CLI y Python 3 (3.12+ para las pruebas del proyecto).
 Comprobar `git --version`, `gh --version` y `python --version` o `python3 --version`.
 En Windows, GitHub CLI se puede instalar con:
@@ -23,14 +29,25 @@ python scripts/publish_github.py --check-only
 python scripts/publish_github.py
 ```
 En Linux/WSL, usar `python3` cuando `python` no exista. El publicador inicia el login de
-GitHub CLI por navegador si hace falta. Autenticarse como `devopssolutionsia`. No pegar
+GitHub CLI por navegador si hace falta. Autenticarse con la cuenta personal autorizada en
+`DevOps-Solutions-IA`; una organización no es una cuenta de inicio de sesión. No pegar
 el token o códigos de autenticación en esta conversación. La identidad de commit utiliza
 un correo noreply construido con el identificador y login de GitHub, no el correo personal.
 
-El comando crea `devopssolutionsia/umbra` con visibilidad **private**, verifica ese estado
+El destino predeterminado es `DevOps-Solutions-IA/umbra`, que ya existe y no se recreará.
+Para un destino nuevo autorizado, usar `--owner ORGANIZACION --name NOMBRE` explícitamente.
+El comando crea el destino con visibilidad **private**, verifica ese estado
 antes de subir código, añade `origin`, sube solo `main` y verifica el SHA remoto. No
 sobrescribe repositorios existentes ni publica releases. La CI puede consumir minutos
 según la cuenta: revisar los límites de GitHub antes de subir si existe un presupuesto estricto.
+
+La autorización se comprueba mediante consultas GET: identidad exacta de la organización y
+membresía activa de la cuenta autenticada. Crear requiere ser administrador de la organización
+o que esta permita explícitamente a sus miembros crear repositorios privados. Reanudar en
+una organización requiere además permiso de escritura confirmado en el repositorio privado
+exacto. Respuestas incompletas o acceso denegado bloquean la operación; el script no cambia
+membresías ni permisos. Una cuenta personal sigue requiriendo coincidencia exacta con `--owner`.
+Consultar [la API de membresía](https://docs.github.com/en/rest/orgs/members#get-an-organization-membership-for-the-authenticated-user).
 
 Si GitHub rechaza la subida de workflows por permisos, revisar la autorización de GitHub CLI
 para este repositorio y el scope `workflow`; no retirar las protecciones ni cambiarlo a público.
@@ -62,11 +79,12 @@ Los mensajes, claves e identidades reales de UMBRA no deben existir en ellos.
 
 ## Verificación independiente después de publicar
 ```bash
-gh repo view devopssolutionsia/umbra --json nameWithOwner,isPrivate,defaultBranchRef,url
+gh repo view DevOps-Solutions-IA/umbra --json nameWithOwner,isPrivate,defaultBranchRef,url
 git rev-parse HEAD
 git ls-remote origin refs/heads/main
 ```
-Se espera `isPrivate: true`, rama `main` y SHA local/remoto idénticos. Eso verifica publicación,
+Se espera `isPrivate: true` y rama `main`. Comparar el SHA remoto con el `main` local actualizado,
+no con una rama de correcciones todavía abierta. Esa comparación verifica publicación,
 no que la aplicación esté terminada ni que las pruebas Android hayan pasado.
 
 ## Almacenamiento de la autenticación local

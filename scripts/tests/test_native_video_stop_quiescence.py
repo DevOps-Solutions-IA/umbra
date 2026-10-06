@@ -1,0 +1,180 @@
+"""Controlled executor ordering only; historical native interleaving remains inferred."""
+from pathlib import Path
+import subprocess
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE = ROOT / 'android/app/src/androidTestConnected/java/app/umbra/media'
+
+PRELUDE = '''package app.umbra.media;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.*;
+public final class Check {
+ static void check(boolean value) {if(!value)throw new AssertionError("Harness assertion");}
+ static void reject(Runnable action) {try {action.run();}catch(AssertionError expected){return;}throw new AssertionError("Accepted invalid worker");}
+ static StackTraceElement f(String owner,String method) {return new StackTraceElement(owner,method,"Synthetic.java",1);}
+ public static void main(String[] args) throws Exception {
+'''
+RACE = '''
+ var executor=new ScheduledThreadPoolExecutor(1);
+ executor.schedule(()->{},1,TimeUnit.DAYS);
+ var captured=new CountDownLatch(1);var release=new CountDownLatch(1);var emitted=new CountDownLatch(1);
+ var known=new AtomicReference<Thread>();var confirmed=new AtomicBoolean(true);
+ var ids=new CopyOnWriteArrayList<String>();
+ executor.execute(()->{
+  known.set(Thread.currentThread());boolean retained=confirmed.get();captured.countDown();
+  try {check(release.await(2,TimeUnit.SECONDS));if(retained)ids.add("async-stop");}
+  catch(InterruptedException e){throw new AssertionError(e);}finally{emitted.countDown();}
+ });
+ check(captured.await(2,TimeUnit.SECONDS));
+ confirmed.set(false);ids.add("foreground-stop");
+'''
+
+
+class NativeVideoStopQuiescenceTest(unittest.TestCase):
+    def run_java(self, body, *, helper=True):
+        with tempfile.TemporaryDirectory() as folder:
+            source=Path(folder)/'Check.java';source.write_text(PRELUDE+body+'\n}}')
+            sources=[str(SOURCE/'VideoStopDeliveryGate.java')]
+            if helper:sources.append(str(SOURCE/'NativeVideoStopQuiescence.java'))
+            subprocess.run(['javac','-d',folder,*sources,str(source)],check=True,capture_output=True)
+            return subprocess.run(['java','-cp',folder,'app.umbra.media.Check'],capture_output=True,text=True,timeout=10)
+
+    def test_controlled_red_snapshot_before_async_stop_loses_inventory(self):
+        result=self.run_java(RACE+'''
+ try {
+  var gate=new VideoStopDeliveryGate("call",2,"nonce");gate.issued(ids);
+  release.countDown();check(emitted.await(2,TimeUnit.SECONDS));
+  gate.requireAnnounced("VIDEO_STOP","call",2,"async-stop");
+ } finally {release.countDown();executor.shutdownNow();executor.awaitTermination(2,TimeUnit.SECONDS);}
+''',helper=False)
+        self.assertNotEqual(0,result.returncode)
+        self.assertIn('Synthetic stop inventory changed after issued receipt',result.stderr)
+
+    def test_idle_fence_waits_for_retained_snapshot_emission_then_inventories_all(self):
+        result=self.run_java(RACE+'''
+ try {
+  long requested=System.nanoTime();int[] pauses={0};
+  NativeVideoStopQuiescence.await(known.get(),known::get,requested,requested+2_000_000_000L,System::nanoTime,nanos->{
+   pauses[0]++;release.countDown();check(emitted.await(1,TimeUnit.SECONDS));TimeUnit.NANOSECONDS.sleep(nanos);
+  });
+  check(pauses[0]>0 && ids.equals(List.of("foreground-stop","async-stop")));
+  var gate=new VideoStopDeliveryGate("call",2,"nonce");gate.issued(ids);
+  for(String id:ids)gate.requireAnnounced("VIDEO_STOP","call",2,id);
+  check(gate.ownStopCount()==2);
+ } finally {release.countDown();executor.shutdownNow();executor.awaitTermination(2,TimeUnit.SECONDS);}
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
+    def test_valid_capture_can_precede_control_idle_after_two_seconds(self):
+        result=self.run_java(RACE+'''
+ try {
+  long requested=1L, deadline=10_000_000_001L;
+  check(VideoStopDeliveryGate.withinBounds(requested,100_000_001L,900_000_001L,1_500_000_001L));
+  long[] clock={1_900_000_001L};
+  NativeVideoStopQuiescence.await(known.get(),known::get,requested,deadline,()->clock[0],nanos->{
+   clock[0]+=nanos;
+   if(clock[0]>=2_100_000_001L){release.countDown();check(emitted.await(1,TimeUnit.SECONDS));Thread.sleep(10);}
+  });
+  check(clock[0]>=2_100_000_001L && clock[0]<deadline && ids.size()==2);
+  // Inventory settling never authorizes a late native capture closure.
+  check(!VideoStopDeliveryGate.withinBounds(requested,100_000_001L,900_000_001L,2_000_000_002L));
+ } finally {release.countDown();executor.shutdownNow();executor.awaitTermination(2,TimeUnit.SECONDS);}
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
+    def test_wrong_or_dead_worker_fails_without_sleep(self):
+        result=self.run_java('''
+ var dead=new Thread(()->{});dead.start();dead.join();
+ for(Thread worker:new Thread[]{null,dead,Thread.currentThread()}) {
+  reject(()->{try {NativeVideoStopQuiescence.await(worker,()->dead,1,2_000_000_001L,()->2,
+   nanos->{throw new AssertionError("Unexpected sleep");});}catch(InterruptedException e){throw new AssertionError(e);}});
+ }
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
+    def test_idle_observation_reports_elapsed_samples_and_safe_busy_frames(self):
+        result=self.run_java(RACE+'''
+ try {
+  long requested=System.nanoTime();
+  var observation=NativeVideoStopQuiescence.await(known.get(),known::get,requested,
+    requested+2_000_000_000L,System::nanoTime,nanos->{
+     release.countDown();check(emitted.await(1,TimeUnit.SECONDS));TimeUnit.NANOSECONDS.sleep(nanos);
+    });
+  check(observation.samples()>=2 && observation.elapsedNanos()>0);
+  check(!observation.lastBusyFrames().isEmpty() && observation.lastBusyFrames().size()<=24);
+  check(!observation.lastBusyFrames().toString().contains("app.umbra.media.Check"));
+  try {observation.lastBusyFrames().add("unsafe");throw new AssertionError("Mutable evidence");}
+  catch(UnsupportedOperationException expected) {}
+ } finally {release.countDown();executor.shutdownNow();executor.awaitTermination(2,TimeUnit.SECONDS);}
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
+    def test_busy_worker_expires_at_supplied_scenario_deadline_without_extension(self):
+        result=self.run_java(RACE+'''
+ try {
+  long[] clock={1_000_000_001L};int[] pauses={0};
+  try {
+   NativeVideoStopQuiescence.await(known.get(),known::get,1L,2_000_000_001L,()->clock[0],nanos->{
+    check(nanos==50_000_000L);clock[0]+=nanos;pauses[0]++;
+   });
+   throw new AssertionError("Busy worker accepted");
+  } catch(AssertionError expected) {check(expected.getMessage().contains("scenario deadline"));}
+  check(clock[0]==2_000_000_001L && pauses[0]==20 && ids.equals(List.of("foreground-stop")));
+ } finally {release.countDown();executor.shutdownNow();executor.awaitTermination(2,TimeUnit.SECONDS);}
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
+    def test_timeout_reports_bounded_safe_metadata_and_remains_failure(self):
+        result=self.run_java(RACE+'''
+ try {
+  known.get().setName("synthetic-private-thread-name");
+  try {
+   NativeVideoStopQuiescence.await(known.get(),known::get,1L,2_000_000_001L,()->2_000_000_001L,
+    nanos->{throw new AssertionError("Budget must not extend");});
+   throw new AssertionError("Timeout accepted");
+  } catch(AssertionError failure) {
+   String message=failure.getMessage();
+   check(message.startsWith("Native stop worker did not become idle within scenario deadline"));
+   check(message.contains("elapsedNanos=2000000000") && message.contains("observations=0"));
+   check(message.contains("threadState=") && message.contains("frames="));
+   check(!message.contains("synthetic-private-thread-name") && !message.contains(".java:") && !message.contains("/"));
+  }
+ } finally {release.countDown();executor.shutdownNow();executor.awaitTermination(2,TimeUnit.SECONDS);}
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
+    def test_safe_stack_allowlist_never_exports_arbitrary_class_method_or_file(self):
+        result=self.run_java('''
+ var stack=new StackTraceElement[40];
+ java.util.Arrays.fill(stack,new StackTraceElement("private.payload.Class","privateMethod","/private/path",1337));
+ stack[0]=f("java.util.concurrent.ThreadPoolExecutor","getTask");
+ var safe=NativeVideoStopQuiescence.safeFrames(stack);
+ check(safe.size()==24 && safe.get(0).equals("java.util.concurrent.ThreadPoolExecutor.getTask"));
+ for(int i=1;i<safe.size();i++)check(safe.get(i).equals("OTHER_FRAME"));
+ check(!safe.toString().contains("private") && !safe.toString().contains("1337"));
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
+    def test_only_actual_executor_queue_stack_qualifies_not_http_or_nested_queue(self):
+        result=self.run_java('''
+ var idle=new StackTraceElement[]{f("java.util.concurrent.locks.LockSupport","parkNanos"),
+  f("java.util.concurrent.ScheduledThreadPoolExecutor$DelayedWorkQueue","take"),
+  f("java.util.concurrent.ThreadPoolExecutor","getTask"),
+  f("java.util.concurrent.ThreadPoolExecutor","runWorker"),
+  f("java.util.concurrent.ThreadPoolExecutor$Worker","run"),f("java.lang.Thread","run")};
+ check(NativeVideoStopQuiescence.executorIdle(Thread.State.TIMED_WAITING,idle));
+ check(NativeVideoStopQuiescence.executorIdle(Thread.State.WAITING,idle));
+ check(!NativeVideoStopQuiescence.executorIdle(Thread.State.RUNNABLE,idle));
+ var http=idle.clone();http[1]=f("com.android.okhttp.HttpEngine","readResponse");
+ check(!NativeVideoStopQuiescence.executorIdle(Thread.State.WAITING,http));
+ var nested=idle.clone();nested[2]=f("app.synthetic.Task","run");
+ check(!NativeVideoStopQuiescence.executorIdle(Thread.State.WAITING,nested));
+ check(!NativeVideoStopQuiescence.executorIdle(Thread.State.TERMINATED,idle));
+''')
+        self.assertEqual(0,result.returncode,result.stderr)
+
+
+if __name__=='__main__':unittest.main()

@@ -48,18 +48,47 @@ public final class Wire {
         List<String> names = new ArrayList<>(List.of("v", "id", "from", "to", "created", "createdMs", "expires", "kind"));
         switch (kind) {
             case "text" -> names.add("text");
+            case "call" -> names.add("call");
+            case "location" -> names.add("location");
+            case "restricted" -> names.add("restricted");
             case "file" -> { names.add("name"); names.add("data"); }
             case "receipt" -> names.add("ackFor");
+            case "device-roster" -> names.add("roster");
+            case "device-grant" -> { names.add("box"); names.add("token"); names.add("proof"); }
             default -> throw new SecurityException("Unsupported content");
+        }
+        long version = integer(c, "v");
+        if((kind.equals("location") || kind.equals("call")) && version!=2) throw new SecurityException("Location requires authenticated logical context");
+        if (version == 2) {
+            if (kind.equals("receipt") || kind.startsWith("device-")) throw new SecurityException("Receipt version unsupported");
+            names.addAll(List.of("logicalId", "logicalFrom", "logicalTo"));
+            uuid(string(c, "logicalId", 36)); identity(string(c, "logicalFrom", 64)); identity(string(c, "logicalTo", 64));
         }
         fields(c, names.toArray(new String[0]));
         for (String key : List.of("id", "from", "to"))
             if (!string(c, key, 64).equals(envelope.getString(key))) throw new SecurityException("Envelope substitution");
         long created = integer(c, "created"), ms = integer(c, "createdMs"), expiry = integer(c, "expires");
-        if (integer(c, "v") != 1 || expiry != integer(envelope, "expires") || created < now - maxTtl || created > now + 300 ||
+        if ((version != 1 && version != 2) || expiry != integer(envelope, "expires") || created < now - maxTtl || created > now + 300 ||
             expiry <= created || expiry - created > maxTtl || ms < 0 || Math.abs(ms / 1000 - created) > 1)
             throw new SecurityException("Authenticated timestamp mismatch");
-        if (kind.equals("text")) {
+        if(kind.equals("restricted")) {
+            if(!(c.get("restricted") instanceof JSONObject p))throw new SecurityException("Invalid restricted object");
+            app.umbra.content.RestrictedPayload.descriptor(p,now);
+            if(!p.getString("from").equals(c.getString("from")) || !p.getString("to").equals(c.getString("to")) ||
+                    p.getLong("expires")!=expiry)throw new SecurityException("Restricted context mismatch");
+        } else if (kind.equals("call")) {
+            if(!(c.get("call") instanceof JSONObject p)) throw new SecurityException("Invalid call object");
+            app.umbra.calls.CallPayload.validate(p,now);
+            JSONObject context=p.getJSONObject("context");
+            if(expiry>context.getLong("ends") || expiry-created>app.umbra.calls.CallPayload.DELIVERY_SECONDS ||
+                (Set.of("INVITE","ACCEPT","SELECT").contains(p.getString("type")) && expiry>context.getLong("inviteUntil"))) throw new SecurityException("Call expiry mismatch");
+            if(Set.of("VIDEO_REQUEST","VIDEO_ACCEPT").contains(p.getString("type")) && expiry>p.getJSONObject("data").getLong("expires"))
+                throw new SecurityException("Video review envelope exceeds consent deadline");
+        } else if (kind.equals("location")) {
+            if(!(c.get("location") instanceof JSONObject p)) throw new SecurityException("Invalid location object");
+            app.umbra.location.LocationPayload.validate(p,now);
+            if(expiry>p.getLong("ends") || expiry-created>120) throw new SecurityException("Location expiry mismatch");
+        } else if (kind.equals("text")) {
             String text = string(c, "text", 16_000);
             if (text.trim().isEmpty() || Bytes.utf8(text).length > 16_000) throw new SecurityException("Invalid text");
         } else if (kind.equals("file")) {
@@ -68,6 +97,11 @@ public final class Wire {
             byte[] data = Bytes.unb64(string(c, "data", 350_000));
             try { if (data.length < 1 || data.length > maxAttachment) throw new SecurityException("Invalid attachment length"); }
             finally { Arrays.fill(data, (byte) 0); }
+        } else if (kind.equals("device-roster")) {
+            app.umbra.devices.DeviceRoster.parse(string(c, "roster", 32000));
+        } else if (kind.equals("device-grant")) {
+            uuid(string(c, "box", 36)); app.umbra.pairing.PairingService.token(string(c, "token", 43));
+            if (Bytes.unb64(string(c, "proof", 88)).length != 64) throw new SecurityException("Invalid delegation proof");
         } else uuid(string(c, "ackFor", 36));
     }
 }

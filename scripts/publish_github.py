@@ -15,7 +15,7 @@ import subprocess
 import sys
 from repository_guard import ROOT, scan, scan_history
 
-DEFAULT_OWNER = 'devopssolutionsia'
+DEFAULT_OWNER = 'DevOps-Solutions-IA'
 DEFAULT_NAME = 'umbra'
 
 
@@ -49,6 +49,35 @@ def gh_json(*args: str) -> dict:
 def assert_private(repo: dict, target: str) -> None:
     if repo.get('private') is not True or str(repo.get('full_name','')).casefold() != target.casefold():
         raise RuntimeError('Se rechaza la publicación: no se confirmó el repositorio privado exacto.')
+
+
+def assert_owner_authorized(profile: dict, owner: str, *, resume_target: str | None = None) -> None:
+    """Read-only checks; never invite members or alter organization/repository permissions."""
+    login = str(profile.get('login', ''))
+    if not login or not valid_target(login, DEFAULT_NAME):
+        raise RuntimeError('No se pudo verificar la cuenta autenticada.')
+    if login.casefold() == owner.casefold():
+        return
+    organization = gh_json('api', '--hostname', 'github.com', f'orgs/{owner}')
+    if str(organization.get('login', '')).casefold() != owner.casefold():
+        raise RuntimeError('No se confirmó la organización exacta de destino.')
+    membership = gh_json('api', '--hostname', 'github.com', f'user/memberships/orgs/{owner}')
+    member = membership.get('user')
+    member_org = membership.get('organization')
+    if (membership.get('state') != 'active' or not isinstance(member, dict) or
+            str(member.get('login', '')).casefold() != login.casefold() or
+            not isinstance(member_org, dict) or str(member_org.get('login', '')).casefold() != owner.casefold() or
+            membership.get('role') not in {'admin', 'member'}):
+        raise RuntimeError('No se confirmó membresía activa de la cuenta en la organización exacta.')
+    if resume_target is not None:
+        repository = gh_json('api', '--hostname', 'github.com', f'repos/{resume_target}')
+        assert_private(repository, resume_target)
+        permissions = repository.get('permissions')
+        if not isinstance(permissions, dict) or permissions.get('push') is not True:
+            raise RuntimeError('No se confirmó permiso de escritura en el repositorio existente.')
+    elif (membership.get('role') != 'admin' and
+            organization.get('members_can_create_private_repositories') is not True):
+        raise RuntimeError('No se confirmó autorización para crear repositorios privados en la organización.')
 
 
 def only_matching_main(refs: str, local_sha: str) -> bool:
@@ -89,8 +118,7 @@ def main() -> int:
         run('gh','auth','login','--hostname','github.com','--git-protocol','https',
             '--web','--scopes','workflow', capture=False)
     profile = gh_json('api','--hostname','github.com','user')
-    if str(profile.get('login','')).casefold() != args.owner.casefold():
-        raise RuntimeError('La cuenta autenticada no coincide con --owner. Cambiar cuenta en GitHub CLI.')
+    assert_owner_authorized(profile, args.owner, resume_target=target if args.resume else None)
     uid = profile.get('id')
     if not isinstance(uid, int) or isinstance(uid, bool) or uid <= 0:
         raise RuntimeError('No se pudo verificar la identidad GitHub.')

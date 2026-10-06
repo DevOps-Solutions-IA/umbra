@@ -1,0 +1,125 @@
+--- a/pc/session_description.h
++++ b/pc/session_description.h
+@@ -587,6 +587,23 @@
+
+   std::unique_ptr<SessionDescription> Clone() const;
+
++  // UMBRA policy over the upstream parsed SDP model, not a textual SDP filter.
++  // No data/unsupported section, multiple audio/video sections or multiple tracks.
++  bool IsUmbraOneToOneMedia() const {
++    int audio = 0;
++    int video = 0;
++    for (const auto& content : contents_) {
++      const auto* media = content.media_description();
++      if (!media || media->streams().size() > 1) return false;
++      switch (media->type()) {
++        case MediaType::AUDIO: ++audio; break;
++        case MediaType::VIDEO: ++video; break;
++        default: return false;
++      }
++    }
++    return audio == 1 && video <= 1;
++  }
++
+   // Content accessors.
+   const ContentInfos& contents() const { return contents_; }
+   ContentInfos& contents() { return contents_; }
+--- a/sdk/android/src/jni/pc/peer_connection.cc
++++ b/sdk/android/src/jni/pc/peer_connection.cc
+@@ -56,6 +56,7 @@
+ #include "api/scoped_refptr.h"
+ #include "api/transport/bitrate_settings.h"
+ #include "p2p/base/port.h"
++#include "pc/session_description.h"
+ #include "rtc_base/checks.h"
+ #include "rtc_base/logging.h"
+ #include "rtc_base/numerics/safe_conversions.h"
+@@ -667,8 +668,14 @@
+     const jni_zero::JavaRef<jobject>& j_observer,
+     const jni_zero::JavaRef<jobject>& j_sdp) {
+   auto observer = make_ref_counted<SetRemoteSdpObserverJni>(jni, j_observer);
+-  ExtractNativePC(jni, j_pc)->SetRemoteDescription(
+-      JavaToNativeSessionDescription(jni, j_sdp), observer);
++  auto description = JavaToNativeSessionDescription(jni, j_sdp);
++  if (!description || !description->description() ||
++      !description->description()->IsUmbraOneToOneMedia()) {
++    observer->OnSetRemoteDescriptionComplete(RTCError(
++        RTCErrorType::INVALID_PARAMETER, "UMBRA media section policy rejected"));
++    return;
++  }
++  ExtractNativePC(jni, j_pc)->SetRemoteDescription(std::move(description), observer);
+ }
+
+ static void JNI_PeerConnection_RestartIce(
+--- a/sdk/android/BUILD.gn
++++ b/sdk/android/BUILD.gn
+@@ -919,6 +919,7 @@
+       "../../p2p:port",
+       "../../pc:media_stream_observer",
+       "../../pc:peer_connection_factory",
++      "../../pc:session_description",
+       "../../pc:webrtc_sdp",
+       "../../rtc_base:buffer",
+       "../../rtc_base:checks",
+--- a/pc/session_description_unittest.cc
++++ b/pc/session_description_unittest.cc
+@@ -149,4 +149,59 @@
+                 ->extmap_allow_mixed_level());
+ }
+
++TEST(UmbraMediaPolicyTest, RejectsEmptyAndVideoOnly) {
++  SessionDescription description;
++  EXPECT_FALSE(description.IsUmbraOneToOneMedia());
++  description.AddContent("video", MediaProtocolType::kRtp,
++                         std::make_unique<VideoContentDescription>());
++  EXPECT_FALSE(description.IsUmbraOneToOneMedia());
++}
++TEST(UmbraMediaPolicyTest, AcceptsAudioAndOneVideo) {
++  SessionDescription description;
++  description.AddContent("audio", MediaProtocolType::kRtp,
++                         std::make_unique<AudioContentDescription>());
++  EXPECT_TRUE(description.IsUmbraOneToOneMedia());
++  description.AddContent("video", MediaProtocolType::kRtp,
++                         std::make_unique<VideoContentDescription>());
++  EXPECT_TRUE(description.IsUmbraOneToOneMedia());
++}
++TEST(UmbraMediaPolicyTest, RejectsDataEvenWhenRejected) {
++  for (bool rejected : {false, true}) {
++    SessionDescription description;
++    description.AddContent("audio", MediaProtocolType::kRtp,
++                           std::make_unique<AudioContentDescription>());
++    description.AddContent("data", MediaProtocolType::kSctp, rejected,
++                           std::make_unique<SctpDataContentDescription>());
++    EXPECT_FALSE(description.IsUmbraOneToOneMedia());
++  }
++}
++TEST(UmbraMediaPolicyTest, RejectsDuplicateAudio) {
++  SessionDescription description;
++  description.AddContent("a1", MediaProtocolType::kRtp,
++                         std::make_unique<AudioContentDescription>());
++  description.AddContent("a2", MediaProtocolType::kRtp,
++                         std::make_unique<AudioContentDescription>());
++  EXPECT_FALSE(description.IsUmbraOneToOneMedia());
++}
++TEST(UmbraMediaPolicyTest, RejectsDuplicateVideo) {
++  SessionDescription description;
++  description.AddContent("audio", MediaProtocolType::kRtp,
++                         std::make_unique<AudioContentDescription>());
++  description.AddContent("v1", MediaProtocolType::kRtp,
++                         std::make_unique<VideoContentDescription>());
++  description.AddContent("v2", MediaProtocolType::kRtp,
++                         std::make_unique<VideoContentDescription>());
++  EXPECT_FALSE(description.IsUmbraOneToOneMedia());
++}
++TEST(UmbraMediaPolicyTest, RejectsMultipleTracksInOneSection) {
++  SessionDescription description;
++  auto audio = std::make_unique<AudioContentDescription>();
++  audio->AddLegacyStream(1);
++  EXPECT_EQ(1u, audio->streams().size());
++  audio->AddLegacyStream(2);
++  EXPECT_EQ(2u, audio->streams().size());
++  description.AddContent("audio", MediaProtocolType::kRtp, std::move(audio));
++  EXPECT_FALSE(description.IsUmbraOneToOneMedia());
++}
++
+ }  // namespace webrtc

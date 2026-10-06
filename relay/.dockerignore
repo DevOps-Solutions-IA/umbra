@@ -1,0 +1,10 @@
+# Host interpreter artifacts must never become production container inputs.
+**/__pycache__
+**/*.py[cod]
+**/.pytest_cache
+**/.venv
+tests
+**/*.sqlite3
+**/*.sqlite3-*
+**/.env
+**/.env.*

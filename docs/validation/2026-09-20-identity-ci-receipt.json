@@ -1,0 +1,60 @@
+{
+  "status": "VERIFIED",
+  "recorded_at": "2026-09-20T20:40:08.586127+00:00",
+  "repository": "DevOps-Solutions-IA/umbra",
+  "pull_request": 4,
+  "source_commit": "d1598e2c2d5e1ea3743f029125c3ba5c1c5697f0",
+  "ci_checkout": "f34452bf666b3893d738da7c7cb5981347996d6f",
+  "ci_run": 35535786431,
+  "ci_url": "https://github.com/DevOps-Solutions-IA/umbra/actions/runs/35535786431",
+  "jobs": [
+    {
+      "id": 106144443751,
+      "name": "repository-guard",
+      "conclusion": "success"
+    },
+    {
+      "id": 106144468295,
+      "name": "relay-and-core",
+      "conclusion": "success"
+    },
+    {
+      "id": 106144468300,
+      "name": "android",
+      "conclusion": "success"
+    },
+    {
+      "id": 106144522638,
+      "name": "relay-container",
+      "conclusion": "success"
+    }
+  ],
+  "artifact_archives": {
+    "reports": {
+      "id": 10612856235,
+      "sha256": "97bf9b4743db7dcc53cd2b44c681d1ff2fb53f9f747a0c2c94693170a77bd9d4"
+    },
+    "debug_apks": {
+      "id": 10612576689,
+      "sha256": "08ae06a696843753694c60663335171403b1c8944dc0742eb01896021a607f85"
+    }
+  },
+  "apk_sha256": {
+    "android/app/build/outputs/apk/connected/debug/app-connected-debug.apk": "22b643dfd066fdb372e083a6016d7305c0150e855219daa421b03e9a517567ed",
+    "android/app/build/outputs/apk/offline/debug/app-offline-debug.apk": "53d5015bb9f9e8ad06a35ef95eb138575e0ada97864f18144bd666325b2e5825",
+    "android/app/build/outputs/apk/connected/release/app-connected-release-unsigned.apk": "d9bb1ef4aaf9a45a41c8ac7bc1471783f5782bf622344f4d4e4ea9fbdcc2d800",
+    "android/app/build/outputs/apk/offline/release/app-offline-release-unsigned.apk": "01023a84dc383ed5a07f9cbf623369bb02549e8f37e2b77754a9fe97846504bc"
+  },
+  "downloaded_debug_hashes_verified": true,
+  "android_instrumentation": {
+    "connected": 16,
+    "offline": 16
+  },
+  "rfcomm_emulated": {
+    "connected": "both endpoints PASS",
+    "offline": "both endpoints PASS"
+  },
+  "physical_bluetooth": "BLOCKED: no physical phones",
+  "hardware_keystore": "BLOCKED: no compatible physical devices",
+  "remaining_scope": "NOT EXECUTED: multi-device linking/revocation, location, signaling, voice/video/TURN; recovery export BLOCKED per ADR"
+}

@@ -14,7 +14,7 @@ public class SignalIntegrationTest {
     @Before public void setup() throws Exception {
         aliceRecords = new MemoryRecords(); bobRecords = new MemoryRecords();
         alice = new Engine(aliceRecords); bob = new Engine(bobRecords);
-        alice.initialize("Alice"); bob.initialize("Bob");
+        alice.initialize("Alice"); AdmissionFixture.enroll(alice); bob.initialize("Bob"); AdmissionFixture.enroll(bob);
         alice.importCard(bob.createCard()); bob.importCard(alice.createCard());
         verifyBoth();
     }
@@ -70,7 +70,7 @@ public class SignalIntegrationTest {
         assertEquals(2, alice.messages(bob.id()).size()); assertEquals(2, bob.messages(alice.id()).size());
     }
     @Test public void unverifiedContactsCannotSend() throws Exception {
-        Engine carol = new Engine(new MemoryRecords()); carol.initialize("Carol"); carol.importCard(bob.createCard());
+        Engine carol = new Engine(new MemoryRecords()); carol.initialize("Carol"); AdmissionFixture.enroll(carol); carol.importCard(bob.createCard());
         assertThrows(SecurityException.class, () -> carol.sendText(bob.id(), "blocked", 3600)); assertTrue(carol.outbox().isEmpty());
     }
     @Test public void incorrectVerificationCodeRejected() throws Exception {
@@ -137,7 +137,7 @@ public class SignalIntegrationTest {
         assertThrows(SecurityException.class, () -> bob.verifyNearby(false, alice.id(), a, b, signature, false));
     }
     @Test public void nearbyReconnectRejectsUnverifiedPeer() throws Exception {
-        Engine carol = new Engine(new MemoryRecords()); carol.initialize("Carol");
+        Engine carol = new Engine(new MemoryRecords()); carol.initialize("Carol"); AdmissionFixture.enroll(carol);
         carol.importCard(bob.createCard()); bob.importCard(carol.createCard());
         byte[] a = Bytes.random(32), b = Bytes.random(32);
         byte[] signature = carol.proveNearby(true, bob.id(), a, b);

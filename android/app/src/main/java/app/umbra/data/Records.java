@@ -9,5 +9,16 @@ public interface Records {
     void remove(String bucket, String key);
     List<String> keys(String bucket);
     <T> T transaction(Work<T> work) throws Exception;
+    /** Captures the current unlock epoch. Implementations without an access gate fail closed. */
+    default Runnable authorization() { throw new SecurityException("Session authorization unavailable"); }
+    /** Optional lifecycle notification; authorization() remains mandatory on every operation. */
+    default void onInvalidation(Runnable callback) {}
+    /** Only implementations backed by a process AccessGate provide coordinated closure. */
+    default app.umbra.core.EmergencyLock emergency() { return null; }
+    /** Internal resource-accounting identity, not authorization. Wrappers/owners of
+     * the same live storage must share this token, including owner replacement. */
+    default Object restrictedResourceScope() {
+        var coordinator=emergency();return coordinator==null?this:coordinator;
+    }
     interface Work<T> { T run() throws Exception; }
 }

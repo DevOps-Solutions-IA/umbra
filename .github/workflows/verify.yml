@@ -8,21 +8,31 @@ permissions:
   contents: read
 concurrency:
   group: umbra-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   repository-guard:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, Node 24
         with:
           python-version: '3.12'
       - name: Source and history hygiene
         run: python scripts/repository_guard.py --git-history
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5, Node 24
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install packet parser for synthetic PCAP regressions
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y tcpdump
+      - name: Install pinned relay primitives used by laboratory diagnostics tests
+        run: python -m pip install --require-hashes -r relay/requirements-hashed.lock
       - name: Handoff tooling tests (not Android tests)
         run: python -m unittest discover -s scripts/tests -p 'test_*.py' -v
   relay-and-core:
@@ -30,24 +40,26 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
         with:
           persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, Node 24
         with:
           python-version: '3.12'
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5, Node 24
         with:
           distribution: temurin
           java-version: '21'
-      - run: python -m pip install -c relay/requirements.lock -r relay/requirements-test.txt
+      - run: python -m pip install -r relay/requirements-test.lock
       - run: bash scripts/test_local.sh
+      - name: Local voice DSP invariants (not remote-media acceptance)
+        run: bash native/webrtc/voice-modulator/test.sh
   relay-container:
     needs: relay-and-core
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
         with:
           persist-credentials: false
       - name: Build relay container (not a deployment)
@@ -75,23 +87,35 @@ jobs:
   android:
     needs: repository-guard
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    # Run37100252917 completed all device checks and finalized15 network cases
+    # at40m04s, then hit the outer40m limit during hashes. Reserve ~5m for
+    # receipts/uploads and runner variation; every per-test deadline is unchanged.
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5, Node 24
         with:
           persist-credentials: false
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - name: Record Android checkout before any build or device test
+        run: |
+          mkdir -p android/app/build/reports
+          git rev-parse HEAD > android/app/build/reports/commit.txt
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6, Node 24
         with:
           python-version: '3.12'
-      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5, Node 24
         with:
           distribution: temurin
           java-version: '21'
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
-      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
         with:
-          gradle-version: '8.13'
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - uses: gradle/actions/setup-gradle@4c125117fe7c5aed11272ec4213f602f012f89f2 # v5, Node 24
+        with:
+          gradle-version: '8.14.4'
           cache-disabled: true
+      - name: Reject dependency fallback after repository connection failure
+        run: python scripts/check_gradle_repository_failure.py --gradle "$(command -v gradle)" --report android/app/build/reports/gradle-repository-failure.json
       - run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
       - name: Real libsignal unit tests, Android builds and lint
         working-directory: android
@@ -99,20 +123,71 @@ jobs:
           gradle --no-daemon :app:testConnectedDebugUnitTest :app:testOfflineDebugUnitTest
           :app:assembleConnectedDebug :app:assembleOfflineDebug
           :app:lintConnectedDebug :app:lintOfflineDebug
-      - name: Check merged manifests (APK inspection remains an additional release gate)
+          :app:assembleConnectedRelease :app:assembleOfflineRelease
+          :app:lintConnectedRelease :app:lintOfflineRelease
+          :app:assembleConnectedDebugAndroidTest :app:assembleOfflineDebugAndroidTest
+      - name: Reject missing, empty, failed or skipped JVM suites
+        run: python scripts/check_android_tests.py
+      - name: Check merged manifests
         run: python scripts/check_merged_permissions.py
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - name: Inspect debug APK permissions and Signal JNI
+        run: python scripts/check_debug_apks.py --include-release
+      - name: Inspect compiled manifest, TLS, backup and production DEX policy
+        run: python scripts/check_apk_policy.py --include-release
+      - name: Install hashed integration test dependencies
+        run: python -m pip install -r relay/requirements-test.lock
+      - name: Real JVM client against isolated HTTPS relay
+        run: python scripts/test_relay_integration.py
+      - name: Install disposable Android 35 emulator
+        run: sdkmanager "emulator" "system-images;android-35;default;x86_64"
+      - name: Grant this ephemeral runner group access to KVM
+        run: |
+          test -c /dev/kvm
+          sudo chgrp "$(id -gn)" /dev/kvm
+          sudo chmod g+rw /dev/kvm
+          test -r /dev/kvm
+          test -w /dev/kvm
+          "$ANDROID_HOME/emulator/emulator" -accel-check
+      - name: Execute both variants on Android (software Keystore rejection, no hardware claim)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v android; then android --help; else echo "Android CLI absent; using installed avdmanager"; fi
+          nproc
+          free -m
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y tcpdump
+          export UMBRA_FINALIZED_CAPTURE=1
+          source scripts/ci_emulator.sh
+          umbra_start_avd umbra-ci 5554
+          python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor connected --log android/app/build/reports/device/connected.log --evidence-dir android/app/build/reports/device/ui-evidence/connected
+          python scripts/run_android_instrumentation.py --serial emulator-5554 --flavor offline --log android/app/build/reports/device/offline.log --evidence-dir android/app/build/reports/device/ui-evidence/offline
+          python scripts/run_location_restart.py --serial emulator-5554 --flavor connected --log-dir android/app/build/reports/device/
+          python scripts/run_location_restart.py --serial emulator-5554 --flavor offline --log-dir android/app/build/reports/device/
+          python scripts/smoke_release_launch.py --serial emulator-5554 > android/app/build/reports/device/release-launch.log
+          python scripts/run_voice_probe.py --serial emulator-5554 --log android/app/build/reports/device/native-voice-probe.log
+          source scripts/ci_bluetooth.sh
+          umbra_finalize_capture
+          python scripts/finalize_media_capture.py --reports "$UMBRA_DEVICE_REPORTS/voice-integration" --owner "$UMBRA_DEVICE_REPORTS/capture-owner.json"
+      - name: Record checked-out commit and APK digests
+        run: |
+          git rev-parse HEAD > android/app/build/reports/commit.txt
+          sha256sum android/app/build/outputs/apk/*/debug/*.apk android/app/build/outputs/apk/*/release/*.apk > android/app/build/reports/apk-sha256.txt
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6, Node 24
         with:
           name: UMBRA-debug-unreviewed-${{ github.sha }}
           path: android/app/build/outputs/apk/*/debug/*.apk
           if-no-files-found: error
           retention-days: 7
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6, Node 24
         if: always()
         with:
           name: Android-test-and-lint-results-${{ github.sha }}
           path: |
             android/app/build/reports/tests/
             android/app/build/reports/lint-results*
-          if-no-files-found: warn
+            android/app/build/reports/device/
+            android/app/build/reports/commit.txt
+            android/app/build/reports/apk-sha256.txt
+          if-no-files-found: error
           retention-days: 7

@@ -1,0 +1,165 @@
+{
+  "dateUtc": "2026-09-21T22:09:59.137018+00:00",
+  "baseHead": "69e9dc19305a096fa88b2162b08385414bba5e67",
+  "scope": "Uncommitted lifecycle correction, exact APK hashes in receipts; not a final CI result",
+  "r8SurfaceLifecycle": {
+    "before": "FAIL: test constructor removed because new test was absent from TraceReferences sources",
+    "after": "PASS: 2 tests; specific test added as TraceReferences source; optimization and obfuscation retained"
+  },
+  "cameraProvider": "PASS: denied, synthetic AVD front/back capture, switch and closure; no physical camera claim",
+  "commandExitCode": 0,
+  "voice": {
+    "apkSha256": {
+      "connected/mediaLab/app-connected-mediaLab.apk": "49e7eaadbe67c7570d07df01d1e755c990625edc52d17b8eb5444aed292aaddd",
+      "androidTest/connected/mediaLab/app-connected-mediaLab-androidTest.apk": "a9b0ff188da1ce5d219fd65e6ef8eb636179511c5d6e7ad8e36e202c525149ef"
+    },
+    "synthetic": true,
+    "endpoints": 2,
+    "observedSeconds": 29.189,
+    "transport": "native WebRTC through coturn UDP",
+    "turnTlsCase": null,
+    "scenario": "force-stop",
+    "directIpv4Reachability": true,
+    "directBlockedDuringMedia": false,
+    "muteUnmute": true,
+    "network": [
+      {
+        "scope": "owned AVD outbound IPv4 UDP",
+        "mediaAttempt": "OBSERVED",
+        "turnPackets": 1360,
+        "turnStunPackets": 15,
+        "nonTurnStunPackets": 0,
+        "otherNonSystemUdpPackets": 0,
+        "ipv6": "NOT_EXECUTED"
+      },
+      {
+        "scope": "owned AVD outbound IPv4 UDP",
+        "mediaAttempt": "OBSERVED",
+        "turnPackets": 1467,
+        "turnStunPackets": 44,
+        "nonTurnStunPackets": 0,
+        "otherNonSystemUdpPackets": 0,
+        "ipv6": "NOT_EXECUTED"
+      }
+    ],
+    "audio": [
+      {
+        "sdpAddressAudit": true,
+        "decodedBuffers": 104,
+        "capturedBuffers": 106,
+        "verifiedNativeTransport": true,
+        "receivedAudioPackets": 50,
+        "codec": "audio/opus",
+        "nativeRelayProtocol": "udp"
+      },
+      {
+        "sdpAddressAudit": true,
+        "decodedBuffers": 112,
+        "capturedBuffers": 113,
+        "verifiedNativeTransport": true,
+        "receivedAudioPackets": 56,
+        "codec": "audio/opus",
+        "nativeRelayProtocol": "udp"
+      }
+    ],
+    "allocationExpiry": null,
+    "nativeCaptureClosure": [],
+    "networkImpairment": []
+  },
+  "video": {
+    "apkSha256": {
+      "connected/mediaLab/app-connected-mediaLab.apk": "49e7eaadbe67c7570d07df01d1e755c990625edc52d17b8eb5444aed292aaddd",
+      "androidTest/connected/mediaLab/app-connected-mediaLab-androidTest.apk": "a9b0ff188da1ce5d219fd65e6ef8eb636179511c5d6e7ad8e36e202c525149ef"
+    },
+    "synthetic": true,
+    "physicalCamera": false,
+    "nativeCodecPipeline": true,
+    "endpoints": 2,
+    "phases": {
+      "active": [
+        {
+          "decodedRemotePatterns": 21,
+          "distinctPatternPhases": 2,
+          "sendPermitted": true,
+          "receivePermitted": true,
+          "decodedAudioDuringVideo": 653,
+          "capturedFrames": 21,
+          "generation": 2,
+          "videoCodec": "video/VP8",
+          "sdpAddressAudit": true
+        },
+        {
+          "decodedRemotePatterns": 20,
+          "distinctPatternPhases": 2,
+          "sendPermitted": true,
+          "receivePermitted": true,
+          "decodedAudioDuringVideo": 646,
+          "capturedFrames": 41,
+          "generation": 2,
+          "videoCodec": "video/VP8",
+          "sdpAddressAudit": true
+        }
+      ],
+      "stopped": [
+        {
+          "captureStopped": true,
+          "captureWasAuthorized": true,
+          "requestToInvalidationNanos": 6692,
+          "requestToLastCaptureNanos": 0,
+          "requestToClosedNanos": 7711615,
+          "observedAfterRequestMillis": 2528,
+          "captureCallbacksAfterRequest": 0,
+          "decodedAudioAfterVideoOff": 259
+        },
+        {
+          "captureStopped": true,
+          "captureWasAuthorized": true,
+          "requestToInvalidationNanos": 7574,
+          "requestToLastCaptureNanos": 0,
+          "requestToClosedNanos": 7570937,
+          "observedAfterRequestMillis": 2516,
+          "captureCallbacksAfterRequest": 0,
+          "decodedAudioAfterVideoOff": 256
+        }
+      ],
+      "resumed": [
+        {
+          "decodedRemotePatterns": 20,
+          "distinctPatternPhases": 2,
+          "sendPermitted": true,
+          "receivePermitted": true,
+          "decodedAudioDuringVideo": 626,
+          "capturedFrames": 44,
+          "generation": 3,
+          "videoCodec": "video/VP8",
+          "sdpAddressAudit": true
+        },
+        {
+          "decodedRemotePatterns": 20,
+          "distinctPatternPhases": 2,
+          "sendPermitted": true,
+          "receivePermitted": true,
+          "decodedAudioDuringVideo": 616,
+          "capturedFrames": 86,
+          "generation": 3,
+          "videoCodec": "video/VP8",
+          "sdpAddressAudit": true
+        }
+      ]
+    }
+  },
+  "optimizedApk": {
+    "package": "app.umbra.privatechat.medialab",
+    "debuggable": false,
+    "apkSha256": "49e7eaadbe67c7570d07df01d1e755c990625edc52d17b8eb5444aed292aaddd",
+    "mappingSha256": "2b5e9c2f9f00fa0f532df6ca7606e569a2b327f01807a6815bf04dbe2b7307f2",
+    "configurationSha256": "6cd6655d5c36cd13d8c897e4ff582ba4d9665bbdd4f60cfd23cea83e54d03f85",
+    "obfuscatedClasses": {
+      "app.umbra.media.NativeVoiceSession": "app.umbra.media.v",
+      "app.umbra.calls.CallService": "a.l",
+      "app.umbra.crypto.Engine": "c.l"
+    },
+    "exactProductionApk": false,
+    "mediaExecution": "NOT_EXECUTED_BY_THIS_CHECK"
+  }
+}

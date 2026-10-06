@@ -1,0 +1,128 @@
+{
+  "status": "PASS for this working-tree execution; NOT final commit validation",
+  "nativeArtifact": "150.7871.01-umbra.2",
+  "nativeSha256": "26cdb1dc1e711f80081520c2a0f00684a41142898e8e421ee7ced2de2cf01b41",
+  "publishedBase": "d4cb521b25171c3d3cfe385ba0de63688dbf9586",
+  "uncommittedVideoChanges": true,
+  "physicalHardware": false,
+  "video": {
+    "synthetic": true,
+    "physicalCamera": false,
+    "nativeCodecPipeline": true,
+    "endpoints": 2,
+    "phases": {
+      "active": [
+        {
+          "decodedRemotePatterns": 20,
+          "distinctPatternPhases": 2,
+          "decodedAudioDuringVideo": 673,
+          "capturedFrames": 20,
+          "generation": 2,
+          "sdpAddressAudit": true
+        },
+        {
+          "decodedRemotePatterns": 20,
+          "distinctPatternPhases": 2,
+          "decodedAudioDuringVideo": 667,
+          "capturedFrames": 45,
+          "generation": 2,
+          "sdpAddressAudit": true
+        }
+      ],
+      "stopped": [
+        {
+          "captureStopped": true,
+          "captureCallbacksAfterRequest": 0,
+          "decodedAudioAfterVideoOff": 259
+        },
+        {
+          "captureStopped": true,
+          "captureCallbacksAfterRequest": 0,
+          "decodedAudioAfterVideoOff": 259
+        }
+      ],
+      "resumed": [
+        {
+          "decodedRemotePatterns": 20,
+          "distinctPatternPhases": 2,
+          "decodedAudioDuringVideo": 632,
+          "capturedFrames": 42,
+          "generation": 3,
+          "sdpAddressAudit": true
+        },
+        {
+          "decodedRemotePatterns": 21,
+          "distinctPatternPhases": 2,
+          "decodedAudioDuringVideo": 632,
+          "capturedFrames": 95,
+          "generation": 3,
+          "sdpAddressAudit": true
+        }
+      ]
+    }
+  },
+  "networkAndAudio": {
+    "synthetic": true,
+    "endpoints": 2,
+    "observedSeconds": 28.395,
+    "transport": "native WebRTC through coturn UDP",
+    "scenario": "audio",
+    "directIpv4Reachability": true,
+    "directBlockedDuringMedia": false,
+    "muteUnmute": true,
+    "network": [
+      {
+        "scope": "owned AVD outbound IPv4 UDP",
+        "mediaAttempt": "OBSERVED",
+        "turnPackets": 1386,
+        "turnStunPackets": 17,
+        "nonTurnStunPackets": 0,
+        "otherNonSystemUdpPackets": 0,
+        "ipv6": "NOT_EXECUTED"
+      },
+      {
+        "scope": "owned AVD outbound IPv4 UDP",
+        "mediaAttempt": "OBSERVED",
+        "turnPackets": 1461,
+        "turnStunPackets": 37,
+        "nonTurnStunPackets": 0,
+        "otherNonSystemUdpPackets": 0,
+        "ipv6": "NOT_EXECUTED"
+      }
+    ],
+    "audio": [
+      {
+        "sdpAddressAudit": true,
+        "decodedBuffers": 103,
+        "capturedBuffers": 120,
+        "verifiedNativeTransport": true,
+        "receivedAudioPackets": 51,
+        "codec": "audio/opus"
+      },
+      {
+        "sdpAddressAudit": true,
+        "decodedBuffers": 111,
+        "capturedBuffers": 102,
+        "verifiedNativeTransport": true,
+        "receivedAudioPackets": 55,
+        "codec": "audio/opus"
+      }
+    ],
+    "allocationExpiry": null,
+    "nativeCaptureClosure": []
+  },
+  "optimizedApk": {
+    "package": "app.umbra.privatechat.medialab",
+    "debuggable": false,
+    "apkSha256": "61fd5fac449c56a97c295f097c4486f3de26e424e6401360b3aff03aab26a53c",
+    "mappingSha256": "dd8004dccd9264d1f4de981c80a89beb6242ccc4e64af84a47cfb15295c8ab55",
+    "configurationSha256": "19cc17344dbad45638de31cff7081a5d89caaf3d5df0e76d287df193cdf72070",
+    "obfuscatedClasses": {
+      "app.umbra.media.NativeVoiceSession": "app.umbra.media.r",
+      "app.umbra.calls.CallService": "a.m",
+      "app.umbra.crypto.Engine": "c.l"
+    },
+    "exactProductionApk": false,
+    "mediaExecution": "NOT_EXECUTED_BY_THIS_CHECK"
+  }
+}

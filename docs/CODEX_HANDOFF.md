@@ -1,4 +1,380 @@
+# Estado vigente del master v4 — 2026-09-29
+
+Rama técnica `codex/security-content-completion`, PR #16 en borrador contra
+`codex/emergency-lock`, base exacta
+`ba75d329bedb2a26cd2e70371d2369e2fb3ba7a1`.
+Fuente inspeccionada: `6093d0333a5616f6ebcd379929ba0958705bd4eb` más regresiones
+locales posteriores identificadas en el recibo de trabajo; no es un SHA final
+aceptado ni una instrucción de reset. Consultar siempre HEAD real y conservar
+avances posteriores. No modificar UI de Claude, main ni historia roja.
+
+El master vigente es `UMBRA_MASTER_CODEX_v4_MOVIL_FISICO.md`, SHA256
+`59af8c3e3ff5d0291b7f1a244559c54dcbc693bcad64d0227000443a374187ed`.
+La copia original del propietario se conserva. Las entradas fechadas bajo el
+apéndice histórico reflejan su momento, **no el estado actual de implementación**.
+
+| Bloque | Implementación actual | Aceptación pendiente o límite |
+|---|---|---|
+| A | Contraseña/Vault, admisión y G1–G7, inicio privado, emergencia, privacy adapters, clipboard/exportación ordinaria | CI acumulativa propia del último SHA; UI por pantalla y autenticación física separadas |
+| B | Motor común v1, PNG, AAC/notas, ONCE/UMBRA_ONLY, caducidad, deduplicación y cierre coordinado | Recibos finales de HTTPS/RFCOMM/debug/R8; captura/acústica física con consentimiento |
+| C | PDF estático aislado, AVC_MP4 de archivo con reproducción/superficie y audio opcional | Recibos finales de codec/reproducción/restart; integración gráfica optimizada de Claude posterior |
+
+No se debe volver a implementar PDF/video ni reconstruir emergencia. Las llamadas
+no sustituyen las notas o videos de archivo. El contrato documentado es
+`UI_SECURITY_CONTENT_API_V1`; ver [UI_API_CONTRACT](UI_API_CONTRACT.md),
+[UI_INTEGRATION_MATRIX](UI_INTEGRATION_MATRIX.md),
+[API_GAPS_UI_SECURITY](API_GAPS_UI_SECURITY.md) y
+[CLAUDE_UI_HANDOFF](CLAUDE_UI_HANDOFF.md). No se identifican APIs G1–G7 faltantes;
+no equivale a aceptación final ni elimina fallos de laboratorio.
+
+[La auditoría de contenido](validation/2026-09-29-content-acceptance-audit.md)
+reconcilia los veinte casos. Nuevas regresiones distinguen TTL real del objeto de
+caducidad de sesión, inspeccionan Vault/WAL cifrados con claves aisladas, y ejercitan
+el parser exacto anterior con Signal real. Cada una necesita su resultado por SHA;
+compilación, test JVM y Android físico no son intercambiables.
+
+El teléfono ya fue detectado y ejecutó históricamente diez casos sintéticos offline
+debug (intento11). TEE observado corresponde a una clave fixture sin autenticación,
+no a la bóveda productiva autenticada. Tras autorización nueva, el29de septiembre
+se instaló R8 offline y pasó10casos sintéticos más consumo/reinicio de cuatro
+formatos; se conservan los rechazos previos. Preview Claude sigue sin instalar. No inferir cancelación
+humana ni instalar de nuevo sin el consentimiento específico requerido. Usar el
+runner seguro y paquete seleccionado; no cambiar protecciones/datos del teléfono.
+`NEEDS_SECOND_PEER`: RFCOMM/voz/video entre dos Android físicos. `MANUAL_PENDING`:
+autenticación y captura/acústica/rutas físicas. Un único teléfono no cubre dos radios.
+
+La matriz final requiere los diez workflows aplicables sobre el mismo HEAD/árbol.
+Preservar por separado EOF HTTPS tras video activo, restauración Wi-Fi de AVD y
+cualquier fallo de credenciales; diagnósticos o un pase posterior no demuestran
+una causa corregida. El recibo final de PR16 fijará HEAD, checkout, padres, árbol,
+runs, artefactos, APK/mapping y respaldo recuperable. No congelar aceptación antes.
+
+## Apéndice histórico — no usar como estado actual
+
+## 2026-09-28 master v4 continuation (not final acceptance)
+
+The governing local master is `UMBRA_MASTER_CODEX_v4_MOVIL_FISICO.md`, SHA-256
+59af8c3e3ff5d0291b7f1a244559c54dcbc693bcad64d0227000443a374187ed. Its original
+Windows copy was read, not overwritten. One physical phone is reported by the
+owner, but both Windows/Linux ADB lists were empty: physical tests NOT EXECUTED.
+See PHYSICAL_DEVICE_TESTING for the new safe runner and blocked/manual lanes.
+
+RFCOMM fixes: 5c40c24 supplies the required coordinator via the existing SQLite
+lab adapter and verifies all three restricted formats separately. fbb98a3 delays
+inbound fixture delivery until the deliberate duplicate writes complete, preserving
+Engine's rejection after ACK. Both historical failures and per-SHA CI are retained.
+Do not attribute the old memory-fixture storage claim to the new SQLite fixture.
+
+File-video now has a candidate bounded AVC/AAC import/re-encode adapter and real
+Android codec tests. Native acceptance, surface playback, file-video HTTPS/RFCOMM,
+cancellation observations and final contract freeze are NOT completed. See
+RESTRICTED_VIDEO and ADR-restricted-video. A/B/C remain open. Claude UI untouched.
+
 # Transferencia técnica a Codex
+
+## Avance acumulativo — PDF y preparación, 2026-09-28
+
+PR #16 sigue abierta en borrador. `c7584ee` incorpora PDF acotado en proceso
+Android aislado; privacidad debug pasó en run 36461176840. R8 falló antes de
+instrumentar por una omisión del fixture en TraceReferences, corregida en a909b60
+y comprobada localmente en ambos mappings; falta repetir su ejecución Android. `c808418` aprobó privacidad debug/R8 y el resto de
+resultados se conserva por SHA, no como aceptación de cambios posteriores.
+La corrección `4e969dc` impide enviar una preparación de una generación anterior
+con un consentimiento nuevo. La siguiente revisión añade ownership de pendientes,
+cuatro slots, invalidación inmediata y cierre comprobable sin esperar bajo el gate.
+Ver UI_API_CONTRACT y validation/2026-09-28-restricted-pdf-checkpoint.md.
+Video de archivo aún no implementado; matriz final y contrato definitivo pendientes.
+No hay integración de UI de Claude ni validación física nueva. Master A/B/C abierto.
+
+## Master v3 — continuación técnica, 2026-09-28
+
+PR #16 permanece parcial, sin UI de Claude. Consultar
+[revisión del checkpoint](validation/2026-09-28-checkpoint-13a5da6-review.md) y
+[AAC nativo y pendientes](validation/2026-09-28-restricted-audio-native.md).
+Contratos provisionales en UI_API_CONTRACT y API_GAPS_UI_SECURITY; no congelados.
+13a5da6 aprobó nueve workflows y falló video. bde7abb falló duración AAC en
+privacidad debug/R8; no contar builds como reproducción aceptada. A/B/C no cerrados.
+
+
+## Bloqueo de emergencia — 2026-09-28, implementación bajo validación
+
+Rama `codex/emergency-lock`, base exacta `52cd1e531b9de41ecd398ba53309b630ce1074f5`
+de PR #14, comprobada contra GitHub antes de modificar. Una solicitud deniega el
+AccessGate antes de esperar cierres independientes. CLOSED exige confirmaciones;
+INCOMPLETE impide otra sesión. Se conserva la bóveda y el commit ya confirmado.
+Ver [contrato para UI](EMERGENCY_LOCK.md), [ADR](adr/ADR-emergency-lock.md) y
+[evidencia](validation/2026-09-28-emergency-lock.md). Botón de Claude y aplicación
+combinada pendientes. Ningún resultado histórico valida esta implementación.
+
+
+## Private startup strict — 2026-09-27, implementación bajo validación
+
+Rama `codex/private-startup-no-network`, base exacta
+`a78a3ffd6962d15acf38efc070ca8f88385fc1fa` de PR #13. Desbloquear no conecta:
+gate de dominio por generación, HTTPS y Nearby separados, cancelación al bloquear.
+No se modifica la rama de UI de Claude. La Activity heredada necesita el ajuste
+mínimo documentado para dejar de restaurar el antiguo flag online.
+Ver [contrato](PRIVATE_STARTUP.md), [ADR](adr/ADR-private-startup.md) y
+[evidencia](validation/2026-09-27-private-startup.md). AVD y CI del nuevo HEAD
+siguen pendientes hasta registrarlos allí. No hay disponibilidad instantánea
+mientras está desconectada. Emergency Lock y demás ampliaciones quedan fuera.
+
+
+## Private device admission — 2026-09-27, bajo validación
+
+Rama dependiente `codex/private-device-admission`, base exacta
+`0de2b102d2d09b1eeed0e4fe233d3b27976e1036`. Autoridad Ed25519 dedicada,
+credenciales por dispositivo y prueba de posesión obligatoria se añaden a las
+políticas existentes; no conceden VERIFIED ni membresía por vinculación.
+Relay cierra APIs privadas sin configuración/admisión. Bóveda, Signal, TURN y
+permisos offline se conservan. UI de Claude y MainActivity no se modifican.
+Consultar [contrato](ADMISSION.md), [ADR](adr/ADR-private-device-admission.md)
+y [evidencia nueva](validation/2026-09-27-private-device-admission.md).
+CI final, AVD y RFCOMM nuevos todavía NO EJECUTADOS en este recibo inicial;
+ningún resultado de PR #11 valida estos cambios. Rotación/recuperación de
+la autoridad y nuevas pantallas quedan fuera de alcance.
+
+
+## Personal vault password — ejecución #11, 2026-09-26
+
+PARTIAL: nueva rama `codex/personal-vault-password` desde PR #10 verde `6b0a844`.
+PR #10 y UI de Claude no se modifican. Argon2id + Keystore, migración transaccional
+y APIs de dominio implementadas; consultar [evidencia](validation/2026-09-26-personal-vault-password.md)
+para validación del nuevo código, fallos y límites. No atribuir la CI de la base
+a esta entrega. La integración visual sigue en la rama de UI independiente.
+
+
+## Continuación tras CI completa de d9dd2f3 — 2026-09-26
+
+Verify (cuatro jobs), voz R8, modulación debug/R8 y las 18 regresiones
+focalizadas pasaron. Video R8 pasó 32 casos; debug pasó 31 y falló en
+credential-expiry: el arnés abortó ante el rechazo correcto de una escritura
+cancelada. Se añade una aserción estricta de ese rechazo, sin autorizar el envío
+ni alterar la caducidad, y tres repeticiones reales por configuración. Los
+resultados siguientes requieren CI nueva; los fallos anteriores se conservan.
+146 pruebas de herramientas locales pasan. Detalles y artefactos históricos en
+[la evidencia](validation/2026-09-26-modulator-stabilization.md); estado vigente
+y recibos finales en la PR #10, que sigue abierta en borrador.
+
+## Estabilización comprobada parcialmente — 2026-09-26
+
+Carrera de video reproducida 3 veces debug y 3 R8 en 60bc42e/run36253121718.
+Corrección 69ec021: regresiones enfocadas R8 verdes (36253784224); debug bloqueó
+antes de media por ruta UDP del laboratorio, no se cuenta aprobado. Preparación
+RFCOMM corregida para salir de Settings y comprobar fin del descubrimiento;
+145 pruebas de herramientas pasan. Verify diagnóstico 8600654 verde, pero no
+valida el siguiente HEAD. Conservar ejecuciones y consultar la CI final en PR #10.
+[Pruebas, causas y límites](validation/2026-09-26-modulator-stabilization.md).
+No nuevas funcionalidades, merge, downgrade ni secretos.
+
+## Accesos restaurados — estabilización 2026-09-26
+
+GitHub y descargas disponibles tras autorización del propietario; los bloqueos
+de publicación anteriores son históricos. KVM local sin permisos efectivos;
+usar CI. Video falla antes de revocar CAMERA, durante stopVideo. Causas de esa
+transición terminal y RFCOMM todavía bajo investigación. Ver
+[continuación](validation/2026-09-26-modulator-stabilization.md).
+
+## Continuación 2026-09-26 — CI incompleta
+
+HEAD publicado `2d9ac6e`: modulación y voz R8 SUCCESS; video R8 SUCCESS;
+video debug falla camera-permission-revoked; Verify falla handshake RFCOMM
+connected. Wrong-fingerprint pasa en ambas matrices. Los dos fallos restantes
+tienen causa no confirmada. Mejoras de diagnóstico en revisión; ver
+[recibo](validation/2026-09-26-modulator-diagnostics.md). No declarar todo verde.
+Los cambios de diagnóstico están locales y probados (142 pruebas de herramientas;
+javac del fixture), pero NO publicados: el conector requiere aprobación y la
+sesión la prohíbe. HEAD local/remoto conocido sigue en `2d9ac6e`. Parche de
+continuación: `/tmp/umbra-modulator-diagnostics.patch`. Se necesita restaurar la
+capacidad de publicación/descarga y ejecución de AVD, sin rebajar garantías.
+
+## Modulación local de voz — en curso, 2026-09-25
+
+PR #10 borrador dependiente de #9, rama `codex/local-voice-modulator`.
+Base #9 verificada: `26d7326a8b2a43ee9533284d20896727ad8bb3ce`; no se modifica
+su rama. DSP por llamada después de AEC/NS/ganancia, antes de Opus; modos natural
+y timbre modulado a 100 Hz, error silenciado sin fallback. No anonimización
+biométrica. Build nativo 36187887900: cuatro ABI, 83 TURN + 12 política multimedia;
+AAR `.5` corrige preparación de formato antes del primer audio admitido.
+Ocho recorridos reales `.5` debug/R8 aprobados en CI 36202456119 para
+HEAD `383fc37`, checkout `7839081`, árbol común `064b1089`. También se ejecutaron
+localmente los cuatro casos por configuración: voz inicial, video, lock y
+revocación. Un fallo local sin audio no se reprodujo; causa no confirmada,
+diagnóstico de laboratorio añadido sin reducir umbrales. Verify/voz/video
+completos y CI del siguiente commit siguen pendientes en este recibo.
+Ver evidencia 2026-09-25-local-voice-modulator.md para comandos y hashes.
+Hardware, inteligibilidad física y medición cuantitativa de sincronía A/V no
+ejecutados; no confundir mediaLab R8 con el APK productivo exacto.
+
+CI posterior `63862cc`: Verify/voz/modulación SUCCESS; video R8 falló únicamente
+wrong-fingerprint (debug31/31, R830/31). Se conserva el fallo 36204852534.
+Corrección implementada: tick cancelado no sobrescribe el diagnóstico terminal;
+observación estable de 350 ms y tres repeticiones R8 enfocadas aprobadas. No se
+amplían motivos aceptados. Nueva CI completa requerida para el commit corrector.
+
+
+## Estado actual de transferencia — 2026-09-22
+
+PR #9 sigue OPEN/DRAFT hacia `codex/turn-voice-core`. Código `171324bf` probado
+en checkout `dca789944`: Verify 35661260991 (cuatro SUCCESS), voz R8 35661261035
+y video 35661261036 SUCCESS. Video: 31 casos debug y 31 R8; 15 escenarios de voz
+por variante. [Recibo y límites](validation/2026-09-22-turn-video-acceptance.md).
+Implementación integrada comprobada con medios sintéticos; no hardware físico ni
+APK productivo exacto. Pendientes: timestamp de último datagrama video, asignación
+relay IPv6, hardware y auditoría. No reabrir fallos históricos como pendientes sin
+una regresión nueva. Las secciones siguientes conservan la evolución anterior.
+
+## Sexta entrega — video — EN CURSO, 2026-09-21
+
+Rama `codex/turn-video-core`, PR #9 borrador dependiente de #8 abierta.
+Base a11b579 reproducida en CI35625489078: cuatro SUCCESS y 15 escenarios de voz.
+[Evidencia nueva](validation/2026-09-21-turn-video-core.md).
+Se reprodujo/corrigió una entrada JNI Zero eliminada por R8; primera voz sintética
+bidireccional con Engine/Signal/HTTPS/TURN sobre clases UMBRA optimizadas pasó en
+dos AVD. Target `.medialab` separado, no APK productivo exacto ni Keystore hardware.
+C++ TURN: el fallo inicial CI35625739825 se corrigió sin omitir el test upstream
+previamente deshabilitado; CI35630454176 ejecutó 83 casos, incluidos 18 de redirección.
+La restricción nativa de secciones SDP pasó en CI35634570646: cuatro ABI, 83 TURN
+y 12 pruebas seleccionadas del modelo/política SDP. AAR `.3` fijado por hash.
+Video: implementación local de consentimiento direccional, generaciones acotadas,
+captura/render y recorrido de patrones remotos + audio ejecutado en debug y R8.
+Recibos de árbol de trabajo disponibles; NO es aceptación final ni CI del video.
+Camera2 sintética, TLS y trayecto cliente-TURN IPv6 (relay IPv4) ya tienen ejecuciones
+parciales; quedan CI final y matriz completa del nuevo árbol. Esperar gathering
+COMPLETE bloqueó extremos con candidatos válidos: la corrección envía candidatos
+incrementales por Engine/Signal, ligados a descripción/generación. Un par prflx no
+autoriza captura. La caducidad de asignaciones se prueba con 180 segundos: el caso
+anterior de 20 segundos no contemplaba el mínimo que coturn aplica al renovar.
+Revisión posterior a 69e9dc1: voz R8 verde, Verify Android y video no verdes.
+Corregido cierre de renderer reemplazado por el listener de MainActivity (dos
+regresiones Android rojo→verde), doble STOP local y carreras de clasificación en el
+arnés. La nueva instrumentación connected exige 27 pruebas; offline conserva 25.
+La CI siguiente debe validar estas correcciones; no atribuirle resultados previos.
+Conservar TURN obligatorio, plazos, offline y evidencia de fallos. No empezar desde main.
+
+## Quinta entrega — voz — en curso, 2026-09-21
+
+PARTIAL — rama `codex/turn-voice-core`, base #7 abierta `e495793`.
+[Estado y comandos ejecutados](validation/2026-09-21-turn-voice-core.md).
+Distribución WebRTC/guardas/configuración RELAY verificadas. Dos AVD han ejecutado
+Engine/SQLite/libsignal/HTTPS y Opus sintético bidireccional por coturn real. Adaptador
+connected y controles mínimos integrados; no conversación humana ni hardware validado.
+Corregida la redirección TURN nativa mediante fuente fijada: cuatro ABI compiladas
+(run35577083313), cero paquetes al destino alternativo en dos AVD x86_64; Opus y rechazo
+DTLS repetidos con ese AAR. La capacidad productiva se liga al hash revisado y conserva
+la autorización Engine. Código c325788: CI35580903584, cuatro SUCCESS; checkout
+b9d5256b47ffeb3ce4c6aa9bbc8342d4f611085c. Recibo JSON/Markdown en docs/validation.
+La entrega documental posterior debe comprobar su propia CI y conservar esta distinción.
+Caducidad de credenciales/asignaciones y rutas UDP reales ejecutadas en laboratorio.
+Regresión adicional: el fixture mide con monotónico el cese de callbacks ADM
+sintéticos tras cancelación; 126 herramientas y lock/disco en dos AVD pasaron.
+CI35585672689 falló antes del AVD por el fixture MAX_TTL+1; se reprodujo la
+carrera 400→409 al cruzar un segundo y se corrigió el test, conservando MAX_TTL
+y pruebas exactas de frontera. 149 backend y HTTPS real pasan localmente.
+Consultar la CI del nuevo HEAD antes de atribuirle la batería completa.
+Hardware, IPv6, TURN TLS y recorrido de voz R8 siguen pendientes.
+No se modifica señalización anterior ni se reducen Keystore/permisos offline.
+
+
+## Cuarta entrega — señalización — 2026-09-21 UTC
+
+USER_DECISION — rama `codex/authenticated-call-signaling`, dependiente de #6.
+Base verificada `78af23b`; no modificar ramas previas. Señalización Signal, selección
+única y consentimiento; RELAY_ONLY obligatorio, DIRECT_ALLOWED inactivo.
+Evidencia y resultados: [informe](validation/2026-09-21-authenticated-call-signaling.md).
+Recibo final de PR distingue HEAD/checkout/CI. Siguiente bloque: WebRTC voz 1:1
+con TURN de laboratorio y pruebas reales; después video. No multimedia ejecutada.
+
+## Tercera entrega — ubicación cifrada — 2026-09-21 UTC
+
+USER_DECISION — Rama `codex/encrypted-location-core`, dependiente de #5 hacia
+`codex/device-linking-core`; base abierta comprobada `c538b68`. No modificar ramas previas.
+Implementación, comandos y estado de validación en el [informe](validation/2026-09-21-encrypted-location-core.md).
+Consultar el recibo final de la nueva PR para HEAD/checkout/CI; no atribuir CI histórica
+al código nuevo. Hardware GPS/Keystore/radio y auditoría siguen pendientes.
+Siguiente bloque: señalización autenticada de llamadas, después audio/video; no están
+implementados por la entrega de ubicación. Recuperación exportable sigue bloqueada.
+
+
+## Segunda entrega de dispositivos — 2026-09-20
+
+USER_DECISION — Rama `codex/device-linking-core`, PR dependiente de #4 hacia
+`codex/secure-identity-media-core`. Base remota #4 comprobada OPEN en `5193b73`;
+no se modifica main ni las ramas previas. Consultar el nuevo informe antes de
+atribuir resultados de CI al commit actual.
+
+VERIFIED — implementación `ef1106f` y CI `35544189738`: cuatro trabajos SUCCESS.
+92 JVM por variante, 136 backend, 18 instrumentadas por variante; autoridad A1, claves Signal por dispositivo,
+ceremonia con consentimiento de sesión, lista firmada/versionada, aprobación de
+conjunto, fanout independiente y revocación local/capacidad delegada del relay.
+[Protocolo](protocol/DEVICE_LINKING.md), [ADR](adr/ADR-device-model.md),
+[evidencia](validation/2026-09-20-device-linking-core.md). Harness A1/A2/B1 real
+HTTPS/JNI y SQLite de instrumentación aislado; no interfaz definitiva de dispositivos.
+
+El HEAD posterior de evidencia/fixtures y su CI propia se registran en la
+[PR #5](https://github.com/DevOps-Solutions-IA/umbra/pull/5); comprobarlos antes de continuar.
+
+BLOCKED — hardware Keystore, Bluetooth físico, recuperación exportable y revisión
+independiente. Ubicación/voz/vídeo/TURN siguen fuera de esta entrega. Consultar los
+límites de revocación mientras no se haya instalado/recibido delegación del buzón.
+
+
+## Núcleo de identidad — 2026-09-20
+
+VERIFIED — PR #3 continúa abierta en `757027020a4a2da51e3f69196f1514eccf2c10c9`.
+CI `35532763825`: cuatro jobs SUCCESS. El fallo histórico del AVD está resuelto.
+Repositorio PUBLIC. Rama nueva `codex/secure-identity-media-core`, PR dependiente
+[#4](https://github.com/DevOps-Solutions-IA/umbra/pull/4) hacia la rama de #3.
+No modificar la rama de estabilización ni asumir fusión de las PR anteriores.
+
+VERIFIED — Correcciones Vault en `b1a865c` (CI `35535038549` SUCCESS),
+identidad en `d1598e2` (CI `35535786431`, cuatro jobs SUCCESS),
+emparejamiento firmado de un uso, consumo local/relay atómico, verificación humana
+separada, estados de confianza y suspensión por cambio de identidad. Misma identidad
+libsignal, sin teléfono ni correo. UI mínima por archivos; no rediseño gráfico.
+[Evidencia del bloque](validation/2026-09-20-secure-identity-media-core.md).
+
+PARTIAL — La misión completa NO está terminada. Dispositivos múltiples, ubicación,
+señalización, voz/video y TURN todavía no están implementados en este bloque.
+RECOVERABLE bloqueado por los requisitos del ADR; sin mecanismo de recuperación
+central. MAXIMUM conserva pérdida de identidad si se pierden todos los dispositivos.
+Hardware físico, bóveda cifrada sobre hardware y revisión independiente pendientes.
+Los informes históricos siguientes no representan el estado actual de CI.
+
+## Continuidad de estabilización — 2026-09-19 UTC
+
+VERIFIED — Rama `codex/repository-audit-fixes`; código validado
+`8fdea14efb3c8a78a0faf66d01f9d254a8dc8a20`. PR #1 permanece abierta en
+`0f4d566880454939dda130167c42de3ac8b4fe77`; se preservó además el HEAD de #2,
+`47b26169717fcf57cfd9e01d79e10b68562ded56`. No partir de main suponiendo merge.
+Consultar GitHub antes de continuar; entregar la corrección hacia la rama de #1.
+
+VERIFIED — Backend 108, core 105, JVM 55 por variante, instrumentación 8 por variante,
+integración HTTPS real y Bluetooth RFCOMM emulado ambas variantes; cuatro APK/lint y
+arranque R8 bloqueado verificados. [Evidencia integral y hashes](validation/2026-09-19-integral-stabilization.md).
+Los documentos siguientes describen etapas históricas y no sustituyen ese inventario.
+
+BLOCKED — CI remota por pagos/límite de gasto según anotación GitHub; hardware físico
+no disponible. NOT_VERIFIED — Bóveda Android productiva con hardware, migraciones/
+fallos/cancelación Android completos, matriz UX y reconexión adversarial Bluetooth.
+Siguiente trabajo: revisión humana de los cambios de identidad/almacenamiento/dependencias,
+resolver por el propietario el bloqueo de Actions y repetir CI; continuar P0-03 y
+las matrices pendientes sin relajar Keystore. No se autoriza auto-merge.
+
+## Actualización P0-01 — 2026-09-19 UTC
+
+VERIFIED — Repositorio privado publicado; base main comprobada:
+`3716f09e415c69f59102e74cffa6a1bbb154dec6`. Cambios de código en
+`5a8f9b368225372a80c5150a37d33737138216c9`, rama `codex/android-build-validation`.
+Build debug real, 30 tests libsignal por variante, lint y permisos/JNI de APK
+verificados localmente. Backend (80 tests) y contenedor aislado también verificados.
+Consultar [evidencia y límites](validation/2026-09-19-p0-01.md) y
+[procedimiento](ANDROID_BUILD.md). La PR requiere revisión; no se autoriza auto-merge.
+
+NOT_VERIFIED — Siguen pendientes instrumentación/Keystore, Bluetooth emulado y
+físico, release/R8, cadena de suministro completa y auditoría. Siguiente trabajo:
+completar los controles restantes de P0-02 y continuar P0-03 según el roadmap.
+La descripción de preparación que sigue es histórica, no el estado actual de publicación.
 
 Fecha: 2026-09-18. Revisión de aplicación: 0.2.0-dev, sin cambios de runtime en esta preparación.
 Objetivo remoto: `devopssolutionsia/umbra`, **privado**. La preparación local no demuestra que
@@ -59,3 +435,23 @@ locks sin hashes siguen siendo deuda de cadena de suministro, no una garantía d
 Consultar `docs/HANDOFF_SOURCES.md`. Codex debe verificar versiones y capacidades actuales antes
 de instalar herramientas. No descargar scripts arbitrarios con `curl | sh` ni copiar secretos a
 mensajes, issues, artefactos de CI, capturas de pantalla o servicios de análisis.
+
+
+### 2026-09-28 master v4 continuation (not closure)
+
+Technical worktree `/tmp/umbra-security-content-completion`; PR16 stays draft against
+emergency-lock. Published a8e6f0d validated native MP4 preparation; a1a4a00 fixes
+physical PDF binding-death cancellation and AAC EOS padding. Ten safe physical
+offline debug cases now pass including silent file presentation and lock. R8
+physical install was rejected with INSTALL_FAILED_USER_RESTRICTED: not executed,
+normal owner installer interaction pending; no protection disabled. New video
+HTTPS/RFCOMM/restart and focus regression code requires its own cumulative CI.
+See 2026-09-28 physical/pdf-aac and file-video checkpoint evidence. Claude UI
+remains untouched; API freeze and full A/B/C closure are NOT declared.
+
+
+USER_DECISION 2026-09-28: No more phone APK installs/updates without specific
+owner consent before EACH installation (including separate app/test packages).
+No installation was in progress when instructed. Physical runner now requires
+per-invocation exact approved APK hashes; never populate flags by inference.
+Continue local/CI work; R8 installer rejection and next physical APK remain blocked.

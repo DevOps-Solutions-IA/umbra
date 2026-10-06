@@ -1,0 +1,1939 @@
+{
+  "verifiedUtc": "2026-09-22",
+  "publishedCodeHead": "171324bf4d280925f87d1bb6689c78be018fd4c8",
+  "integrationCheckout": "dca789944fabd2947ae6adab5da6fd3cce51d3ee",
+  "localBuild": {
+    "head": "171324bf4d280925f87d1bb6689c78be018fd4c8",
+    "command": "python scripts/build_android.py --release",
+    "exitCode": 0,
+    "jvm": {
+      "testConnectedDebugUnitTest": {
+        "tests": 157,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "testOfflineDebugUnitTest": {
+        "tests": 117,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    },
+    "apks": {
+      "android/app/build/outputs/apk/connected/debug/app-connected-debug.apk": "b8e6943fb844752c7ee9e0e29d8be6ac8a387ce8fc73564df3726c11e91bd836",
+      "android/app/build/outputs/apk/connected/release/app-connected-release-unsigned.apk": "34dc8b61022ed23afff98547e9fcb1839ebd92d922e2e658fb9a8a9a1eca2eea",
+      "android/app/build/outputs/apk/offline/debug/app-offline-debug.apk": "75af517a52a2d854a1e38dc7a5dcf9a18ad8fbb9d44db52c30d9568adc3fef22",
+      "android/app/build/outputs/apk/offline/release/app-offline-release-unsigned.apk": "2ab4d11134a4907166608e206d309dc0dbbc852bca2aa37e266466b9ce138817"
+    }
+  },
+  "runs": [
+    {
+      "id": 35661260991,
+      "url": "https://github.com/DevOps-Solutions-IA/umbra/actions/runs/35661260991",
+      "jobs": [
+        {
+          "name": "repository-guard",
+          "conclusion": "success"
+        },
+        {
+          "name": "relay-and-core",
+          "conclusion": "success"
+        },
+        {
+          "name": "android",
+          "conclusion": "success"
+        },
+        {
+          "name": "relay-container",
+          "conclusion": "success"
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 10668082101,
+          "name": "Android-test-and-lint-results-dca789944fabd2947ae6adab5da6fd3cce51d3ee",
+          "size_in_bytes": 199240,
+          "digest": "sha256:b08fea601f36f7f4e7d24337561cce4e07d8505b019dcff1c7afac3c68fb29c1"
+        },
+        {
+          "id": 10668042012,
+          "name": "UMBRA-debug-unreviewed-dca789944fabd2947ae6adab5da6fd3cce51d3ee",
+          "size_in_bytes": 222541651,
+          "digest": "sha256:e7fc2eca9d012ab799cf3cb01046aa7065c9d5f43266aaea05655ef3e2b8ce47"
+        }
+      ],
+      "voiceReceipts": 15,
+      "videoReceipts": 0,
+      "apkSha256": {
+        "android/app/build/outputs/apk/connected/debug/app-connected-debug.apk": "53043a6b17b6ccbfb335ee40c856b091c69a03522c37a45a7084b3502bcc81d8",
+        "android/app/build/outputs/apk/offline/debug/app-offline-debug.apk": "c54d80aeabe37ff4141618ef21bc1c6455904bedda1a8d3b2b5d8e23be2d9f26",
+        "android/app/build/outputs/apk/connected/release/app-connected-release-unsigned.apk": "34dc8b61022ed23afff98547e9fcb1839ebd92d922e2e658fb9a8a9a1eca2eea",
+        "android/app/build/outputs/apk/offline/release/app-offline-release-unsigned.apk": "2ab4d11134a4907166608e206d309dc0dbbc852bca2aa37e266466b9ce138817"
+      },
+      "instrumentation": {
+        "connected": 27,
+        "offline": 25
+      },
+      "downloadedApksVerified": {
+        "app-connected-debug.apk": "53043a6b17b6ccbfb335ee40c856b091c69a03522c37a45a7084b3502bcc81d8",
+        "app-offline-debug.apk": "c54d80aeabe37ff4141618ef21bc1c6455904bedda1a8d3b2b5d8e23be2d9f26"
+      }
+    },
+    {
+      "id": 35661261035,
+      "url": "https://github.com/DevOps-Solutions-IA/umbra/actions/runs/35661261035",
+      "jobs": [
+        {
+          "name": "optimized-voice",
+          "conclusion": "success"
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 10666949442,
+          "name": "optimized-media-evidence-dca789944fabd2947ae6adab5da6fd3cce51d3ee",
+          "size_in_bytes": 847841,
+          "digest": "sha256:48902cbdbb0b4e1f586f15e13ea5dc8174476ee0cff121ccb2be20d7ec706fba"
+        }
+      ],
+      "voiceReceipts": 15,
+      "videoReceipts": 0
+    },
+    {
+      "id": 35661261036,
+      "url": "https://github.com/DevOps-Solutions-IA/umbra/actions/runs/35661261036",
+      "jobs": [
+        {
+          "name": "video (false)",
+          "conclusion": "success"
+        },
+        {
+          "name": "video (true)",
+          "conclusion": "success"
+        }
+      ],
+      "artifacts": [
+        {
+          "id": 10668765883,
+          "name": "video-media-evidence-r8-false-dca789944fabd2947ae6adab5da6fd3cce51d3ee",
+          "size_in_bytes": 92375,
+          "digest": "sha256:9a6e9e59e1c34f99b7fbd0b9531122f622f12b53f7795cc7462f575d301b8235"
+        },
+        {
+          "id": 10668308430,
+          "name": "video-media-evidence-r8-true-dca789944fabd2947ae6adab5da6fd3cce51d3ee",
+          "size_in_bytes": 909725,
+          "digest": "sha256:b4f09495508ce4d8340c74e93a5a3ee51a3abed0eb9e680d49d123b25bdb855b"
+        }
+      ],
+      "voiceReceipts": 60,
+      "videoReceipts": 36,
+      "matrices": [
+        {
+          "artifact": "video-media-evidence-r8-false-dca789944fabd2947ae6adab5da6fd3cce51d3ee",
+          "cases": [
+            {
+              "case": "camera-provider",
+              "exitCode": 0,
+              "seconds": 14.269,
+              "status": "PASS"
+            },
+            {
+              "case": "audio",
+              "exitCode": 0,
+              "seconds": 60.017,
+              "status": "PASS"
+            },
+            {
+              "case": "direct-blocked",
+              "exitCode": 0,
+              "seconds": 60.233,
+              "status": "PASS"
+            },
+            {
+              "case": "expired-auth",
+              "exitCode": 0,
+              "seconds": 55.828,
+              "status": "PASS"
+            },
+            {
+              "case": "allocation-expiry",
+              "exitCode": 0,
+              "seconds": 206.231,
+              "status": "PASS"
+            },
+            {
+              "case": "invalid-auth",
+              "exitCode": 0,
+              "seconds": 54.803,
+              "status": "PASS"
+            },
+            {
+              "case": "unreachable",
+              "exitCode": 0,
+              "seconds": 54.448,
+              "status": "PASS"
+            },
+            {
+              "case": "turn-loss",
+              "exitCode": 0,
+              "seconds": 67.981,
+              "status": "PASS"
+            },
+            {
+              "case": "trust-loss",
+              "exitCode": 0,
+              "seconds": 51.8,
+              "status": "PASS"
+            },
+            {
+              "case": "lock",
+              "exitCode": 0,
+              "seconds": 50.469,
+              "status": "PASS"
+            },
+            {
+              "case": "credential-expiry",
+              "exitCode": 0,
+              "seconds": 81.095,
+              "status": "PASS"
+            },
+            {
+              "case": "device-revoked",
+              "exitCode": 0,
+              "seconds": 52.226,
+              "status": "PASS"
+            },
+            {
+              "case": "storage-failure",
+              "exitCode": 0,
+              "seconds": 50.931,
+              "status": "PASS"
+            },
+            {
+              "case": "force-stop",
+              "exitCode": 0,
+              "seconds": 51.576,
+              "status": "PASS"
+            },
+            {
+              "case": "permission-revoked",
+              "exitCode": 0,
+              "seconds": 49.842,
+              "status": "PASS"
+            },
+            {
+              "case": "unauthorized-redirect",
+              "exitCode": 0,
+              "seconds": 54.328,
+              "status": "PASS"
+            },
+            {
+              "case": "wrong-fingerprint",
+              "exitCode": 0,
+              "seconds": 31.55,
+              "status": "PASS"
+            },
+            {
+              "case": "receive-only",
+              "exitCode": 0,
+              "seconds": 50.385,
+              "status": "PASS"
+            },
+            {
+              "case": "degraded-network",
+              "exitCode": 0,
+              "seconds": 57.762,
+              "status": "PASS"
+            },
+            {
+              "case": "camera-denied",
+              "exitCode": 0,
+              "seconds": 33.467,
+              "status": "PASS"
+            },
+            {
+              "case": "camera-permission-revoked",
+              "exitCode": 0,
+              "seconds": 51.619,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-valid",
+              "exitCode": 0,
+              "seconds": 51.251,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-wrong-name",
+              "exitCode": 0,
+              "seconds": 54.87,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-expired",
+              "exitCode": 0,
+              "seconds": 54.919,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-untrusted",
+              "exitCode": 0,
+              "seconds": 55.344,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-invalid-auth",
+              "exitCode": 0,
+              "seconds": 54.891,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-unreachable",
+              "exitCode": 0,
+              "seconds": 54.137,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-unauthorized-redirect",
+              "exitCode": 0,
+              "seconds": 54.505,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-turn-loss",
+              "exitCode": 0,
+              "seconds": 61.61,
+              "status": "PASS"
+            },
+            {
+              "case": "ipv6-udp",
+              "exitCode": 0,
+              "seconds": 49.047,
+              "status": "PASS"
+            },
+            {
+              "case": "ipv6-tls",
+              "exitCode": 0,
+              "seconds": 51.052,
+              "status": "PASS"
+            }
+          ],
+          "videoReceipts": 18,
+          "captureCancellation": {
+            "samples": 35,
+            "maxRequestToInvalidationNanos": 7131,
+            "maxRequestToClosedNanos": 32417387,
+            "minimumObservationMillis": 2502
+          },
+          "representativeEvidence": {
+            "audio": {
+              "apkSha256": {
+                "connected/debug/app-connected-debug.apk": "cc4a02611fbb97504eabb95da9e1063515952bc2a81c586bbd42b83ba26d5a25",
+                "androidTest/connected/debug/app-connected-debug-androidTest.apk": "13903c1013fbbce83ad11138f03797346833e264187516de38e434aa964f0ee1"
+              },
+              "audio": [
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 103,
+                  "capturedBuffers": 118,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 54,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                },
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 116,
+                  "capturedBuffers": 109,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 55,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                }
+              ],
+              "network": [
+                {
+                  "scope": "owned AVD outbound IPv4 UDP",
+                  "mediaAttempt": "OBSERVED",
+                  "turnPackets": 1493,
+                  "turnStunPackets": 18,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                },
+                {
+                  "scope": "owned AVD outbound IPv4 UDP",
+                  "mediaAttempt": "OBSERVED",
+                  "turnPackets": 1567,
+                  "turnStunPackets": 46,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                }
+              ],
+              "videoPhases": {
+                "active": [
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 646,
+                    "capturedFrames": 19,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 659,
+                    "capturedFrames": 41,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ],
+                "stopped": [
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 3315,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 23515028,
+                    "observedAfterRequestMillis": 2618,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 260
+                  },
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 6409,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 20675509,
+                    "observedAfterRequestMillis": 2533,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 251
+                  }
+                ],
+                "resumed": [
+                  {
+                    "decodedRemotePatterns": 22,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 788,
+                    "capturedFrames": 47,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 775,
+                    "capturedFrames": 87,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ]
+              }
+            },
+            "receive-only": {
+              "apkSha256": {
+                "connected/debug/app-connected-debug.apk": "cc4a02611fbb97504eabb95da9e1063515952bc2a81c586bbd42b83ba26d5a25",
+                "androidTest/connected/debug/app-connected-debug-androidTest.apk": "13903c1013fbbce83ad11138f03797346833e264187516de38e434aa964f0ee1"
+              },
+              "audio": [
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 112,
+                  "capturedBuffers": 110,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 55,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                },
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 106,
+                  "capturedBuffers": 119,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 53,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                }
+              ],
+              "network": [
+                {
+                  "scope": "owned AVD outbound IPv4 UDP",
+                  "mediaAttempt": "OBSERVED",
+                  "turnPackets": 1484,
+                  "turnStunPackets": 16,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                },
+                {
+                  "scope": "owned AVD outbound IPv4 UDP",
+                  "mediaAttempt": "OBSERVED",
+                  "turnPackets": 1381,
+                  "turnStunPackets": 37,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                }
+              ],
+              "videoPhases": {
+                "active": [
+                  {
+                    "decodedRemotePatterns": 0,
+                    "distinctPatternPhases": 0,
+                    "sendPermitted": true,
+                    "receivePermitted": false,
+                    "decodedAudioDuringVideo": 673,
+                    "capturedFrames": 20,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": false,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 680,
+                    "capturedFrames": 0,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ],
+                "stopped": [
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 3615,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 9369374,
+                    "observedAfterRequestMillis": 2599,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 257
+                  },
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": false,
+                    "requestToInvalidationNanos": 0,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 0,
+                    "observedAfterRequestMillis": 2598,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 258
+                  }
+                ],
+                "resumed": [
+                  {
+                    "decodedRemotePatterns": 0,
+                    "distinctPatternPhases": 0,
+                    "sendPermitted": true,
+                    "receivePermitted": false,
+                    "decodedAudioDuringVideo": 775,
+                    "capturedFrames": 44,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": false,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 766,
+                    "capturedFrames": 0,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ]
+              }
+            },
+            "tls-valid": {
+              "apkSha256": {
+                "connected/debug/app-connected-debug.apk": "cc4a02611fbb97504eabb95da9e1063515952bc2a81c586bbd42b83ba26d5a25",
+                "androidTest/connected/debug/app-connected-debug-androidTest.apk": "13903c1013fbbce83ad11138f03797346833e264187516de38e434aa964f0ee1"
+              },
+              "audio": [
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 103,
+                  "capturedBuffers": 117,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 54,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "tls"
+                },
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 124,
+                  "capturedBuffers": 111,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 53,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "tls"
+                }
+              ],
+              "network": [
+                {
+                  "scope": "owned AVD outbound IPv4 TCP/TLS and UDP fallback rejection",
+                  "turnTlsPackets": 1905,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "otherNonSystemTcpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                },
+                {
+                  "scope": "owned AVD outbound IPv4 TCP/TLS and UDP fallback rejection",
+                  "turnTlsPackets": 1935,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "otherNonSystemTcpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                }
+              ],
+              "videoPhases": {
+                "active": [
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 652,
+                    "capturedFrames": 20,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 666,
+                    "capturedFrames": 43,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ],
+                "stopped": [
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 3155,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 10587010,
+                    "observedAfterRequestMillis": 2537,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 252
+                  },
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 4817,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 14617180,
+                    "observedAfterRequestMillis": 2528,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 259
+                  }
+                ],
+                "resumed": [
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 787,
+                    "capturedFrames": 46,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 795,
+                    "capturedFrames": 87,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ]
+              }
+            },
+            "ipv6-udp": {
+              "apkSha256": {
+                "connected/debug/app-connected-debug.apk": "cc4a02611fbb97504eabb95da9e1063515952bc2a81c586bbd42b83ba26d5a25",
+                "androidTest/connected/debug/app-connected-debug-androidTest.apk": "13903c1013fbbce83ad11138f03797346833e264187516de38e434aa964f0ee1"
+              },
+              "audio": [
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 107,
+                  "capturedBuffers": 109,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 55,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                },
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 106,
+                  "capturedBuffers": 118,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 54,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                }
+              ],
+              "network": [
+                {
+                  "scope": "owned Wi-Fi IPv4+IPv6 TCP/UDP; IPv6 client-to-TURN, IPv4 relay allocation",
+                  "turnIpv6Packets": 1402,
+                  "nonAuthorizedTcpUdpPackets": 0,
+                  "transport": "UDP",
+                  "allIpv6Allocation": "NOT_EXECUTED: pinned allocator uses default IPv4 allocation"
+                },
+                {
+                  "scope": "owned Wi-Fi IPv4+IPv6 TCP/UDP; IPv6 client-to-TURN, IPv4 relay allocation",
+                  "turnIpv6Packets": 1490,
+                  "nonAuthorizedTcpUdpPackets": 0,
+                  "transport": "UDP",
+                  "allIpv6Allocation": "NOT_EXECUTED: pinned allocator uses default IPv4 allocation"
+                }
+              ],
+              "videoPhases": {
+                "active": [
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 696,
+                    "capturedFrames": 21,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 703,
+                    "capturedFrames": 45,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ],
+                "stopped": [
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 4667,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 32417387,
+                    "observedAfterRequestMillis": 2589,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 259
+                  },
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 6750,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 13730567,
+                    "observedAfterRequestMillis": 2606,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 258
+                  }
+                ],
+                "resumed": [
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 655,
+                    "capturedFrames": 43,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 653,
+                    "capturedFrames": 95,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ]
+              }
+            },
+            "ipv6-tls": {
+              "apkSha256": {
+                "connected/debug/app-connected-debug.apk": "cc4a02611fbb97504eabb95da9e1063515952bc2a81c586bbd42b83ba26d5a25",
+                "androidTest/connected/debug/app-connected-debug-androidTest.apk": "13903c1013fbbce83ad11138f03797346833e264187516de38e434aa964f0ee1"
+              },
+              "audio": [
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 107,
+                  "capturedBuffers": 108,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 55,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "tls"
+                },
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 113,
+                  "capturedBuffers": 125,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 53,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "tls"
+                }
+              ],
+              "network": [
+                {
+                  "scope": "owned Wi-Fi IPv4+IPv6 TCP/UDP; IPv6 client-to-TURN, IPv4 relay allocation",
+                  "turnIpv6Packets": 1886,
+                  "nonAuthorizedTcpUdpPackets": 0,
+                  "transport": "TLS",
+                  "allIpv6Allocation": "NOT_EXECUTED: pinned allocator uses default IPv4 allocation"
+                },
+                {
+                  "scope": "owned Wi-Fi IPv4+IPv6 TCP/UDP; IPv6 client-to-TURN, IPv4 relay allocation",
+                  "turnIpv6Packets": 1957,
+                  "nonAuthorizedTcpUdpPackets": 0,
+                  "transport": "TLS",
+                  "allIpv6Allocation": "NOT_EXECUTED: pinned allocator uses default IPv4 allocation"
+                }
+              ],
+              "videoPhases": {
+                "active": [
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 691,
+                    "capturedFrames": 20,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 698,
+                    "capturedFrames": 47,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ],
+                "stopped": [
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 4217,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 11809670,
+                    "observedAfterRequestMillis": 2593,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 258
+                  },
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 7131,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 14629570,
+                    "observedAfterRequestMillis": 2522,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 256
+                  }
+                ],
+                "resumed": [
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 771,
+                    "capturedFrames": 46,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 770,
+                    "capturedFrames": 92,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ]
+              }
+            },
+            "degraded-network": {
+              "apkSha256": {
+                "connected/debug/app-connected-debug.apk": "cc4a02611fbb97504eabb95da9e1063515952bc2a81c586bbd42b83ba26d5a25",
+                "androidTest/connected/debug/app-connected-debug-androidTest.apk": "13903c1013fbbce83ad11138f03797346833e264187516de38e434aa964f0ee1"
+              },
+              "audio": [
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 110,
+                  "capturedBuffers": 118,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 54,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                },
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 117,
+                  "capturedBuffers": 110,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 53,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                }
+              ],
+              "network": [
+                {
+                  "scope": "owned AVD outbound IPv4 UDP",
+                  "mediaAttempt": "OBSERVED",
+                  "turnPackets": 1703,
+                  "turnStunPackets": 17,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                },
+                {
+                  "scope": "owned AVD outbound IPv4 UDP",
+                  "mediaAttempt": "OBSERVED",
+                  "turnPackets": 1729,
+                  "turnStunPackets": 38,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                }
+              ],
+              "videoPhases": {
+                "active": [
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 1000,
+                    "capturedFrames": 24,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 999,
+                    "capturedFrames": 49,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ],
+                "stopped": [
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 4076,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 15430435,
+                    "observedAfterRequestMillis": 2582,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 259
+                  },
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 4477,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 10379431,
+                    "observedAfterRequestMillis": 2561,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 252
+                  }
+                ],
+                "resumed": [
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 1053,
+                    "capturedFrames": 47,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 1122,
+                    "capturedFrames": 120,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "artifact": "video-media-evidence-r8-true-dca789944fabd2947ae6adab5da6fd3cce51d3ee",
+          "cases": [
+            {
+              "case": "camera-provider",
+              "exitCode": 0,
+              "seconds": 14.216,
+              "status": "PASS"
+            },
+            {
+              "case": "audio",
+              "exitCode": 0,
+              "seconds": 61.899,
+              "status": "PASS"
+            },
+            {
+              "case": "direct-blocked",
+              "exitCode": 0,
+              "seconds": 59.709,
+              "status": "PASS"
+            },
+            {
+              "case": "expired-auth",
+              "exitCode": 0,
+              "seconds": 55.715,
+              "status": "PASS"
+            },
+            {
+              "case": "allocation-expiry",
+              "exitCode": 0,
+              "seconds": 204.769,
+              "status": "PASS"
+            },
+            {
+              "case": "invalid-auth",
+              "exitCode": 0,
+              "seconds": 53.576,
+              "status": "PASS"
+            },
+            {
+              "case": "unreachable",
+              "exitCode": 0,
+              "seconds": 52.966,
+              "status": "PASS"
+            },
+            {
+              "case": "turn-loss",
+              "exitCode": 0,
+              "seconds": 67.635,
+              "status": "PASS"
+            },
+            {
+              "case": "trust-loss",
+              "exitCode": 0,
+              "seconds": 50.764,
+              "status": "PASS"
+            },
+            {
+              "case": "lock",
+              "exitCode": 0,
+              "seconds": 60.993,
+              "status": "PASS"
+            },
+            {
+              "case": "credential-expiry",
+              "exitCode": 0,
+              "seconds": 82.147,
+              "status": "PASS"
+            },
+            {
+              "case": "device-revoked",
+              "exitCode": 0,
+              "seconds": 52.311,
+              "status": "PASS"
+            },
+            {
+              "case": "storage-failure",
+              "exitCode": 0,
+              "seconds": 49.384,
+              "status": "PASS"
+            },
+            {
+              "case": "force-stop",
+              "exitCode": 0,
+              "seconds": 48.593,
+              "status": "PASS"
+            },
+            {
+              "case": "permission-revoked",
+              "exitCode": 0,
+              "seconds": 47.953,
+              "status": "PASS"
+            },
+            {
+              "case": "unauthorized-redirect",
+              "exitCode": 0,
+              "seconds": 52.798,
+              "status": "PASS"
+            },
+            {
+              "case": "wrong-fingerprint",
+              "exitCode": 0,
+              "seconds": 33.348,
+              "status": "PASS"
+            },
+            {
+              "case": "receive-only",
+              "exitCode": 0,
+              "seconds": 45.971,
+              "status": "PASS"
+            },
+            {
+              "case": "degraded-network",
+              "exitCode": 0,
+              "seconds": 60.146,
+              "status": "PASS"
+            },
+            {
+              "case": "camera-denied",
+              "exitCode": 0,
+              "seconds": 33.757,
+              "status": "PASS"
+            },
+            {
+              "case": "camera-permission-revoked",
+              "exitCode": 0,
+              "seconds": 48.384,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-valid",
+              "exitCode": 0,
+              "seconds": 49.326,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-wrong-name",
+              "exitCode": 0,
+              "seconds": 55.078,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-expired",
+              "exitCode": 0,
+              "seconds": 55.418,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-untrusted",
+              "exitCode": 0,
+              "seconds": 53.238,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-invalid-auth",
+              "exitCode": 0,
+              "seconds": 53.423,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-unreachable",
+              "exitCode": 0,
+              "seconds": 53.594,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-unauthorized-redirect",
+              "exitCode": 0,
+              "seconds": 56.249,
+              "status": "PASS"
+            },
+            {
+              "case": "tls-turn-loss",
+              "exitCode": 0,
+              "seconds": 59.91,
+              "status": "PASS"
+            },
+            {
+              "case": "ipv6-udp",
+              "exitCode": 0,
+              "seconds": 51.253,
+              "status": "PASS"
+            },
+            {
+              "case": "ipv6-tls",
+              "exitCode": 0,
+              "seconds": 51.039,
+              "status": "PASS"
+            }
+          ],
+          "videoReceipts": 18,
+          "captureCancellation": {
+            "samples": 35,
+            "maxRequestToInvalidationNanos": 12849,
+            "maxRequestToClosedNanos": 27441336,
+            "minimumObservationMillis": 2501
+          },
+          "representativeEvidence": {
+            "audio": {
+              "apkSha256": {
+                "connected/mediaLab/app-connected-mediaLab.apk": "bc327efc87456a8fb9b7a90f2780ab33402d15c8abb69ebe085a7b93415fe5fd",
+                "androidTest/connected/mediaLab/app-connected-mediaLab-androidTest.apk": "ec5d20b1afdab19a87fc59603c3d5b406d7aa0e5a4b75321428a3cad735b01ee"
+              },
+              "audio": [
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 116,
+                  "capturedBuffers": 107,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 54,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                },
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 113,
+                  "capturedBuffers": 122,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 52,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                }
+              ],
+              "network": [
+                {
+                  "scope": "owned AVD outbound IPv4 UDP",
+                  "mediaAttempt": "OBSERVED",
+                  "turnPackets": 1395,
+                  "turnStunPackets": 16,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                },
+                {
+                  "scope": "owned AVD outbound IPv4 UDP",
+                  "mediaAttempt": "OBSERVED",
+                  "turnPackets": 1477,
+                  "turnStunPackets": 44,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                }
+              ],
+              "videoPhases": {
+                "active": [
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 674,
+                    "capturedFrames": 21,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 673,
+                    "capturedFrames": 42,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ],
+                "stopped": [
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 12849,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 16321687,
+                    "observedAfterRequestMillis": 2509,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 249
+                  },
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 9734,
+                    "requestToLastCaptureNanos": 2114924,
+                    "requestToClosedNanos": 18211758,
+                    "observedAfterRequestMillis": 2542,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 251
+                  }
+                ],
+                "resumed": [
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 652,
+                    "capturedFrames": 45,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 650,
+                    "capturedFrames": 90,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ]
+              }
+            },
+            "receive-only": {
+              "apkSha256": {
+                "connected/mediaLab/app-connected-mediaLab.apk": "bc327efc87456a8fb9b7a90f2780ab33402d15c8abb69ebe085a7b93415fe5fd",
+                "androidTest/connected/mediaLab/app-connected-mediaLab-androidTest.apk": "ec5d20b1afdab19a87fc59603c3d5b406d7aa0e5a4b75321428a3cad735b01ee"
+              },
+              "audio": [
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 110,
+                  "capturedBuffers": 107,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 52,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                },
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 106,
+                  "capturedBuffers": 116,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 54,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                }
+              ],
+              "network": [
+                {
+                  "scope": "owned AVD outbound IPv4 UDP",
+                  "mediaAttempt": "OBSERVED",
+                  "turnPackets": 1262,
+                  "turnStunPackets": 15,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                },
+                {
+                  "scope": "owned AVD outbound IPv4 UDP",
+                  "mediaAttempt": "OBSERVED",
+                  "turnPackets": 1186,
+                  "turnStunPackets": 44,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                }
+              ],
+              "videoPhases": {
+                "active": [
+                  {
+                    "decodedRemotePatterns": 0,
+                    "distinctPatternPhases": 0,
+                    "sendPermitted": true,
+                    "receivePermitted": false,
+                    "decodedAudioDuringVideo": 517,
+                    "capturedFrames": 21,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": false,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 524,
+                    "capturedFrames": 0,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ],
+                "stopped": [
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 6770,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 10159045,
+                    "observedAfterRequestMillis": 2511,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 252
+                  },
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": false,
+                    "requestToInvalidationNanos": 0,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 0,
+                    "observedAfterRequestMillis": 2512,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 252
+                  }
+                ],
+                "resumed": [
+                  {
+                    "decodedRemotePatterns": 0,
+                    "distinctPatternPhases": 0,
+                    "sendPermitted": true,
+                    "receivePermitted": false,
+                    "decodedAudioDuringVideo": 633,
+                    "capturedFrames": 44,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 22,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": false,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 646,
+                    "capturedFrames": 0,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ]
+              }
+            },
+            "tls-valid": {
+              "apkSha256": {
+                "connected/mediaLab/app-connected-mediaLab.apk": "bc327efc87456a8fb9b7a90f2780ab33402d15c8abb69ebe085a7b93415fe5fd",
+                "androidTest/connected/mediaLab/app-connected-mediaLab-androidTest.apk": "ec5d20b1afdab19a87fc59603c3d5b406d7aa0e5a4b75321428a3cad735b01ee"
+              },
+              "audio": [
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 112,
+                  "capturedBuffers": 109,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 53,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "tls"
+                },
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 100,
+                  "capturedBuffers": 114,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 53,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "tls"
+                }
+              ],
+              "network": [
+                {
+                  "scope": "owned AVD outbound IPv4 TCP/TLS and UDP fallback rejection",
+                  "turnTlsPackets": 1869,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "otherNonSystemTcpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                },
+                {
+                  "scope": "owned AVD outbound IPv4 TCP/TLS and UDP fallback rejection",
+                  "turnTlsPackets": 1864,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "otherNonSystemTcpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                }
+              ],
+              "videoPhases": {
+                "active": [
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 665,
+                    "capturedFrames": 20,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 659,
+                    "capturedFrames": 44,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ],
+                "stopped": [
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 8303,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 11957961,
+                    "observedAfterRequestMillis": 2537,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 258
+                  },
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 6780,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 9787294,
+                    "observedAfterRequestMillis": 2524,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 251
+                  }
+                ],
+                "resumed": [
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 785,
+                    "capturedFrames": 43,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 786,
+                    "capturedFrames": 87,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ]
+              }
+            },
+            "ipv6-udp": {
+              "apkSha256": {
+                "connected/mediaLab/app-connected-mediaLab.apk": "bc327efc87456a8fb9b7a90f2780ab33402d15c8abb69ebe085a7b93415fe5fd",
+                "androidTest/connected/mediaLab/app-connected-mediaLab-androidTest.apk": "ec5d20b1afdab19a87fc59603c3d5b406d7aa0e5a4b75321428a3cad735b01ee"
+              },
+              "audio": [
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 116,
+                  "capturedBuffers": 111,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 54,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                },
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 113,
+                  "capturedBuffers": 125,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 57,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                }
+              ],
+              "network": [
+                {
+                  "scope": "owned Wi-Fi IPv4+IPv6 TCP/UDP; IPv6 client-to-TURN, IPv4 relay allocation",
+                  "turnIpv6Packets": 1498,
+                  "nonAuthorizedTcpUdpPackets": 0,
+                  "transport": "UDP",
+                  "allIpv6Allocation": "NOT_EXECUTED: pinned allocator uses default IPv4 allocation"
+                },
+                {
+                  "scope": "owned Wi-Fi IPv4+IPv6 TCP/UDP; IPv6 client-to-TURN, IPv4 relay allocation",
+                  "turnIpv6Packets": 1572,
+                  "nonAuthorizedTcpUdpPackets": 0,
+                  "transport": "UDP",
+                  "allIpv6Allocation": "NOT_EXECUTED: pinned allocator uses default IPv4 allocation"
+                }
+              ],
+              "videoPhases": {
+                "active": [
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 667,
+                    "capturedFrames": 21,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 659,
+                    "capturedFrames": 41,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ],
+                "stopped": [
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 8703,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 13579906,
+                    "observedAfterRequestMillis": 2528,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 252
+                  },
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 7941,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 12400937,
+                    "observedAfterRequestMillis": 2529,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 251
+                  }
+                ],
+                "resumed": [
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 802,
+                    "capturedFrames": 44,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 811,
+                    "capturedFrames": 88,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ]
+              }
+            },
+            "ipv6-tls": {
+              "apkSha256": {
+                "connected/mediaLab/app-connected-mediaLab.apk": "bc327efc87456a8fb9b7a90f2780ab33402d15c8abb69ebe085a7b93415fe5fd",
+                "androidTest/connected/mediaLab/app-connected-mediaLab-androidTest.apk": "ec5d20b1afdab19a87fc59603c3d5b406d7aa0e5a4b75321428a3cad735b01ee"
+              },
+              "audio": [
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 119,
+                  "capturedBuffers": 112,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 54,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "tls"
+                },
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 114,
+                  "capturedBuffers": 126,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 58,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "tls"
+                }
+              ],
+              "network": [
+                {
+                  "scope": "owned Wi-Fi IPv4+IPv6 TCP/UDP; IPv6 client-to-TURN, IPv4 relay allocation",
+                  "turnIpv6Packets": 1895,
+                  "nonAuthorizedTcpUdpPackets": 0,
+                  "transport": "TLS",
+                  "allIpv6Allocation": "NOT_EXECUTED: pinned allocator uses default IPv4 allocation"
+                },
+                {
+                  "scope": "owned Wi-Fi IPv4+IPv6 TCP/UDP; IPv6 client-to-TURN, IPv4 relay allocation",
+                  "turnIpv6Packets": 1952,
+                  "nonAuthorizedTcpUdpPackets": 0,
+                  "transport": "TLS",
+                  "allIpv6Allocation": "NOT_EXECUTED: pinned allocator uses default IPv4 allocation"
+                }
+              ],
+              "videoPhases": {
+                "active": [
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 653,
+                    "capturedFrames": 20,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 20,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 646,
+                    "capturedFrames": 42,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ],
+                "stopped": [
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 9094,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 27441336,
+                    "observedAfterRequestMillis": 2562,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 258
+                  },
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 6570,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 9637052,
+                    "observedAfterRequestMillis": 2510,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 250
+                  }
+                ],
+                "resumed": [
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 789,
+                    "capturedFrames": 43,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 782,
+                    "capturedFrames": 88,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ]
+              }
+            },
+            "degraded-network": {
+              "apkSha256": {
+                "connected/mediaLab/app-connected-mediaLab.apk": "bc327efc87456a8fb9b7a90f2780ab33402d15c8abb69ebe085a7b93415fe5fd",
+                "androidTest/connected/mediaLab/app-connected-mediaLab-androidTest.apk": "ec5d20b1afdab19a87fc59603c3d5b406d7aa0e5a4b75321428a3cad735b01ee"
+              },
+              "audio": [
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 106,
+                  "capturedBuffers": 114,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 54,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                },
+                {
+                  "sdpAddressAudit": true,
+                  "decodedBuffers": 113,
+                  "capturedBuffers": 105,
+                  "verifiedNativeTransport": true,
+                  "receivedAudioPackets": 52,
+                  "codec": "audio/opus",
+                  "nativeRelayProtocol": "udp"
+                }
+              ],
+              "network": [
+                {
+                  "scope": "owned AVD outbound IPv4 UDP",
+                  "mediaAttempt": "OBSERVED",
+                  "turnPackets": 1817,
+                  "turnStunPackets": 18,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                },
+                {
+                  "scope": "owned AVD outbound IPv4 UDP",
+                  "mediaAttempt": "OBSERVED",
+                  "turnPackets": 1874,
+                  "turnStunPackets": 49,
+                  "nonTurnStunPackets": 0,
+                  "otherNonSystemUdpPackets": 0,
+                  "ipv6": "NOT_EXECUTED"
+                }
+              ],
+              "videoPhases": {
+                "active": [
+                  {
+                    "decodedRemotePatterns": 21,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 1111,
+                    "capturedFrames": 24,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 23,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 1165,
+                    "capturedFrames": 77,
+                    "generation": 2,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ],
+                "stopped": [
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 7091,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 10905602,
+                    "observedAfterRequestMillis": 2875,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 281
+                  },
+                  {
+                    "captureStopped": true,
+                    "captureWasAuthorized": true,
+                    "requestToInvalidationNanos": 8523,
+                    "requestToLastCaptureNanos": 0,
+                    "requestToClosedNanos": 15142691,
+                    "observedAfterRequestMillis": 2555,
+                    "captureCallbacksAfterRequest": 0,
+                    "decodedAudioAfterVideoOff": 261
+                  }
+                ],
+                "resumed": [
+                  {
+                    "decodedRemotePatterns": 22,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 1018,
+                    "capturedFrames": 50,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  },
+                  {
+                    "decodedRemotePatterns": 25,
+                    "distinctPatternPhases": 2,
+                    "sendPermitted": true,
+                    "receivePermitted": true,
+                    "decodedAudioDuringVideo": 1113,
+                    "capturedFrames": 150,
+                    "generation": 3,
+                    "videoCodec": "video/VP8",
+                    "sdpAddressAudit": true
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "testedSourceTrees": {
+    "android": "f5cfa8e837709fba12955e8f46995aaaef1f2048",
+    "relay": "017c63a36052f94d67465e076d7c24c526e206f5",
+    "scripts": "40ad65926ff9cd8f15457a8101a7b6de690c9ffc",
+    "native": "dafc9d3d1f8c483612cdb2283f6b48f56341030a",
+    ".github": "160e3fee13ca7eea81f1b1d8898f92fedaa82ea5"
+  }
+}

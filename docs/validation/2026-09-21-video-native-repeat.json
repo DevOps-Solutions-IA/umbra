@@ -1,0 +1,28 @@
+{
+  "run": 35646136452,
+  "head": "69e9dc19305a096fa88b2162b08385414bba5e67",
+  "allFourJobs": "SUCCESS",
+  "executedSelectedCppTests": {
+    "turn": 83,
+    "mediaPolicyAndModel": 12
+  },
+  "fullUpstreamSuite": false,
+  "jni": {
+    "jni/arm64-v8a/libjingle_peerconnection_so.so": {
+      "sha256": "78ed72cc993071a6e6d470d2a7c76b97f9cb12360dd9cd5599075382f30a4816",
+      "matchesPinnedArtifact": true
+    },
+    "jni/x86/libjingle_peerconnection_so.so": {
+      "sha256": "5af9f2abbdfa4c8427d4afea42acb9f0927d0cc669366fceec75184afe484c8e",
+      "matchesPinnedArtifact": true
+    },
+    "jni/x86_64/libjingle_peerconnection_so.so": {
+      "sha256": "0a721f1323839ce5a94747784147810553a4937a93d300cb1b0673597998f478",
+      "matchesPinnedArtifact": true
+    },
+    "jni/armeabi-v7a/libjingle_peerconnection_so.so": {
+      "sha256": "9f3567fdd76f0c1e213ab218e602562adf0952ee6d62d6ca8c58bdc152c69828",
+      "matchesPinnedArtifact": true
+    }
+  }
+}

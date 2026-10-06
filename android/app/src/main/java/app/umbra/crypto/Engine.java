@@ -22,12 +22,60 @@ public final class Engine {
     public static final int MAX_OUTBOX = 256, MAX_MESSAGES = 4096, MAX_SEEN = 8192;
     private final Records db;
     private final SignalStore signal;
-    public Engine(Records records) { db = records; signal = new SignalStore(records); }
+    private final app.umbra.content.RestrictedContentService restricted;
+    private final app.umbra.admission.AdmissionService admission;
+    private final app.umbra.location.LocationService locations;
+    private final app.umbra.calls.CallService calls;
+    public Engine(Records records) { this(records, () -> System.nanoTime()/1_000_000L); }
+    public Engine(Records records, java.util.function.LongSupplier elapsed) {
+        db = records; signal = new SignalStore(records);
+        admission = new app.umbra.admission.AdmissionService(records);
+        restricted = new app.umbra.content.RestrictedContentService(records,this);
+        locations = new app.umbra.location.LocationService(records, this, elapsed);
+        calls = new app.umbra.calls.CallService(records, this, elapsed);
+        connectivity().onOnlineStopped(calls::cancelLocal);
+        if(records.emergency()!=null) {
+            records.emergency().registerOwner(app.umbra.core.EmergencyLock.Subsystem.CALLS,calls,owner->{owner.cancelLocal();return java.util.concurrent.CompletableFuture.completedFuture(null);});
+            records.emergency().registerOwner(app.umbra.core.EmergencyLock.Subsystem.LOCATION,locations,owner->{owner.cancelLocal();return java.util.concurrent.CompletableFuture.completedFuture(null);});
+        }
+    }
+    public app.umbra.core.EmergencyLock emergency() {
+        var service=db.emergency(); if(service==null)throw new SecurityException("Coordinated lock unavailable"); return service;
+    }
+    public app.umbra.core.EmergencyLock.Status emergencyLock() { return emergency().request(); }
+    public app.umbra.connectivity.ConnectivityService connectivity() { return admission.connectivity(); }
+    public app.umbra.admission.AdmissionService admission() { return admission; }
+    public app.umbra.calls.CallService calls() { return calls; }
+    public app.umbra.content.RestrictedContentService restricted() { return restricted; }
+    public app.umbra.location.LocationService locations() { return locations; }
     public JSONObject get(String bucket, String key) throws Exception {
+        if(bucket.startsWith("restricted-"))throw new app.umbra.content.ContentException(app.umbra.content.ContentException.Code.EXPORT_FORBIDDEN);
         byte[] value = db.get(bucket, key); return value == null ? null : new JSONObject(Bytes.text(value));
     }
     private void put(String bucket, String key, JSONObject value) { db.put(bucket, key, Bytes.utf8(value.toString())); }
-    public boolean initialized() { return db.get("meta", "identity") != null; }
+    public boolean initialized() throws Exception {
+        byte[] identity = db.get("meta", "identity");
+        if (identity == null) {
+            // A missing identity is only a fresh install when no application records remain.
+            // Never offer re-enrollment over a partially lost or damaged vault.
+            for (String bucket : new String[]{"meta", "contact", "trusted", "session", "prekey", "signed", "kyber",
+                    "key-expiry", "kem-used", "sender-key", "message", "seen", "outbox", "export", "pairing-issued", "pairing-pending", "device-roster", "device-index", "device-issued", "device-pending", "device-relay", "location-out", "location-in", "calls", "admission", "admission-secret", "admission-peers", "admission-revoked", "admission-decisions", "admission-nonces", "admission-challenges", "admission-peer-evidence", "restricted-state", "restricted-object"})
+                if (!db.keys(bucket).isEmpty()) throw new IllegalStateException("Identity missing from existing vault");
+            return false;
+        }
+        IdentityKeyPair pair = new IdentityKeyPair(identity);
+        JSONObject savedProfile = profile();
+        int registration = signal.getLocalRegistrationId();
+        if (savedProfile == null || !Bytes.identity(pair.getPublicKey().serialize()).equals(savedProfile.getString("id")) ||
+                registration < 1 || registration > 16380)
+            throw new IllegalStateException("Stored identity metadata is inconsistent");
+        JSONObject affiliation = get("meta", "device-affiliation");
+        if (affiliation == null && (!db.keys("device-roster").isEmpty() || !db.keys("device-index").isEmpty()))
+            throw new SecurityException("Device affiliation missing from existing vault");
+        if (affiliation != null && (get("device-roster", affiliation.getString("root")) == null || get("device-index", id()) == null))
+            throw new SecurityException("Device membership missing from existing vault");
+        return true;
+    }
     public void initialize(String alias) throws Exception {
         if (alias.trim().isEmpty() || alias.length() > 40 || alias.codePoints().anyMatch(c -> Character.isISOControl(c) || Character.getType(c) == Character.FORMAT)) throw new IllegalArgumentException("Alias de 1 a 40 caracteres");
         db.transaction(() -> {
@@ -49,8 +97,11 @@ public final class Engine {
     public void setOnline(boolean enabled) throws Exception {
         db.transaction(() -> { JSONObject p = profile(); p.put("online", enabled); put("meta", "profile", p); return null; });
     }
-    public JSONObject createCard() throws Exception {
+    public JSONObject createCard() throws Exception { return createCard(Bytes::now); }
+    // Injectable only within the domain package for deterministic clock-boundary tests.
+    JSONObject createCard(java.util.function.LongSupplier wallClock) throws Exception {
         return db.transaction(() -> {
+            app.umbra.devices.DevicePolicy.authorize(db, id(), id());
             // Bound unused key material: exporting indefinitely cannot fill storage without limit.
             if (db.keys("key-expiry").size() >= 200) throw new IllegalStateException("Demasiadas invitaciones pendientes; espere su vencimiento");
             IdentityKeyPair identity = signal.getIdentityKeyPair();
@@ -63,7 +114,8 @@ public final class Engine {
             signal.storePreKey(keyId, new PreKeyRecord(keyId, oneTime));
             signal.storeSignedPreKey(keyId, new SignedPreKeyRecord(keyId, System.currentTimeMillis(), signed, ecSignature));
             signal.storeKyberPreKey(keyId, new KyberPreKeyRecord(keyId, System.currentTimeMillis(), kem, kemSignature));
-            db.put("key-expiry", "" + keyId, Bytes.utf8("" + (Bytes.now() + MAX_TTL)));
+            long created = wallClock.getAsLong(), expiry = Math.addExact(created, MAX_TTL);
+            db.put("key-expiry", "" + keyId, Bytes.utf8("" + expiry));
             JSONObject me = profile();
             JSONObject body = new JSONObject().put("v", 1).put("id", me.getString("id")).put("alias", me.getString("alias"))
                 .put("identity", Bytes.b64(identity.getPublicKey().serialize())).put("registration", signal.getLocalRegistrationId())
@@ -71,37 +123,51 @@ public final class Engine {
                 .put("signed", Bytes.b64(signed.getPublicKey().serialize())).put("signedSig", Bytes.b64(ecSignature))
                 .put("kem", Bytes.b64(kem.getPublicKey().serialize())).put("kemSig", Bytes.b64(kemSignature))
                 .put("box", me.getString("box")).put("write", me.getString("write"))
-                .put("created", Bytes.now()).put("expires", Bytes.now() + MAX_TTL);
+                .put("created", created).put("expires", expiry);
+            String credential=admission.getAdmissionState()==app.umbra.admission.AdmissionService.State.ADMITTED
+                ? admission.requireAdmission().wire() : "";
+            body.put("admission",credential);
             byte[] raw = Bytes.utf8(body.toString());
-            return new JSONObject().put("format", "umbra-contact-v1").put("body", Bytes.b64(raw))
+            return new JSONObject().put("format", "umbra-contact-v2").put("body", Bytes.b64(raw))
                 .put("signature", Bytes.b64(identity.getPrivateKey().calculateSignature(raw)));
         });
     }
     public String importCard(JSONObject card) throws Exception {
         return db.transaction(() -> {
-            if (!"umbra-contact-v1".equals(card.getString("format")) || card.toString().length() > 16_000)
+            if (!java.util.Set.of("umbra-contact-v1","umbra-contact-v2").contains(card.getString("format")) || card.toString().length() > 16_000)
                 throw new SecurityException("Tarjeta no compatible");
             byte[] raw = Bytes.unb64(card.getString("body"));
             JSONObject body = Wire.parse(raw, 12_000);
             Wire.fields(card, "format", "body", "signature");
-            Wire.fields(body, "v", "id", "alias", "identity", "registration", "keyId", "oneTime", "signed", "signedSig", "kem", "kemSig", "box", "write", "created", "expires");
+            boolean admissionCard="umbra-contact-v2".equals(card.getString("format"));
+            if(admissionCard) Wire.fields(body, "v", "id", "alias", "identity", "registration", "keyId", "oneTime", "signed", "signedSig", "kem", "kemSig", "box", "write", "created", "expires", "admission");
+            else Wire.fields(body, "v", "id", "alias", "identity", "registration", "keyId", "oneTime", "signed", "signedSig", "kem", "kemSig", "box", "write", "created", "expires");
             for (String f : new String[]{"v", "registration", "keyId", "created", "expires"}) Wire.integer(body, f);
             for (String f : new String[]{"id", "alias", "identity", "oneTime", "signed", "signedSig", "kem", "kemSig", "box", "write"}) Wire.string(body, f, 4096);
-            if (body.getInt("v") != 1) throw new SecurityException("Versión de contacto no compatible");
+            if (Wire.integer(body, "v") != 1) throw new SecurityException("Versión de contacto no compatible");
             String peer = body.getString("id");
             ECPublicKey key = new ECPublicKey(Bytes.unb64(body.getString("identity")));
             if (!peer.equals(Bytes.identity(key.serialize())) || peer.equals(id())) throw new SecurityException("Identidad inválida");
             if (!key.verifySignature(raw, Bytes.unb64(card.getString("signature")))) throw new SecurityException("Firma de contacto inválida");
+            if(admissionCard) {
+                String credential=Wire.string(body,"admission",4096);
+                if(!credential.isEmpty()) admission.installPeerCredential(credential,peer);
+            }
             if (!key.verifySignature(Bytes.unb64(body.getString("signed")), Bytes.unb64(body.getString("signedSig"))) ||
                 !key.verifySignature(Bytes.unb64(body.getString("kem")), Bytes.unb64(body.getString("kemSig"))))
                 throw new SecurityException("Firma de preclave inválida");
             long now = Bytes.now(), expiry = body.getLong("expires"), created = body.getLong("created");
-            if (expiry <= now || created > now + 300 || expiry > created + MAX_TTL || created < now - MAX_TTL)
+            if (created < now - MAX_TTL || created > now + 300 || expiry <= now || expiry <= created || expiry - created > MAX_TTL)
                 throw new SecurityException("Invitación vencida o reloj incorrecto");
-            if (body.getInt("registration") < 1 || body.getInt("registration") > 16380 || body.getInt("keyId") < 1)
+            long registration = Wire.integer(body, "registration"), keyId = Wire.integer(body, "keyId");
+            // Validate before any getInt()/libsignal conversion; Number.intValue() can wrap.
+            if (registration < 1 || registration > 16380 || keyId < 1 || keyId > Integer.MAX_VALUE)
                 throw new SecurityException("Preclaves inválidas");
             Wire.uuid(body.getString("box"));
-            if (!body.getString("write").matches("[A-Za-z0-9_-]{43}")) throw new SecurityException("Buzón inválido");
+            String writeToken = body.getString("write");
+            if (!writeToken.matches("[A-Za-z0-9_-]{43}") ||
+                !Base64.getUrlEncoder().withoutPadding().encodeToString(Base64.getUrlDecoder().decode(writeToken)).equals(writeToken))
+                throw new SecurityException("Buzón inválido");
             if (body.getString("alias").trim().isEmpty() || body.getString("alias").length() > 40 || body.getString("alias").codePoints().anyMatch(c -> Character.isISOControl(c) || Character.getType(c) == Character.FORMAT)) throw new SecurityException("Alias inválido");
             // Parse key encodings now rather than deferring failures until first send.
             new ECPublicKey(Bytes.unb64(body.getString("oneTime")));
@@ -114,15 +180,14 @@ public final class Engine {
                 throw new SecurityException("No se permite retroceder una tarjeta de contacto");
             put("contact", peer, new JSONObject().put("id", peer).put("card", body)
                 .put("verified", old != null && old.optBoolean("verified"))
-                .put("blocked", old != null && old.optBoolean("blocked")));
+                .put("blocked", old != null && old.optBoolean("blocked"))
+                .put("identityChanged", old != null && old.optBoolean("identityChanged")));
             return peer;
         });
     }
     public void verify(String peer, String typedCode) throws Exception {
         db.transaction(() -> {
-            String expected = Bytes.safetyCode(id(), peer);
-            String entered = typedCode.toLowerCase(Locale.ROOT).replaceAll("\\s", "");
-            if (!Bytes.equal(Bytes.utf8(expected), Bytes.utf8(entered))) throw new SecurityException("El código no coincide");
+            if (!app.umbra.verification.Verification.matches(id(), peer, typedCode)) throw new SecurityException("El código no coincide");
             JSONObject contact = requiredContact(peer, false);
             signal.pin(peer, new IdentityKey(new ECPublicKey(Bytes.unb64(contact.getJSONObject("card").getString("identity")))));
             contact.put("verified", true); put("contact", peer, contact); return null;
@@ -133,15 +198,82 @@ public final class Engine {
             JSONObject contact = get("contact", peer);
             if (contact == null) throw new IllegalArgumentException("Unknown contact");
             contact.put("blocked", blocked); put("contact", peer, contact);
+            if (blocked) { locations.suspendIdentity(peer); calls.suspendIdentity(peer); }
             if (blocked) for (String k : db.keys("outbox")) if (get("outbox", k).getString("peer").equals(peer)) db.remove("outbox", k);
             return null;
         });
     }
-    private JSONObject requiredContact(String peer, boolean verified) throws Exception {
+    public enum TrustState { UNVERIFIED, VERIFIED, IDENTITY_CHANGED, BLOCKED }
+    /** Production policy remains VERIFIED_ONLY for every message, including text. */
+    public TrustState trustState(String peer) throws Exception {
         JSONObject contact = get("contact", peer);
-        if (contact == null || contact.optBoolean("blocked")) throw new SecurityException("Contacto desconocido o bloqueado");
+        if (contact == null) throw new SecurityException("Unknown contact");
+        if (contact.optBoolean("blocked")) return TrustState.BLOCKED;
+        if (contact.optBoolean("identityChanged")) return TrustState.IDENTITY_CHANGED;
+        return contact.optBoolean("verified") ? TrustState.VERIFIED : TrustState.UNVERIFIED;
+    }
+    /** A reported key change suspends the old association immediately, even before a new card exists. */
+    public void identityChanged(String peer) throws Exception {
+        db.transaction(() -> {
+            JSONObject contact = get("contact", peer);
+            if (contact == null) throw new SecurityException("Unknown contact");
+            contact.put("identityChanged", true).put("verified", false); put("contact", peer, contact);
+            locations.suspendIdentity(peer); calls.suspendIdentity(peer);
+            for (String k : db.keys("outbox")) if (get("outbox", k).getString("peer").equals(peer)) db.remove("outbox", k);
+            signal.deleteAllSessions(peer); return null;
+        });
+    }
+    /** Explicit human confirmation of the NEW fingerprint. Alias equality never authorizes replacement. */
+    public String confirmIdentityChange(String oldPeer, JSONObject newCard, String newCode) throws Exception {
+        return db.transaction(() -> {
+            JSONObject old = get("contact", oldPeer);
+            if (old == null || !old.optBoolean("identityChanged")) throw new SecurityException("No pending identity change");
+            String replacement = importCard(newCard);
+            if (replacement.equals(oldPeer)) throw new SecurityException("Expected a distinct new identity");
+            verify(replacement, newCode);
+            old.put("blocked", true); put("contact", oldPeer, old); return replacement;
+        });
+    }
+    private JSONObject requiredContact(String peer, boolean verified) throws Exception {
+        app.umbra.devices.DevicePolicy.authorize(db, id(), peer);
+        JSONObject contact = get("contact", peer);
+        if (contact == null || contact.optBoolean("blocked") || contact.optBoolean("identityChanged")) throw new SecurityException("Contacto desconocido o bloqueado");
+        if (verified) { admission.requireAdmission(); admission.requirePeer(peer); }
         if (verified && !contact.optBoolean("verified")) throw new SecurityException("Verifique el código de seguridad antes de conversar");
         return contact;
+    }
+    /** Recheck immediately before a transport starts a queued write. Already emitted bytes cannot be recalled. */
+    public void authorizeTransportSelf() throws Exception {
+        db.transaction(() -> { admission.requireAdmission(); app.umbra.devices.DevicePolicy.authorize(db, id(), id()); return null; });
+    }
+    /** A queued network write must not acquire a fresh authorization after lock/reopen. */
+    public Records.Work<Void> deliveryAuthorization(String peer) throws Exception {
+        Runnable lease = db.authorization(); authorizeTransport(peer);
+        return () -> { lease.run(); authorizeTransport(peer); return null; };
+    }
+    public Records.Work<Void> deliveryAuthorization(JSONObject envelope) throws Exception {
+        Runnable lease = db.authorization();
+        JSONObject immutable = new JSONObject(envelope.toString()); authorizeEnvelope(immutable);
+        return () -> { lease.run(); authorizeEnvelope(immutable); return null; };
+    }
+    public void authorizeEnvelope(JSONObject envelope) throws Exception {
+        db.transaction(() -> {
+            requiredContact(envelope.getString("to"), true);
+            if(envelope.getLong("expires") <= Bytes.now()) throw new SecurityException("Delivery expired");
+            JSONObject queued = get("outbox", envelope.getString("id"));
+            if(queued == null) {
+                JSONObject sent = get("message", envelope.getString("id"));
+                if(sent == null || !sent.optBoolean("outgoing") || !sent.getString("peer").equals(envelope.getString("to")))
+                    throw new SecurityException("Delivery cancelled or unknown");
+            } else {
+                if(!digest(queued.getJSONObject("envelope")).equals(digest(envelope))) throw new SecurityException("Delivery substitution");
+                locations.authorizeDelivery(queued); calls.authorizeDelivery(queued);
+            }
+            return null;
+        });
+    }
+    public void authorizeTransport(String peer) throws Exception {
+        db.transaction(() -> { requiredContact(peer, true); return null; });
     }
     public List<JSONObject> contacts() throws Exception {
         List<JSONObject> result = new ArrayList<>();
@@ -153,7 +285,7 @@ public final class Engine {
         List<JSONObject> result = new ArrayList<>();
         for (String k : db.keys("message")) {
             JSONObject message = get("message", k);
-            if (peer.equals(message.getString("peer")) && message.getLong("expires") > Bytes.now()) result.add(message);
+            if (!message.optString("kind").startsWith("device-") && peer.equals(message.getString("peer")) && message.getLong("expires") > Bytes.now()) result.add(message);
         }
         result.sort(Comparator.comparingLong(m -> m.optLong("createdMs", m.optLong("created") * 1000)));
         return result;
@@ -166,6 +298,121 @@ public final class Engine {
         if (content.length < 1 || content.length > MAX_ATTACHMENT) throw new IllegalArgumentException("Adjunto máximo: 256 KiB");
         name = app.umbra.core.FileNames.sanitize(name);
         return send(peer, new JSONObject().put("kind", "file").put("name", name).put("data", Bytes.b64(content)), ttl);
+    }
+    public String sendDeviceRoster(String peer) throws Exception {
+        return db.transaction(() -> {
+            JSONObject own = get("meta", "device-affiliation");
+            if (own == null) throw new SecurityException("Device migration required");
+            return send(peer, new JSONObject().put("kind", "device-roster").put("roster",
+                new app.umbra.devices.DeviceService(db).roster(own.getString("root"))), 600);
+        });
+    }
+    public String sendDeviceDelegation() throws Exception {
+        return db.transaction(() -> {
+            JSONObject grant = new app.umbra.devices.DeviceService(db).relayDelegation();
+            return send(grant.getString("root"), new JSONObject().put("kind", "device-grant").put("box", grant.getString("box")).put("token", grant.getString("token")).put("proof", grant.getString("proof")), 600);
+        });
+    }
+    /** Atomic fanout to the explicitly approved current recipient set, with independent sessions. */
+    public String sendIdentityText(String root, String text, long ttl) throws Exception {
+        if (text.trim().isEmpty() || Bytes.utf8(text).length > 16_000) throw new IllegalArgumentException("Invalid text");
+        return sendIdentity(root, new JSONObject().put("kind", "text").put("text", text), ttl);
+    }
+    public String sendIdentityFile(String root, String name, byte[] data, long ttl) throws Exception {
+        if (data.length < 1 || data.length > MAX_ATTACHMENT) throw new IllegalArgumentException("Invalid attachment");
+        return sendIdentity(root, new JSONObject().put("kind", "file").put("name", app.umbra.core.FileNames.sanitize(name)).put("data", Bytes.b64(data)), ttl);
+    }
+    private String sendIdentity(String root, JSONObject content, long ttl) throws Exception {
+        return db.transaction(() -> {
+            JSONObject own = get("meta", "device-affiliation");
+            if (own == null) throw new SecurityException("Explicit device migration required");
+            List<String> recipients = new app.umbra.devices.DeviceService(db).recipients(root);
+            String logicalId = UUID.randomUUID().toString();
+            content.put("logicalId", logicalId).put("logicalFrom", own.getString("root")).put("logicalTo", root);
+            for (String peer : recipients) send(peer, new JSONObject(content.toString()), ttl);
+            return logicalId;
+        });
+    }
+    /** Only LocationService can mint the content-bound, unlock-bound permit. */
+    public void enqueueLocation(app.umbra.location.LocationService.Permit permit, JSONObject payload) throws Exception {
+        db.transaction(() -> {
+            if(permit == null) throw new SecurityException("Location consent required");
+            permit.check(db,payload);
+            app.umbra.location.LocationPayload.validate(payload,Bytes.now());
+            JSONObject own=get("meta","device-affiliation");
+            if(own==null || !own.getString("root").equals(payload.getString("owner")) || !id().equals(payload.getString("device")))
+                throw new SecurityException("Location sender substitution");
+            String logical=UUID.randomUUID().toString();
+            List<String> peers=locations.authorizedTargets(payload);
+            if(peers.isEmpty()) throw new SecurityException("No location recipients");
+            for(String peer:peers) {
+                permit.check(db,payload); requiredContact(peer,true);
+                JSONObject content=new JSONObject().put("kind","location").put("logicalId",logical)
+                    .put("logicalFrom",payload.getString("owner")).put("logicalTo",payload.getString("recipient"))
+                    .put("location",new JSONObject(payload.toString()));
+                JSONObject envelope=encrypt(peer,content,Math.min(payload.getLong("ends"),Bytes.now()+120));
+                putOutbox(peer,envelope,false);
+                JSONObject queued=get("outbox",envelope.getString("id"));
+                queued.put("locationSession",payload.getString("session")).put("locationType",payload.getString("type"));
+                put("outbox",envelope.getString("id"),queued);
+            }
+            return null;
+        });
+    }
+    /** Ingress cannot be minted by a direct call to CallService. */
+    public final class CallIngress {
+        private final String bytes;
+        private CallIngress(JSONObject content) { bytes=content.toString(); }
+        public void check(Records records,JSONObject content) {
+            if(records!=db || !bytes.equals(content.toString())) throw new SecurityException("Call ingress substitution");
+        }
+    }
+    public void enqueueCall(app.umbra.calls.CallService.Permit permit,JSONObject payload,List<String> recipients) throws Exception {
+        db.transaction(() -> {
+            if(permit==null) throw new SecurityException("Call consent required"); permit.check(db,payload);
+            app.umbra.calls.CallPayload.validate(payload,Bytes.now());
+            JSONObject c=payload.getJSONObject("context"); boolean caller=id().equals(c.getString("callerDevice"));
+            List<String> allowed=caller?app.umbra.calls.CallPayload.targets(c):List.of(c.getString("callerDevice"));
+            if(recipients.isEmpty() || new HashSet<>(recipients).size()!=recipients.size() || !allowed.containsAll(recipients)) throw new SecurityException("Invalid call destinations");
+            for(String peer:recipients) {
+                permit.check(db,payload); requiredContact(peer,true);
+                JSONObject content=new JSONObject().put("kind","call").put("call",new JSONObject(payload.toString()))
+                    .put("logicalId",payload.getString("event")).put("logicalFrom",c.getString(caller?"caller":"callee"))
+                    .put("logicalTo",c.getString(caller?"callee":"caller"));
+                long expiry=Math.min(c.getLong("ends"),Bytes.now()+app.umbra.calls.CallPayload.DELIVERY_SECONDS);
+                if(Set.of("INVITE","ACCEPT","SELECT").contains(payload.getString("type"))) expiry=Math.min(expiry,c.getLong("inviteUntil"));
+                if(Set.of("VIDEO_REQUEST","VIDEO_ACCEPT").contains(payload.getString("type"))) expiry=Math.min(expiry,payload.getJSONObject("data").getLong("expires"));
+                if(expiry<=Bytes.now()) throw new SecurityException("Call delivery expired");
+                JSONObject envelope=encrypt(peer,content,expiry); putOutbox(peer,envelope,false);
+                JSONObject queued=get("outbox",envelope.getString("id"));
+                queued.put("callSession",c.getString("callId")).put("callType",payload.getString("type")).put("callGeneration",payload.getInt("generation"));
+                if(payload.getInt("v")==2) {
+                    JSONObject data=payload.getJSONObject("data");
+                    queued.put("videoChange",data.has("video")?data.getJSONObject("video").getString("change"):data.getString("change"));
+                }
+                put("outbox",envelope.getString("id"),queued);
+            }
+            return null;
+        });
+    }
+    public final class RestrictedIngress {
+        private final String body;
+        private RestrictedIngress(JSONObject content) {body=content.toString();}
+        public void check(Records records,JSONObject content) {
+            if(records!=db || !body.equals(content.toString()))throw new SecurityException("Restricted ingress substitution");
+        }
+    }
+    public void enqueueRestricted(app.umbra.content.RestrictedContentService.Permit permit,JSONObject payload) throws Exception {
+        db.transaction(()->{
+            if(permit==null)throw new SecurityException("Restricted consent required");permit.check(db,payload);
+            app.umbra.content.RestrictedPayload.descriptor(payload,Bytes.now());
+            if(!id().equals(payload.getString("from")))throw new SecurityException("Restricted sender mismatch");
+            String peer=payload.getString("to");requiredContact(peer,true);
+            JSONObject content=new JSONObject().put("kind","restricted").put("restricted",new JSONObject(payload.toString()));
+            JSONObject envelope=encrypt(peer,content,payload.getLong("expires"));putOutbox(peer,envelope,false);
+            JSONObject queued=get("outbox",envelope.getString("id"));queued.put("restrictedId",payload.getString("id"));
+            put("outbox",envelope.getString("id"),queued);return null;
+        });
     }
     private String send(String peer, JSONObject content, long ttl) throws Exception {
         if (ttl < 60 || ttl > MAX_TTL) throw new IllegalArgumentException("Caducidad inválida");
@@ -193,7 +440,7 @@ public final class Engine {
             new SessionBuilder(signal, remote, local).process(bundle);
         }
         String messageId = UUID.randomUUID().toString();
-        content.put("createdMs", System.currentTimeMillis()).put("v", 1).put("id", messageId).put("from", id()).put("to", peer).put("created", Bytes.now()).put("expires", expiry);
+        content.put("createdMs", System.currentTimeMillis()).put("v", content.has("logicalId") ? 2 : 1).put("id", messageId).put("from", id()).put("to", peer).put("created", Bytes.now()).put("expires", expiry);
         byte[] clear = Bytes.utf8(content.toString()), padded = Padding.pad(clear);
         CiphertextMessage encrypted;
         try { encrypted = new SessionCipher(signal, local, remote).encrypt(padded); }
@@ -249,32 +496,70 @@ public final class Engine {
             try { raw = Padding.unpad(padded); content = Wire.parse(raw, Padding.MAX_CLEAR); }
             finally { Arrays.fill(padded, (byte) 0); if (raw != null) Arrays.fill(raw, (byte) 0); }
             Wire.content(content, envelope, now, MAX_TTL, MAX_ATTACHMENT);
+            if (content.getInt("v") == 2) {
+                JSONObject own = get("meta", "device-affiliation"), sender = get("device-index", peer);
+                if (own == null || sender == null || !own.getString("root").equals(content.getString("logicalTo")) ||
+                    !sender.getString("root").equals(content.getString("logicalFrom")))
+                    throw new SecurityException("Logical identity substitution");
+            }
             String kind = content.getString("kind");
             JSONObject seenValue = new JSONObject().put("digest", fingerprint).put("expires", now + MAX_TTL);
             if (kind.equals("receipt")) {
                 String acknowledged = content.getString("ackFor");
                 JSONObject sent = get("message", acknowledged);
+                JSONObject pending = get("outbox", acknowledged);
+                if(pending != null && (pending.has("locationSession") || pending.has("callSession") || pending.has("restrictedId")) && peer.equals(pending.getString("peer"))) db.remove("outbox", acknowledged);
                 if (sent != null && sent.optBoolean("outgoing") && peer.equals(sent.getString("peer"))) {
                     sent.put("status", "Entregado"); put("message", acknowledged, sent); db.remove("outbox", acknowledged);
                 }
             } else {
-                if (kind.equals("text")) {
+                boolean acknowledge = true;
+                if (kind.equals("device-roster")) {
+                    app.umbra.devices.DeviceRoster roster = app.umbra.devices.DeviceRoster.parse(content.getString("roster"));
+                    JSONObject senderIndex = get("device-index", peer);
+                    if (!peer.equals(roster.root) && (senderIndex == null || !senderIndex.getString("root").equals(roster.root)))
+                        throw new SecurityException("Unrelated device roster sender");
+                    new app.umbra.devices.DeviceService(db).apply(roster.transcript);
+                    acknowledge = (!roster.members.containsKey(peer) || roster.active(peer)) &&
+                        (!roster.members.containsKey(id()) || roster.active(id()));
+                } else if (kind.equals("device-grant")) {
+                    new app.umbra.devices.DeviceService(db).receiveRelayDelegation(peer, content);
+                } else if (kind.equals("call")) {
+                    calls.receive(new CallIngress(content),content);
+                } else if (kind.equals("location")) {
+                    locations.receive(content);
+                } else if (kind.equals("restricted")) {
+                    restricted.receive(new RestrictedIngress(content),content);
+                } else if (kind.equals("text")) {
                     if (Bytes.utf8(content.getString("text")).length > 16_000) throw new SecurityException("Text too large");
                 } else if (kind.equals("file")) {
                     if (Bytes.unb64(content.getString("data")).length > MAX_ATTACHMENT || content.getString("name").length() > 120)
                         throw new SecurityException("Attachment too large");
                 } else throw new SecurityException("Unsupported content");
                 if (db.keys("message").size() >= MAX_MESSAGES) throw new LocalCapacityException();
-                put("message", peer + ":" + messageId, new JSONObject(content.toString()).put("peer", peer).put("outgoing", false).put("status", "Recibido"));
-                JSONObject receipt = encrypt(peer, new JSONObject().put("kind", "receipt").put("ackFor", messageId), Math.min(expiry, now + 86400));
-                putOutbox(peer, receipt, true); seenValue.put("receipt", receipt);
+                if (!kind.startsWith("device-") && !kind.equals("location") && !kind.equals("call") && !kind.equals("restricted")) put("message", peer + ":" + messageId, new JSONObject(content.toString()).put("peer", peer).put("outgoing", false).put("status", "Recibido"));
+                if (acknowledge) {
+                    JSONObject receipt = encrypt(peer, new JSONObject().put("kind", "receipt").put("ackFor", messageId), Math.min(expiry, now + 86400));
+                    putOutbox(peer, receipt, true); seenValue.put("receipt", receipt);
+                }
             }
             put("seen", seenKey, seenValue); return null;
         });
     }
     public List<JSONObject> outbox() throws Exception {
         List<JSONObject> result = new ArrayList<>();
-        for (String k : db.keys("outbox")) result.add(get("outbox", k));
+        db.transaction(() -> {
+            locations.maintain(); calls.maintain();
+            for (String k : db.keys("outbox")) {
+                JSONObject queued=get("outbox",k);
+                if(queued.has("locationSession") || queued.has("callSession")) {
+                    try { locations.authorizeDelivery(queued); calls.authorizeDelivery(queued); }
+                    catch(SecurityException rejected) { db.remove("outbox",k); continue; }
+                }
+                if(queued.getJSONObject("envelope").getLong("expires")>Bytes.now()) result.add(queued);
+            }
+            return null;
+        });
         // Order of encryption, not expiry: a short TTL must not overtake the initial pre-key message.
         result.sort(Comparator.comparingLong(o -> o.optLong("sequence", 0)));
         return result;
@@ -307,18 +592,26 @@ public final class Engine {
     /** Sign only a bounded, domain-separated application challenge; not an arbitrary signing oracle. */
     public byte[] proveNearby(boolean dialer, String peer, byte[] ownNonce, byte[] peerNonce) throws Exception {
         return db.transaction(() -> {
-            requiredContact(peer, false); // Explicit enrollment must have imported the peer card first.
-            return signal.getIdentityKeyPair().getPrivateKey().calculateSignature(
-                app.umbra.core.NearbyTranscript.encode(dialer, id(), ownNonce, peer, peerNonce));
+            requiredContact(peer, false);
+            byte[] transcript=app.umbra.core.NearbyTranscript.encode(dialer,id(),ownNonce,peer,peerNonce);
+            String credential=admission.requireAdmission().wire();
+            byte[] signalProof=signal.getIdentityKeyPair().getPrivateKey().calculateSignature(transcript);
+            return Bytes.utf8(new JSONObject().put("v",1).put("credential",credential)
+                .put("signal",Bytes.b64(signalProof)).put("admission",admission.proveNearby(transcript)).toString());
         });
     }
-    public void verifyNearby(boolean peerIsDialer, String peer, byte[] peerNonce, byte[] ownNonce, byte[] signature, boolean enrolling) throws Exception {
+    public void verifyNearby(boolean peerIsDialer, String peer, byte[] peerNonce, byte[] ownNonce, byte[] proof, boolean enrolling) throws Exception {
         db.transaction(() -> {
-            JSONObject c = requiredContact(peer, !enrolling);
-            byte[] publicKey = Bytes.unb64(c.getJSONObject("card").getString("identity"));
-            if (signature.length != 64 || !peer.equals(Bytes.identity(publicKey)) || !new ECPublicKey(publicKey).verifySignature(
-                app.umbra.core.NearbyTranscript.encode(peerIsDialer, peer, peerNonce, id(), ownNonce), signature))
+            JSONObject c=requiredContact(peer,false);
+            if(!enrolling && !c.optBoolean("verified")) throw new SecurityException("Contact verification required");
+            JSONObject p=Wire.parse(proof,6000); Wire.fields(p,"v","credential","signal","admission");
+            if(Wire.integer(p,"v")!=1) throw new SecurityException("Nearby admission version");
+            byte[] signature=Bytes.unb64(Wire.string(p,"signal",88));
+            byte[] publicKey=Bytes.unb64(c.getJSONObject("card").getString("identity"));
+            byte[] transcript=app.umbra.core.NearbyTranscript.encode(peerIsDialer,peer,peerNonce,id(),ownNonce);
+            if(signature.length!=64 || !peer.equals(Bytes.identity(publicKey)) || !new ECPublicKey(publicKey).verifySignature(transcript,signature))
                 throw new SecurityException("No se pudo autenticar el dispositivo cercano");
+            admission.verifyNearby(Wire.string(p,"credential",4096),Wire.string(p,"admission",2048),peer,transcript);
             return null;
         });
     }
@@ -341,15 +634,18 @@ public final class Engine {
     public void clearExport(String key) throws Exception { db.transaction(() -> { db.remove("export", key); return null; }); }
     public void expire() throws Exception {
         db.transaction(() -> {
-            long now = Bytes.now();
-            for (String bucket : new String[]{"message", "seen", "outbox", "export"}) for (String k : db.keys(bucket)) {
+            long now = Bytes.now(); locations.maintain(); calls.maintain();
+            for (String bucket : new String[]{"message", "seen", "outbox", "export", "pairing-issued", "pairing-pending"}) for (String k : db.keys(bucket)) {
                 JSONObject item = get(bucket, k);
                 long expiry = bucket.equals("outbox") ? item.getJSONObject("envelope").getLong("expires") : item.getLong("expires");
                 if (expiry <= now) db.remove(bucket, k);
             }
             for (String keyId : db.keys("key-expiry")) {
                 long expiry = Long.parseLong(Bytes.text(db.get("key-expiry", keyId)));
-                if (expiry <= now) {
+                // Invitation expiry stops NEW sessions. Already encrypted initial messages
+                // may remain in transit for MAX_TTL; retain unused prekeys for that window.
+                // Consumed one-time keys are still removed immediately by SignalStore.
+                if (expiry <= now - MAX_TTL) {
                     db.remove("prekey", keyId); db.remove("signed", keyId); db.remove("kyber", keyId); db.remove("key-expiry", keyId);
                 }
             }
@@ -359,6 +655,7 @@ public final class Engine {
     }
     public void clearConversation(String peer) throws Exception {
         db.transaction(() -> {
+            locations.clearPeer(peer); calls.suspendIdentity(peer);
             for (String bucket : new String[]{"message", "outbox"}) {
                 for (String k : db.keys(bucket)) if (get(bucket, k).getString("peer").equals(peer)) db.remove(bucket, k);
             }
